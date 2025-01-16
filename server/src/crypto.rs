@@ -1,0 +1,1 @@
+/// Functions for managing data encryption and server connections

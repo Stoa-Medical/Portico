@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-portico}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-portico123}
+      POSTGRES_DB: ${POSTGRES_DB:-portico_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-portico}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-portico}:${POSTGRES_PASSWORD:-portico123}@db:5432/${POSTGRES_DB:-portico_db}
+    ports:
+      - "8080:8080"
+
+volumes:
+  postgres_data:
