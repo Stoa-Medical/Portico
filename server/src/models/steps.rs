@@ -23,7 +23,8 @@ pub enum StepAction {
 pub struct Step {
     pub name: String,
     pub instruction: StepAction,
-    run_count: AtomicU64
+    run_count: AtomicU64,
+    success_count: AtomicU64,
 }
 
 impl Step {
@@ -34,7 +35,8 @@ impl Step {
         Self {
             name,
             instruction,
-            run_count: AtomicU64::new(0)
+            run_count: AtomicU64::new(0),
+            success_count: AtomicU64::new(0)
         }
     }
 
@@ -47,7 +49,10 @@ impl Step {
         match &self.instruction {
             StepAction::Prompt(the_prompt) => {
                 match call_llm(the_prompt, source).await {
-                    Ok(res_str) => Ok(Some(Value::String(res_str))),
+                    Ok(res_str) => {
+                        self.success_count.fetch_add(1, Ordering::SeqCst);
+                        Ok(Some(Value::String(res_str)))
+                    },
                     Err(err) => Err(SessionError::StepFailed { 
                         step_idx: step_idx,  // This should probably come from Session
                         message: err.to_string() 
@@ -56,7 +61,10 @@ impl Step {
             }
             StepAction::Python(the_code) => {
                 match self.exec_python(&source, the_code) {
-                    Ok(result) => Ok(result),
+                    Ok(result) => {
+                        self.success_count.fetch_add(1, Ordering::SeqCst);
+                        Ok(result)
+                    },
                     Err(err) => Err(SessionError::StepFailed { 
                         step_idx: step_idx,  // This should probably come from Session
                         message: err.to_string() 
@@ -66,9 +74,12 @@ impl Step {
         }
     }
 
-    // Getter for analytics
     pub fn get_run_count(&self) -> u64 {
         self.run_count.load(Ordering::SeqCst)
+    }
+
+    pub fn get_success_count(&self) -> u64 {
+        self.success_count.load(Ordering::SeqCst)
     }
 
     fn exec_python(&self, source: &Value, the_code: &str) -> anyhow::Result<Option<Value>> {

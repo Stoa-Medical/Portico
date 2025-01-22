@@ -12,7 +12,6 @@ pub mod steps;
 #[cfg(test)]
 mod tests {
 
-    /// Tests for the `Step` library
     mod test_steps {
         use super::super::steps::{Step, StepAction};
         use serde_json::json; 
@@ -197,14 +196,18 @@ res = source_data + 1
             assert!(result1.is_some());
             assert!(!session.completed);
             assert_eq!(steps[0].get_run_count(), 1);
+            assert_eq!(steps[0].get_success_count(), 1);
             assert_eq!(steps[1].get_run_count(), 0);
+            assert_eq!(steps[1].get_success_count(), 0);
     
             // Run second step
             let result2 = session.run_steps(1, true).await.unwrap();
             assert!(result2.is_some());
             assert!(session.completed);
             assert_eq!(steps[0].get_run_count(), 1);
+            assert_eq!(steps[0].get_success_count(), 1);
             assert_eq!(steps[1].get_run_count(), 1);
+            assert_eq!(steps[1].get_success_count(), 1);
         }
     
         #[tokio::test]
@@ -240,8 +243,10 @@ res = source_data['value'] * 2
             assert!(result2.is_err());
             
             // Check run counts
-            assert_eq!(steps[0].get_run_count(), 1); // Expect this to run once
+            assert_eq!(steps[0].get_run_count(), 1); // Expect this to run once (i.e. retry from last failed)
+            assert_eq!(steps[0].get_success_count(), 1);
             assert_eq!(steps[1].get_run_count(), 2); // Second step fails twice
+            assert_eq!(steps[1].get_success_count(), 0);
         }
     }
 }
