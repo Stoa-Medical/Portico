@@ -31,22 +31,13 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/api")
             .wrap(auth)
-            // Add routes here when you uncomment them
-            // .service(register_pubkey)
-            // .service(verify_pubkey)
-            // .service(get_all_agents)
             // .service(create_agent)
             // .service(get_agent)
+            // .service(get_all_agents)
             // .service(update_agent)
             // .service(delete_agent)
     );
 }
-// // Structures for requests/responses
-// #[derive(Deserialize)]
-// struct RegisterKeyRequest {
-//     secret: String,
-//     public_key: String,
-// }
 
 // #[derive(Serialize)]
 // struct AgentSettings {
@@ -54,32 +45,6 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 //     agent_id: String,
 //     settings: Value,
 // }
-
-// /// Given a correct secret, registers the public key to the device
-// #[post("/crypto/register-pubkey")]
-// async fn register_pubkey(req: web::Json<RegisterKeyRequest>) -> impl Responder {
-//     // Validate against REGISTER_SECRET
-//     let register_secret = std::env::var("REGISTER_SECRET")
-//         .map_err(|_| HttpResponse::InternalServerError().finish())?;
-    
-//     if req.secret != register_secret {
-//         return Ok(HttpResponse::Unauthorized().finish());
-//     }
-    
-//     // TODO: Store public key
-//     Ok(HttpResponse::Ok().finish())
-// }
-
-// /// Verifies that the given public key and signature is on the server + valid
-// #[get("/crypto/verify-pubkey")]
-// async fn verify_pubkey(
-//     signature: web::Query<String>,
-//     public_key: web::Query<String>,
-// ) -> impl Responder {
-//     // TODO: Implement signature verification
-//     HttpResponse::Ok().finish()
-// }
-
 
 // /// Gets serialized IDs for all current agents
 // #[get("/agents/all")]

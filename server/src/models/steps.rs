@@ -2,19 +2,17 @@
 ///   Each Step is a series of Python code that users define
 
 use std::ffi::CString;
-use std::env;
-
-use thiserror::Error;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-
-use reqwest::Client;
-use anyhow::Result;
 use serde_json::Value;
 
+use crate::call_llm;
+use crate::models::session::SessionError;
+
 #[derive(Debug)]
-enum StepAction {
+pub enum StepAction {
     /// Python that will be executed within the current interpreter session
     Python(String),
     /// An LLM prompt that will query the configured LLM
@@ -25,9 +23,7 @@ enum StepAction {
 pub struct Step {
     name: String,
     instruction: StepAction,
-    // input: Value,
-    // result: Option<Result<Option<Value>>>,
-    run_count: u64
+    run_count: AtomicU64
 }
 
 impl Step {
@@ -38,119 +34,191 @@ impl Step {
         Self {
             name,
             instruction,
-            run_count: 0,
+            run_count: AtomicU64::new(0)
         }
     }
 
     /// Runs the step with fresh context
     /// NOTE: If python code, expects the input value to be called `source` and expect result to be `res`
-    pub async fn run(&self, source: Value) -> Result<Option<Value>> {
+    pub async fn run(&self, source: Value, step_idx: usize) -> Result<Option<Value>, SessionError> {
+        // Increment FIRST, before any potential errors
+        self.run_count.fetch_add(1, Ordering::SeqCst);
+        
         match &self.instruction {
             StepAction::Prompt(the_prompt) => {
-                // Do LLM call and return as a string
                 match call_llm(the_prompt, source).await {
                     Ok(res_str) => Ok(Some(Value::String(res_str))),
-                    Err(err) => Err(err.into())
+                    Err(err) => Err(SessionError::StepFailed { 
+                        step_idx: step_idx,  // This should probably come from Session
+                        message: err.to_string() 
+                    })
                 }
             }
             StepAction::Python(the_code) => {
-                // Run code with independent context
-                pyo3::prepare_freethreaded_python();
-                Python::with_gil(|py| {
-                    // Have clean state at each start
-                    let locals = PyDict::new(py);
-                    // Convert serde_json::Value to PyObject
-                    let py_source = serde_json::to_string(&source)
-                        .map_err(|e| anyhow::anyhow!("Failed to serialize source: {}", e))?;
-                    locals.set_item("source", py_source)?;
-                    
-                    // Convert String to CString correctly
-                    let code_as_cstr = CString::new(the_code.as_bytes())?;
-                    py.run(code_as_cstr.as_c_str(), None, Some(&locals))?;
-                    
-                    // Get result and convert back to serde_json::Value if it exists
-                    match locals.get_item("res") {
-                        Ok(Some(res)) => {
-                            let res_str = res.to_string();
-                            let json_value: Value = serde_json::from_str(&res_str)
-                                .map_err(|e| anyhow::anyhow!("Failed to parse result: {}", e))?;
-                            Ok(Some(json_value))
-                        }
-                        Ok(None) => Ok(None),
-                        Err(err) => Err(anyhow::anyhow!("Python error: {}", err))
-                    }
-                })
+                match self.exec_python(&source, the_code) {
+                    Ok(result) => Ok(result),
+                    Err(err) => Err(SessionError::StepFailed { 
+                        step_idx: step_idx,  // This should probably come from Session
+                        message: err.to_string() 
+                    })
+                }
             }
         }
     }
-}
 
+    // Getter for analytics
+    pub fn get_run_count(&self) -> u64 {
+        self.run_count.load(Ordering::SeqCst)
+    }
 
-/// The goal of a Session is to complete a series of steps and return the result
-/// It receives a pointer to steps and is expected to run those steps
-pub struct Session<'steps> {
-    /// Pointer to steps that should be executed
-    steps: &'steps Vec<Step>,
-    /// The starting input of the session
-    input_data: Value,
-    /// The end result of a session
-    result: Option<Result<Option<Value>>>,
-    /// Whether the session ran to completion or not
-    completed: bool,
-    /// Current index of the session step
-    curr_idx: usize,
-}
-
-impl<'steps> Session<'steps> {
-    pub fn new(steps: &'steps Vec<Step>, input_data: Value) -> Self {
-        Self {
-            steps,
-            input_data,
-            result: None,
-            completed: false,
-            curr_idx: 0,
-        }
+    fn exec_python(&self, source: &Value, the_code: &str) -> anyhow::Result<Option<Value>> {
+        // Preps python interpreter (only needs to run once, though repeat calls are negligible)
+        pyo3::prepare_freethreaded_python();
+        // Run code with independent context
+        Python::with_gil(|py| {
+            // Have clean state at each start
+            let locals = PyDict::new(py);
+            // Convert serde_json::Value to PyObject
+            let py_source = serde_json::to_string(source)?;
+            locals.set_item("source", py_source)?;
+            
+            // Convert String to CString correctly
+            let code_as_cstr = CString::new(the_code.as_bytes())?;
+            py.run(code_as_cstr.as_c_str(), None, Some(&locals))?;
+            
+            // Get result and convert back to serde_json::Value if it exists
+            match locals.get_item("res") {
+                Ok(Some(res)) => {
+                    let res_str = res.to_string();
+                    let json_value: Value = serde_json::from_str(&res_str)?;
+                    Ok(Some(json_value))
+                }
+                Ok(None) => Ok(None),
+                Err(err) => Err(anyhow::anyhow!("Python error: {}", err))
+            }
+        })
     }
 }
 
-// ============ Internal functions ============
 
-#[derive(Error, Debug)]
-pub enum LLMError {
-    #[error("API request failed: {0}")]
-    RequestError(#[from] reqwest::Error),
-    #[error("Missing API key")]
-    MissingApiKey,
-    #[error("Missing API endpoint")]
-    MissingApiEndpoint,
-    #[error("Invalid response: {0}")]
-    InvalidResponse(String),
-}
+// ============ Tests ============
 
-pub async fn call_llm(prompt: &str, context: Value) -> Result<String, LLMError> {
-    let api_key = env::var("LLM_API_KEY").map_err(|_| LLMError::MissingApiKey)?;
-    let api_endpoint = env::var("LLM_API_ENDPOINT").map_err(|_| LLMError::MissingApiEndpoint)?;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
 
-    let request = serde_json::json!({
-        "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-        "prompt": format!("{} | Context: {}", prompt, context),
-        "max_tokens": 1000,
-        "temperature": 0.7
-    });
+    #[test]
+    fn test_step_new() {
+        let step = Step::new(
+            "test_step".to_string(),
+            StepAction::Python("print('hello')".to_string())
+        );
+        
+        assert_eq!(step.name, "test_step");
+        assert_eq!(step.get_run_count(), 0);  // Use getter instead of direct comparison
+        match step.instruction {
+            StepAction::Python(code) => assert_eq!(code, "print('hello')"),
+            _ => panic!("Wrong instruction type"),
+        }
+    }
 
-    let response: Value = Client::new()
-        .post(api_endpoint)
-        .header("Authorization", format!("Bearer {}", api_key))
-        .json(&request)
-        .send()
-        .await?
-        .json()
-        .await?;
+    #[tokio::test]
+    async fn test_python_step_execution() {
+        let step = Step::new(  // No need for mut
+            "python_test".to_string(),
+            StepAction::Python(r#"
+import json
+source_data = json.loads(source)
+res = source_data['value'] * 2
+"#.to_string())
+        );
 
-    // println!("{:?}", &response);
+        let input = json!({"value": 21});
+        let result = step.run(input, 0).await.unwrap().unwrap();
+        
+        assert_eq!(result, json!(42));
+        assert_eq!(step.get_run_count(), 1);
+    }
 
-    response["choices"][0]["message"]["content"]
-        .as_str()
-        .map(String::from)
-        .ok_or_else(|| LLMError::InvalidResponse("No completion found".to_string()))
+    #[tokio::test]
+    async fn test_python_step_no_result() {
+        let step = Step::new(  // No need for mut
+            "no_result_test".to_string(),
+            StepAction::Python("print('hello')".to_string())
+        );
+
+        let input = json!({"value": 21});
+        let result = step.run(input, 0).await.unwrap();
+        
+        assert!(result.is_none());
+        assert_eq!(step.get_run_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_python_step_error() {
+        let step = Step::new(  // No need for mut
+            "error_test".to_string(),
+            StepAction::Python("invalid python code".to_string())
+        );
+
+        let input = json!({"value": 21});
+        let result = step.run(input, 0).await;
+        
+        assert!(result.is_err());
+        assert_eq!(step.get_run_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_step_multiple_runs() {
+        let step = Step::new(
+            "multiple_runs".to_string(),
+            StepAction::Python(r#"
+import json
+source_data = json.loads(source)
+res = source_data['value'] * 2
+"#.to_string())
+        );
+
+        let input = json!({"value": 21});
+        
+        // Run multiple times
+        step.run(input.clone(), 0).await.unwrap();
+        step.run(input.clone(), 1).await.unwrap();
+        step.run(input.clone(), 2).await.unwrap();
+        
+        assert_eq!(step.get_run_count(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_step_count_on_error() {
+        let step = Step::new(
+            "error_count".to_string(),
+            StepAction::Python("invalid python code".to_string())
+        );
+
+        let input = json!({"value": 21});
+        
+        // Even failed runs should increment the counter
+        let _ = step.run(input.clone(), 0).await;
+        let _ = step.run(input.clone(), 1).await;
+        
+        assert_eq!(step.get_run_count(), 2);
+    }
+
+    // // Note: This test will need a mock for call_llm to work properly
+    // #[tokio::test]
+    // #[ignore] // Ignore by default since it needs LLM configuration
+    // async fn test_prompt_step() {
+    //     let mut step = Step::new(
+    //         "prompt_test".to_string(),
+    //         StepAction::Prompt("Test prompt".to_string())
+    //     );
+
+    //     let input = json!({"value": "test"});
+    //     let result = step.run(input).await.unwrap().unwrap();
+        
+    //     assert!(matches!(result, Value::String(_)));
+    //     assert_eq!(step.run_count, 1);
+    // }
 }
