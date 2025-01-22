@@ -21,8 +21,8 @@ pub enum StepAction {
 
 #[derive(Debug)]
 pub struct Step {
-    name: String,
-    instruction: StepAction,
+    pub name: String,
+    pub instruction: StepAction,
     run_count: AtomicU64
 }
 
@@ -98,127 +98,4 @@ impl Step {
             }
         })
     }
-}
-
-
-// ============ Tests ============
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn test_step_new() {
-        let step = Step::new(
-            "test_step".to_string(),
-            StepAction::Python("print('hello')".to_string())
-        );
-        
-        assert_eq!(step.name, "test_step");
-        assert_eq!(step.get_run_count(), 0);  // Use getter instead of direct comparison
-        match step.instruction {
-            StepAction::Python(code) => assert_eq!(code, "print('hello')"),
-            _ => panic!("Wrong instruction type"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_python_step_execution() {
-        let step = Step::new(  // No need for mut
-            "python_test".to_string(),
-            StepAction::Python(r#"
-import json
-source_data = json.loads(source)
-res = source_data['value'] * 2
-"#.to_string())
-        );
-
-        let input = json!({"value": 21});
-        let result = step.run(input, 0).await.unwrap().unwrap();
-        
-        assert_eq!(result, json!(42));
-        assert_eq!(step.get_run_count(), 1);
-    }
-
-    #[tokio::test]
-    async fn test_python_step_no_result() {
-        let step = Step::new(  // No need for mut
-            "no_result_test".to_string(),
-            StepAction::Python("print('hello')".to_string())
-        );
-
-        let input = json!({"value": 21});
-        let result = step.run(input, 0).await.unwrap();
-        
-        assert!(result.is_none());
-        assert_eq!(step.get_run_count(), 1);
-    }
-
-    #[tokio::test]
-    async fn test_python_step_error() {
-        let step = Step::new(  // No need for mut
-            "error_test".to_string(),
-            StepAction::Python("invalid python code".to_string())
-        );
-
-        let input = json!({"value": 21});
-        let result = step.run(input, 0).await;
-        
-        assert!(result.is_err());
-        assert_eq!(step.get_run_count(), 1);
-    }
-
-    #[tokio::test]
-    async fn test_step_multiple_runs() {
-        let step = Step::new(
-            "multiple_runs".to_string(),
-            StepAction::Python(r#"
-import json
-source_data = json.loads(source)
-res = source_data['value'] * 2
-"#.to_string())
-        );
-
-        let input = json!({"value": 21});
-        
-        // Run multiple times
-        step.run(input.clone(), 0).await.unwrap();
-        step.run(input.clone(), 1).await.unwrap();
-        step.run(input.clone(), 2).await.unwrap();
-        
-        assert_eq!(step.get_run_count(), 3);
-    }
-
-    #[tokio::test]
-    async fn test_step_count_on_error() {
-        let step = Step::new(
-            "error_count".to_string(),
-            StepAction::Python("invalid python code".to_string())
-        );
-
-        let input = json!({"value": 21});
-        
-        // Even failed runs should increment the counter
-        let _ = step.run(input.clone(), 0).await;
-        let _ = step.run(input.clone(), 1).await;
-        
-        assert_eq!(step.get_run_count(), 2);
-    }
-
-    // // Note: This test will need a mock for call_llm to work properly
-    // #[tokio::test]
-    // #[ignore] // Ignore by default since it needs LLM configuration
-    // async fn test_prompt_step() {
-    //     let mut step = Step::new(
-    //         "prompt_test".to_string(),
-    //         StepAction::Prompt("Test prompt".to_string())
-    //     );
-
-    //     let input = json!({"value": "test"});
-    //     let result = step.run(input).await.unwrap().unwrap();
-        
-    //     assert!(matches!(result, Value::String(_)));
-    //     assert_eq!(step.run_count, 1);
-    // }
 }

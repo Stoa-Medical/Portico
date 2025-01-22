@@ -21,15 +21,15 @@ pub enum SessionError {
 
 pub struct Session<'steps> {
     /// Pointer to steps that should be executed
-    steps: &'steps Vec<Step>,
+    pub steps: &'steps Vec<Step>,
     /// The starting input of the session
-    input_data: Value,
+    pub input_data: Value,
     /// The end result of a session
     curr_result: Result<Option<Value>, SessionError>,
     /// Whether the session ran to completion or not
-    completed: bool,
+    pub completed: bool,
     /// Current index of the session step
-    curr_idx: usize,
+    pub curr_idx: usize,
     /// The state of the data at each step (e.g. index i is state after running step i)
     res_state: Vec<Result<Option<Value>, SessionError>>
 }
@@ -105,119 +105,5 @@ impl<'steps> Session<'steps> {
     pub async fn run_all(&mut self, reset_on_err: bool) -> Result<Option<Value>, SessionError> {
         let remaining_steps = self.steps.len() - self.curr_idx;
         self.run_steps(remaining_steps, reset_on_err).await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::models::steps::StepAction;
-    use serde_json::json;
-
-    #[tokio::test]
-    async fn test_session_basic() {
-        let steps = vec![
-            Step::new(
-                "step1".to_string(),
-                StepAction::Python(r#"
-import json
-source_data = json.loads(source)
-res = source_data['value'] * 2
-"#.to_string())
-            ),
-            Step::new(
-                "step2".to_string(),
-                StepAction::Python(r#"
-import json
-source_data = json.loads(source)
-res = source_data + 1
-"#.to_string())
-            ),
-        ];
-
-        let input = json!({"value": 21});
-        let mut session = Session::new(&steps, input);
-        
-        let result = session.run_all(true).await.unwrap();
-        assert!(result.is_some());
-        assert!(session.completed);
-        assert_eq!(steps[0].get_run_count(), 1);
-        assert_eq!(steps[1].get_run_count(), 1);
-    }
-
-    #[tokio::test]
-    async fn test_session_step_by_step() {
-        let steps = vec![
-            Step::new(
-                "step1".to_string(),
-                StepAction::Python(r#"
-import json
-source_data = json.loads(source)
-res = source_data['value'] * 2
-"#.to_string())
-            ),
-            Step::new(
-                "step2".to_string(),
-                StepAction::Python(r#"
-import json
-source_data = json.loads(source)
-res = source_data + 1
-"#.to_string())
-            ),
-        ];
-
-        let input = json!({"value": 21});
-        let mut session = Session::new(&steps, input);
-        
-        // Run first step
-        let result1 = session.run_steps(1, true).await.unwrap();
-        assert!(result1.is_some());
-        assert!(!session.completed);
-        assert_eq!(steps[0].get_run_count(), 1);
-        assert_eq!(steps[1].get_run_count(), 0);
-
-        // Run second step
-        let result2 = session.run_steps(1, true).await.unwrap();
-        assert!(result2.is_some());
-        assert!(session.completed);
-        assert_eq!(steps[0].get_run_count(), 1);
-        assert_eq!(steps[1].get_run_count(), 1);
-    }
-
-    #[tokio::test]
-    async fn test_session_retry_on_error() {
-        let steps = vec![
-            Step::new(
-                "step1".to_string(),
-                StepAction::Python(r#"
-import json
-source_data = json.loads(source)
-res = source_data['value'] * 2
-"#.to_string())
-            ),
-            Step::new(
-                "step2".to_string(),
-                StepAction::Python("invalid python code".to_string())
-            ),
-        ];
-
-        let input = json!({"value": 21});
-        let mut session = Session::new(&steps, input);
-        
-        // First attempt fails at step2
-        let result1 = session.run_all(true).await;
-        println!("After first run: {:?}", result1);
-        println!("Current idx: {}", session.curr_idx);
-        assert!(result1.is_err());
-        
-        // Retry the failed step
-        let result2 = session.run_all(true).await;
-        println!("After second run: {:?}", result2);
-        println!("Current idx: {}", session.curr_idx);
-        assert!(result2.is_err());
-        
-        // Check run counts
-        assert_eq!(steps[0].get_run_count(), 1); // Expect this to run once
-        assert_eq!(steps[1].get_run_count(), 2); // Second step fails twice
     }
 }
