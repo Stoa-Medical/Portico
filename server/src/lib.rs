@@ -10,40 +10,96 @@ pub mod models;
 /// API routes
 pub mod api;
 
-// /// Supported network protocols for Agents
-// pub enum DataProtocol {
-//     // PlaintextTcpIp,  // TODO: Implement this for HL7 messages
-//     // XmlSoap,
-//     JsonRest
-// }
 
-// /// Something that can receive data on an incoming port
-// pub trait CanReceive {
-//     /// The port the channel can receive on (only 1 allowed)
-//     fn incoming_port(&self) -> u16;
-//     /// Starts listener on the incoming port
-//     fn receive(&self, protocol: DataProtocol) -> Result<serde_json::Value, std::io::Error>;
-// }
+// ============ Traits ============
+use chrono::{DateTime, Utc};
+use cron::Schedule;
+use std::str::FromStr;
+use anyhow::Result;
+use serde_json::Value;
+use std::path::PathBuf;
+use async_trait::async_trait;
+use tokio::fs::read_to_string;
 
-// /// Something that can send data to an outgoing destination
-// pub trait CanReact {
-//     /// The destination for the resulting action (expressed as a String)
-//     fn outgoing_destinations(&self) -> Vec<String>;
-//     /// Performs the action in reaction to the data, and returns to the outgoing destination
-//     fn react(&self, source: serde_json::Value, protocol: DataProtocol) -> Result<(), std::io::Error>;
-// }
+#[derive(Debug)]
+pub enum DataSource {
+    Json(Value),
+    File(PathBuf),
+    Directory(PathBuf, String), // Path and file pattern (e.g., "*.json")
+    Url(String),
+}
 
-// pub trait CanSave {
+/// Something that can respond to data
+#[async_trait]
+pub trait CanReact {
+    /// Configure what types of data this reactor accepts
+    fn accepts(&self) -> Vec<&str> {
+        vec!["application/json"]
+    }
 
-// }
+    /// React to a single piece of data
+    async fn react(&self, source: Value) -> Result<Value>;
+
+    /// Process a data source (with default implementations)
+    async fn process_source(&self, source: DataSource) -> Result<Vec<Value>> {
+        match source {
+            DataSource::Json(value) => Ok(vec![self.react(value).await?]),
+            
+            DataSource::File(path) => {
+                let content = read_to_string(path).await?;
+                let value: Value = serde_json::from_str(&content)?;
+                Ok(vec![self.react(value).await?])
+            }
+            
+            DataSource::Directory(path, pattern) => {
+                let mut results = Vec::new();
+                let glob_pattern = path.join(pattern).to_string_lossy().to_string();
+                for entry in glob::glob(&glob_pattern)? {
+                    let path = entry?;
+                    let content = read_to_string(path).await?;
+                    let value: Value = serde_json::from_str(&content)?;
+                    results.push(self.react(value).await?);
+                }
+                Ok(results)
+            }
+            
+            DataSource::Url(url) => {
+                let client = reqwest::Client::new();
+                let value: Value = client.get(&url).send().await?.json().await?;
+                Ok(vec![self.react(value).await?])
+            }
+        }
+    }
+}
+
+
+/// Something that can act on its own (based on a schedule)
+#[async_trait]
+pub trait CanAct {
+    /// The CRON schedule for when this actor should run
+    fn schedule(&self) -> &str;
+    
+    /// The action to perform on schedule
+    async fn act(&self) -> Result<Value>;
+    
+    /// Check if it's time to run based on the schedule
+    fn should_run(&self, last_run: Option<DateTime<Utc>>) -> bool {
+        let schedule = Schedule::from_str(self.schedule()).ok().expect("CRON load failed -- is your syntax right?");
+        let now = Utc::now();
+        
+        match last_run {
+            None => true, // Never run before
+            Some(last) => schedule.after(&last).next().map_or(false, |next| next <= now)
+        }
+    }
+}
+
 
 // ============ Shared functions ============
 
 use std::env;
 use thiserror::Error;
 use reqwest::Client;
-use anyhow::Result;
-use serde_json::Value;
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -96,12 +152,4 @@ pub async fn call_llm(prompt: &str, context: Value) -> Result<String, LLMError> 
         .as_str()
         .map(String::from)
         .ok_or_else(|| LLMError::InvalidResponse("No completion found".to_string()))
-}
-
-/// Tests
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    
 }

@@ -11,7 +11,6 @@ pub mod steps;
 /// Tests for all the modules in this subdirectory
 #[cfg(test)]
 mod tests {
-    use serde_json::Value;
 
     /// Tests for the `Step` library
     mod test_steps {
