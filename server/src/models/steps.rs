@@ -8,7 +8,9 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use serde_json::Value;
 
-use crate::call_llm;
+use anyhow::Result;
+
+use crate::{DataSource, call_llm};
 use crate::models::session::SessionError;
 
 #[derive(Debug)]
@@ -42,13 +44,15 @@ impl Step {
 
     /// Runs the step with fresh context
     /// NOTE: If python code, expects the input value to be called `source` and expect result to be `res`
-    pub async fn run(&self, source: Value, step_idx: usize) -> Result<Option<Value>, SessionError> {
+    pub async fn run(&self, source: DataSource, step_idx: usize) -> Result<Option<Value>> {
         // Increment FIRST, before any potential errors
         self.run_count.fetch_add(1, Ordering::SeqCst);
         
+        let source_data = source.extract().await?;
+
         match &self.instruction {
             StepAction::Prompt(the_prompt) => {
-                match call_llm(the_prompt, source).await {
+                match call_llm(the_prompt, source_data).await {
                     Ok(res_str) => {
                         self.success_count.fetch_add(1, Ordering::SeqCst);
                         Ok(Some(Value::String(res_str)))
@@ -56,11 +60,11 @@ impl Step {
                     Err(err) => Err(SessionError::StepFailed { 
                         step_idx: step_idx,  // This should probably come from Session
                         message: err.to_string() 
-                    })
+                    }.into())
                 }
             }
             StepAction::Python(the_code) => {
-                match self.exec_python(&source, the_code) {
+                match self.exec_python(&source_data, the_code) {
                     Ok(result) => {
                         self.success_count.fetch_add(1, Ordering::SeqCst);
                         Ok(result)
@@ -68,7 +72,7 @@ impl Step {
                     Err(err) => Err(SessionError::StepFailed { 
                         step_idx: step_idx,  // This should probably come from Session
                         message: err.to_string() 
-                    })
+                    }.into())
                 }
             }
         }

@@ -13,8 +13,9 @@ pub mod steps;
 mod tests {
 
     mod test_steps {
-        use super::super::steps::{Step, StepAction};
-        use serde_json::json; 
+        use crate::models::steps::{Step, StepAction};
+        use serde_json::json;
+        use crate::DataSource;
 
         #[test]
         fn test_step_new() {
@@ -42,7 +43,7 @@ res = source_data['value'] * 2
 "#.to_string())
             );
     
-            let input = json!({"value": 21});
+            let input = DataSource::Json(json!({"value": 21}));
             let result = step.run(input, 0).await.unwrap().unwrap();
             
             assert_eq!(result, json!(42));
@@ -56,7 +57,7 @@ res = source_data['value'] * 2
                 StepAction::Python("print('hello')".to_string())
             );
     
-            let input = json!({"value": 21});
+            let input =  DataSource::Json(json!({"value": 21}));
             let result = step.run(input, 0).await.unwrap();
             
             assert!(result.is_none());
@@ -70,7 +71,7 @@ res = source_data['value'] * 2
                 StepAction::Python("invalid python code".to_string())
             );
     
-            let input = json!({"value": 21});
+            let input =  DataSource::Json(json!({"value": 21}));
             let result = step.run(input, 0).await;
             
             assert!(result.is_err());
@@ -88,7 +89,7 @@ res = source_data['value'] * 2
 "#.to_string())
             );
     
-            let input = json!({"value": 21});
+            let input =  DataSource::Json(json!({"value": 21}));
             
             // Run multiple times
             step.run(input.clone(), 0).await.unwrap();
@@ -105,7 +106,7 @@ res = source_data['value'] * 2
                 StepAction::Python("invalid python code".to_string())
             );
     
-            let input = json!({"value": 21});
+            let input =  DataSource::Json(json!({"value": 21}));
             
             // Even failed runs should increment the counter
             let _ = step.run(input.clone(), 0).await;
@@ -134,6 +135,7 @@ res = source_data['value'] * 2
     mod test_session {
         use crate::models::session::Session;
         use crate::models::steps::{Step, StepAction};
+        use crate::DataSource;
         use serde_json::json;
     
         #[tokio::test]
@@ -157,12 +159,12 @@ res = source_data + 1
                 ),
             ];
     
-            let input = json!({"value": 21});
+            let input =  DataSource::Json(json!({"value": 21}));
             let mut session = Session::new(&steps, input);
             
             let result = session.run_all(true).await.unwrap();
             assert!(result.is_some());
-            assert!(session.completed);
+            assert!(session.is_completed());
             assert_eq!(steps[0].get_run_count(), 1);
             assert_eq!(steps[1].get_run_count(), 1);
         }
@@ -188,22 +190,22 @@ res = source_data + 1
                 ),
             ];
     
-            let input = json!({"value": 21});
+            let input =  DataSource::Json(json!({"value": 21}));
             let mut session = Session::new(&steps, input);
             
             // Run first step
-            let result1 = session.run_steps(1, true).await.unwrap();
+            let result1 = session.run_n_steps(1, true).await.unwrap();
             assert!(result1.is_some());
-            assert!(!session.completed);
+            assert!(!session.is_completed());
             assert_eq!(steps[0].get_run_count(), 1);
             assert_eq!(steps[0].get_success_count(), 1);
             assert_eq!(steps[1].get_run_count(), 0);
             assert_eq!(steps[1].get_success_count(), 0);
     
             // Run second step
-            let result2 = session.run_steps(1, true).await.unwrap();
+            let result2 = session.run_n_steps(1, true).await.unwrap();
             assert!(result2.is_some());
-            assert!(session.completed);
+            assert!(session.is_completed());
             assert_eq!(steps[0].get_run_count(), 1);
             assert_eq!(steps[0].get_success_count(), 1);
             assert_eq!(steps[1].get_run_count(), 1);
@@ -227,19 +229,19 @@ res = source_data['value'] * 2
                 ),
             ];
     
-            let input = json!({"value": 21});
+            let input =  DataSource::Json(json!({"value": 21}));
             let mut session = Session::new(&steps, input);
             
             // First attempt fails at step2
             let result1 = session.run_all(true).await;
             println!("After first run: {:?}", result1);
-            println!("Current idx: {}", session.curr_idx);
+            println!("Current idx: {}", session.current_step());
             assert!(result1.is_err());
             
             // Retry the failed step
             let result2 = session.run_all(true).await;
             println!("After second run: {:?}", result2);
-            println!("Current idx: {}", session.curr_idx);
+            println!("Current idx: {}", session.current_step());
             assert!(result2.is_err());
             
             // Check run counts

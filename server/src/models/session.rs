@@ -1,6 +1,7 @@
 /// The goal of a Session is to complete a series of steps and return the curr_result
 /// It receives a pointer to steps and is expected to run those steps
 
+use crate::DataSource;
 use crate::models::steps::Step;
 use serde_json::Value;
 
@@ -23,19 +24,19 @@ pub struct Session<'steps> {
     /// Pointer to steps that should be executed
     pub steps: &'steps Vec<Step>,
     /// The starting input of the session
-    pub input_data: Value,
+    pub input_data: DataSource,
     /// The end result of a session
     curr_result: Result<Option<Value>, SessionError>,
     /// Whether the session ran to completion or not
-    pub completed: bool,
+    completed: bool,
     /// Current index of the session step
-    pub curr_idx: usize,
+    curr_idx: usize,
     /// The state of the data at each step (e.g. index i is state after running step i)
     res_state: Vec<Result<Option<Value>, SessionError>>
 }
 
 impl<'steps> Session<'steps> {
-    pub fn new(steps: &'steps Vec<Step>, input_data: Value) -> Self {
+    pub fn new(steps: &'steps Vec<Step>, input_data: DataSource) -> Self {
         Self {
             steps,
             input_data,
@@ -46,9 +47,52 @@ impl<'steps> Session<'steps> {
         }
     }
 
-    /// Attempts to execute steps. If successful, retuns the number of steps run (stops at last step)
-    ///   Returns the number of steps executed. Returns Err if cannot complete that number of steps
-    pub async fn run_steps(&mut self, n_steps: usize, reset_on_err: bool) -> Result<Option<Value>, SessionError> {
+    /// Runs a single step and returns its result
+    async fn run_one_step(&mut self, idx: usize) -> Result<Option<Value>, SessionError> {
+        let step = &self.steps[idx];
+        let input = if idx == 0 {
+            self.input_data.extract().await.map_err(|e| SessionError::StepFailed { 
+                step_idx: idx, 
+                message: e.to_string() 
+            })?
+        } else if idx == self.curr_idx && !self.res_state.is_empty() {
+            // If retrying a step, use the previous step's result
+            self.res_state[idx-1].clone()?.ok_or(SessionError::NoInput(idx))?
+        } else {
+            self.curr_result.clone()?.ok_or(SessionError::NoInput(idx))?
+        };
+
+        match step.run(DataSource::Json(input), idx).await {
+            Ok(result) => {
+                self.curr_result = Ok(result.clone());
+                self.res_state.push(self.curr_result.clone());
+                self.curr_idx += 1;
+                Ok(result)
+            }
+            Err(e) => Err(SessionError::StepFailed { 
+                step_idx: idx, 
+                message: e.to_string() 
+            })
+        }
+    }
+    /// Rolls back the session state to before the given index
+    fn rollback_to(&mut self, idx: usize, initial_res: Result<Option<Value>, SessionError>) {
+        self.curr_result = initial_res;
+        self.curr_idx = idx;
+        self.res_state.truncate(idx);
+    }
+
+    /// Returns whether all steps have been completed
+    pub fn is_completed(&self) -> bool {
+        self.completed
+    }
+
+    /// Returns the current step index
+    pub fn current_step(&self) -> usize {
+        self.curr_idx
+    }
+
+    pub async fn run_n_steps(&mut self, n_steps: usize, reset_on_err: bool) -> Result<Option<Value>, SessionError> {
         let target_idx = self.curr_idx + n_steps;
         if target_idx > self.steps.len() {
             return Err(SessionError::BoundsExceeded { 
@@ -57,39 +101,16 @@ impl<'steps> Session<'steps> {
             });
         }
     
-        // Store initial state in case we need to reset
         let initial_res = self.curr_result.clone();
         
-        // Execute steps
         for idx in self.curr_idx..target_idx {
-            let step = &self.steps[idx];
-            let input = if idx == 0 {
-                self.input_data.clone()
-            } else if idx == self.curr_idx && !self.res_state.is_empty() {
-                // If retrying a step, use the previous step's result
-                self.res_state[idx-1].clone()?.ok_or(SessionError::NoInput(idx))?
-            } else {
-                self.curr_result.clone()?.ok_or(SessionError::NoInput(idx))?
-            };
-    
-
-            match step.run(input, idx).await {
-                Ok(result) => {
-                    self.curr_result = Ok(result);
-                    self.res_state.push(self.curr_result.clone());
-                    self.curr_idx += 1;
-                }
+            match self.run_one_step(idx).await {
+                Ok(_) => continue,
                 Err(e) => {
                     if reset_on_err {
-                        // Reset the result and the index
-                        self.curr_result = initial_res;
-                        self.curr_idx = idx; // Reset to the failed step
-                        self.res_state.truncate(idx);
+                        self.rollback_to(idx, initial_res);
                     }
-                    return Err(SessionError::StepFailed { 
-                        step_idx: idx, 
-                        message: e.to_string() 
-                    });
+                    return Err(e);
                 }
             }
         }
@@ -101,9 +122,8 @@ impl<'steps> Session<'steps> {
         Ok(self.curr_result.clone()?)
     }
 
-    /// Attempts to run steps to completion. Starts from the current step. Returns whether all 
     pub async fn run_all(&mut self, reset_on_err: bool) -> Result<Option<Value>, SessionError> {
         let remaining_steps = self.steps.len() - self.curr_idx;
-        self.run_steps(remaining_steps, reset_on_err).await
+        self.run_n_steps(remaining_steps, reset_on_err).await
     }
 }

@@ -21,16 +21,37 @@ use std::path::PathBuf;
 use async_trait::async_trait;
 use tokio::fs::read_to_string;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum DataSource {
     Json(Value),
     File(PathBuf),
-    Directory(PathBuf, String), // Path and file pattern (e.g., "*.json")
-    Url(String),
+    Url(String), // Performs a GET request and processes HTML as string
+}
+
+impl DataSource {
+    /// Extract the content into a Value
+    pub async fn extract(&self) -> Result<Value, anyhow::Error> {
+        match self {
+            DataSource::Json(value) => Ok(value.clone()),
+            DataSource::File(path) => {
+                let content = read_to_string(path).await?;
+                Ok(serde_json::from_str(&content)?)
+            },
+            DataSource::Url(url) => {
+                let client = reqwest::Client::new();
+                Ok(client.get(url)
+                    .send()
+                    .await?
+                    .json()
+                    .await?)
+            }
+        }
+    }
 }
 
 /// Something that can respond to data
 #[async_trait]
+// NEXT-STEP: Modified to `DataSource` -- get this to work
 pub trait CanReact {
     /// Configure what types of data this reactor accepts
     fn accepts(&self) -> Vec<&str> {
@@ -38,38 +59,7 @@ pub trait CanReact {
     }
 
     /// React to a single piece of data
-    async fn react(&self, source: Value) -> Result<Value>;
-
-    /// Process a data source (with default implementations)
-    async fn process_source(&self, source: DataSource) -> Result<Vec<Value>> {
-        match source {
-            DataSource::Json(value) => Ok(vec![self.react(value).await?]),
-            
-            DataSource::File(path) => {
-                let content = read_to_string(path).await?;
-                let value: Value = serde_json::from_str(&content)?;
-                Ok(vec![self.react(value).await?])
-            }
-            
-            DataSource::Directory(path, pattern) => {
-                let mut results = Vec::new();
-                let glob_pattern = path.join(pattern).to_string_lossy().to_string();
-                for entry in glob::glob(&glob_pattern)? {
-                    let path = entry?;
-                    let content = read_to_string(path).await?;
-                    let value: Value = serde_json::from_str(&content)?;
-                    results.push(self.react(value).await?);
-                }
-                Ok(results)
-            }
-            
-            DataSource::Url(url) => {
-                let client = reqwest::Client::new();
-                let value: Value = client.get(&url).send().await?.json().await?;
-                Ok(vec![self.react(value).await?])
-            }
-        }
-    }
+    async fn react(&self, source: DataSource) -> Result<Value>;
 }
 
 
@@ -80,7 +70,7 @@ pub trait CanAct {
     fn schedule(&self) -> &str;
     
     /// The action to perform on schedule
-    async fn act(&self) -> Result<Value>;
+    async fn act(&self, source: DataSource) -> Result<Value>;
     
     /// Check if it's time to run based on the schedule
     fn should_run(&self, last_run: Option<DateTime<Utc>>) -> bool {
