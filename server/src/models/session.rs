@@ -19,10 +19,16 @@ pub enum SessionError {
     NoInput(usize),
 }
 
+#[derive(Clone)]
+pub struct SessionCheckpoint {
+    current_step: usize,
+    saved_result: Option<Value>,
+}
+
 
 pub struct Session<'steps> {
     /// Pointer to steps that should be executed
-    pub steps: &'steps Vec<Step>,
+    pub steps: &'steps mut Vec<Step>,
     /// The starting input of the session
     pub input_data: DataSource,
     /// The end result of a session
@@ -36,7 +42,7 @@ pub struct Session<'steps> {
 }
 
 impl<'steps> Session<'steps> {
-    pub fn new(steps: &'steps Vec<Step>, input_data: DataSource) -> Self {
+    pub fn new(steps: &'steps mut Vec<Step>, input_data: DataSource) -> Self {
         Self {
             steps,
             input_data,
@@ -47,9 +53,27 @@ impl<'steps> Session<'steps> {
         }
     }
 
+    pub fn save_checkpoint(&self) -> Option<SessionCheckpoint> {
+        Some(SessionCheckpoint {
+            current_step: self.curr_idx,
+            saved_result: self.curr_result.clone().expect("Expected non-Err checkpoint to save"),
+        })
+    }
+
+    pub fn resume_from_checkpoint(
+        steps: &'steps mut Vec<Step>, 
+        input: DataSource, 
+        checkpoint: SessionCheckpoint
+    ) -> Self {
+        let mut session = Self::new(steps, input);
+        session.curr_idx = checkpoint.current_step;
+        session.curr_result = Ok(checkpoint.saved_result);
+        session
+    }
+
     /// Runs a single step and returns its result
     async fn run_one_step(&mut self, idx: usize) -> Result<Option<Value>, SessionError> {
-        let step = &self.steps[idx];
+        let step = &mut self.steps[idx];
         let input = if idx == 0 {
             self.input_data.extract().await.map_err(|e| SessionError::StepFailed { 
                 step_idx: idx, 

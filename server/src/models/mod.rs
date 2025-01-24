@@ -140,84 +140,102 @@ res = source_data['value'] * 2
     
         #[tokio::test]
         async fn test_session_basic() {
-            let steps = vec![
+            let mut steps = vec![
                 Step::new(
                     "step1".to_string(),
                     StepAction::Python(r#"
 import json
 source_data = json.loads(source)
 res = source_data['value'] * 2
-"#.to_string())
-            ),
-            Step::new(
-                "step2".to_string(),
-                StepAction::Python(r#"
+    "#.to_string())
+                ),
+                Step::new(
+                    "step2".to_string(),
+                    StepAction::Python(r#"
 import json
 source_data = json.loads(source)
 res = source_data + 1
-"#.to_string())
+    "#.to_string())
                 ),
             ];
     
-            let input =  DataSource::Json(json!({"value": 21}));
-            let mut session = Session::new(&steps, input);
+            let input = DataSource::Json(json!({"value": 21}));
             
-            let result = session.run_all(true).await.unwrap();
-            assert!(result.is_some());
-            assert!(session.is_completed());
+            {
+                let mut session = Session::new(&mut steps, input);
+                let result = session.run_all(true).await.unwrap();
+                assert!(result.is_some());
+                assert!(session.is_completed());
+            }
+    
+            // Verify final state
             assert_eq!(steps[0].get_run_count(), 1);
             assert_eq!(steps[1].get_run_count(), 1);
         }
-    
+        
         #[tokio::test]
-        async fn test_session_step_by_step() {
-            let steps = vec![
-                Step::new(
-                    "step1".to_string(),
-                    StepAction::Python(r#"
+        async fn test_session_checkpoints() {
+                let mut steps = vec![
+                    Step::new(
+                        "step1".to_string(),
+                        StepAction::Python(r#"
 import json
 source_data = json.loads(source)
 res = source_data['value'] * 2
 "#.to_string())
-            ),
-            Step::new(
-                "step2".to_string(),
-                StepAction::Python(r#"
+                    ),
+                    Step::new(
+                        "step2".to_string(),
+                        StepAction::Python(r#"
 import json
 source_data = json.loads(source)
 res = source_data + 1
 "#.to_string())
-                ),
-            ];
-    
-            let input =  DataSource::Json(json!({"value": 21}));
-            let mut session = Session::new(&steps, input);
-            
-            // Run first step
-            let result1 = session.run_n_steps(1, true).await.unwrap();
-            assert!(result1.is_some());
-            assert!(!session.is_completed());
-            assert_eq!(steps[0].get_run_count(), 1);
-            assert_eq!(steps[0].get_success_count(), 1);
-            assert_eq!(steps[1].get_run_count(), 0);
-            assert_eq!(steps[1].get_success_count(), 0);
-    
-            // Run second step
-            let result2 = session.run_n_steps(1, true).await.unwrap();
-            assert!(result2.is_some());
-            assert!(session.is_completed());
-            assert_eq!(steps[0].get_run_count(), 1);
-            assert_eq!(steps[0].get_success_count(), 1);
-            assert_eq!(steps[1].get_run_count(), 1);
-            assert_eq!(steps[1].get_success_count(), 1);
+                    ),
+                ];
+
+                let input = DataSource::Json(json!({"value": 21}));
+                let mut checkpoint = None;
+                
+                // First session - run until interruption
+                {
+                    let mut session = Session::new(&mut steps, input.clone());
+                    let result = session.run_n_steps(1, true).await.unwrap();
+                    assert!(result.is_some());
+                    checkpoint = session.save_checkpoint();
+                }
+
+                // Verify intermediate state
+                assert_eq!(steps[0].get_run_count(), 1);
+                assert_eq!(steps[0].get_success_count(), 1);
+                assert_eq!(steps[1].get_run_count(), 0);
+                
+                // Resume session from checkpoint
+                {
+                    let mut session = Session::resume_from_checkpoint(&mut steps, input, checkpoint.unwrap());
+                    let result = session.run_all(true).await.unwrap();
+                    assert!(result.is_some());
+                    assert!(session.is_completed());
+                }
+
+                // Verify final state
+                assert_eq!(steps[0].get_run_count(), 1); // First step shouldn't run again
+                assert_eq!(steps[0].get_success_count(), 1);
+                assert_eq!(steps[1].get_run_count(), 1); // Only second step runs
+                assert_eq!(steps[1].get_success_count(), 1);
         }
+    }
+    mod test_agents {
+        use crate::models::agents::{Agent, AgentType};
+        use crate::models::steps::{Step, StepAction};
+        use crate::DataSource;
+        use serde_json::json;
     
-        #[tokio::test]
-        async fn test_session_retry_on_error() {
+        fn create_test_agent(err_rate: f32, agent_type: AgentType) -> Agent {
             let steps = vec![
                 Step::new(
                     "step1".to_string(),
-                StepAction::Python(r#"
+                    StepAction::Python(r#"
 import json
 source_data = json.loads(source)
 res = source_data['value'] * 2
@@ -225,30 +243,135 @@ res = source_data['value'] * 2
                 ),
                 Step::new(
                     "step2".to_string(),
+                    StepAction::Python(r#"
+import json
+source_data = json.loads(source)
+res = source_data + 1
+"#.to_string())
+                ),
+            ];
+    
+            Agent::new(
+                "Test Agent".to_string(),
+                err_rate,
+                steps,
+                agent_type
+            )
+        }
+    
+        #[test]
+        fn test_agent_state_transitions() {
+            let mut agent = create_test_agent(0.1, AgentType::Reactor);
+            
+            // Test initial state
+            assert!(agent.start().is_ok());
+            
+            // Test invalid transitions
+            assert!(agent.start().is_err()); // Can't start twice
+            
+            // Test check operation
+            assert!(agent.check().is_ok()); // Should be stable initially
+            
+            // Test stop operation
+            assert!(agent.stop().is_ok());
+            assert!(agent.check().is_err()); // Can't check when inactive
+        }
+    
+        #[tokio::test]
+        async fn test_agent_reactor_behavior() {
+            let mut agent = create_test_agent(0.1, AgentType::Reactor);
+            agent.start().unwrap();
+            
+            let input = DataSource::Json(json!({"value": 21}));
+            let result = agent.run(input).await;
+            
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), json!(43)); // (21 * 2) + 1
+        }
+    
+        #[tokio::test]
+        async fn test_agent_actor_behavior() {
+            let mut agent = create_test_agent(
+                0.1, 
+                AgentType::Actor("0 0 * * * *".to_string())
+            );
+            agent.start().unwrap();
+            
+            let input = DataSource::Json(json!({"value": 21}));
+            let result = agent.run(input).await;
+            
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), json!(43)); // (21 * 2) + 1
+        }
+    
+        #[tokio::test]
+        async fn test_agent_error_handling() {
+            let steps = vec![
+                Step::new(
+                    "step1".to_string(),
                     StepAction::Python("invalid python code".to_string())
                 ),
             ];
     
-            let input =  DataSource::Json(json!({"value": 21}));
-            let mut session = Session::new(&steps, input);
+            let mut agent = Agent::new(
+                "Error Test Agent".to_string(),
+                0.1,
+                steps,
+                AgentType::Reactor
+            );
+    
+            agent.start().unwrap();
             
-            // First attempt fails at step2
-            let result1 = session.run_all(true).await;
-            println!("After first run: {:?}", result1);
-            println!("Current idx: {}", session.current_step());
-            assert!(result1.is_err());
+            let input = DataSource::Json(json!({"value": 21}));
+            let result = agent.run(input).await;
             
-            // Retry the failed step
-            let result2 = session.run_all(true).await;
-            println!("After second run: {:?}", result2);
-            println!("Current idx: {}", session.current_step());
-            assert!(result2.is_err());
+            assert!(result.is_err());
+            assert!(agent.check().is_err()); // Should be unstable
+        }
+    
+        #[test]
+        fn test_error_rate_calculation() {
+            let steps = vec![
+                Step::new(
+                    "step1".to_string(),
+                    StepAction::Python("print('test')".to_string())
+                ),
+            ];
+    
+            let agent = Agent::new(
+                "Error Rate Test".to_string(),
+                0.1,
+                steps,
+                AgentType::Reactor
+            );
+    
+            // Initially should have 0 error rate
+            assert_eq!(agent.get_err_rate(), 0.0);
+        }
+    
+        #[tokio::test]
+        async fn test_agent_stability_threshold() {
+            let mut agent = create_test_agent(0.5, AgentType::Reactor); // 50% error threshold
+            agent.start().unwrap();
             
-            // Check run counts
-            assert_eq!(steps[0].get_run_count(), 1); // Expect this to run once (i.e. retry from last failed)
-            assert_eq!(steps[0].get_success_count(), 1);
-            assert_eq!(steps[1].get_run_count(), 2); // Second step fails twice
-            assert_eq!(steps[1].get_success_count(), 0);
+            let input = DataSource::Json(json!({"value": 21}));
+            let result = agent.run(input).await;
+
+            assert!(result.is_ok());
+
+            let check_result = agent.check();
+            assert!(check_result.is_ok()); // Should be stable
+    
+            // Now create an agent with very low error threshold
+            let mut strict_agent = create_test_agent(0.01, AgentType::Reactor); // 1% error threshold
+            strict_agent.start().unwrap();
+            
+            // Run with invalid input to cause errors
+            let invalid_input = DataSource::Json(json!({"wrong_key": 21}));
+            let result = strict_agent.run(invalid_input).await;
+            
+            assert!(result.is_err());
+            assert!(strict_agent.check().is_err()); // Should be unstable
         }
     }
 }

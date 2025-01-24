@@ -51,7 +51,6 @@ impl DataSource {
 
 /// Something that can respond to data
 #[async_trait]
-// NEXT-STEP: Modified to `DataSource` -- get this to work
 pub trait CanReact {
     /// Configure what types of data this reactor accepts
     fn accepts(&self) -> Vec<&str> {
@@ -59,7 +58,7 @@ pub trait CanReact {
     }
 
     /// React to a single piece of data
-    async fn react(&self, source: DataSource) -> Result<Value>;
+    async fn react(&mut self, source: DataSource) -> Result<Value>;
 }
 
 
@@ -70,7 +69,7 @@ pub trait CanAct {
     fn schedule(&self) -> &str;
     
     /// The action to perform on schedule
-    async fn act(&self, source: DataSource) -> Result<Value>;
+    async fn act(&mut self, source: DataSource) -> Result<Value>;
     
     /// Check if it's time to run based on the schedule
     fn should_run(&self, last_run: Option<DateTime<Utc>>) -> bool {

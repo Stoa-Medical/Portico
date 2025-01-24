@@ -41,7 +41,7 @@ pub struct Agent {
 ///      └───────── Stopping ◄──────────┘
 /// ```
 #[derive(Debug, PartialEq)]
-enum AgentState {
+pub enum AgentState {
     Inactive,
     Waiting,
     Running,
@@ -83,7 +83,7 @@ impl Agent {
         match self.agent_state {
             AgentState::Waiting | AgentState::Unstable => {
                 let curr_err_rate = self.get_err_rate();
-                let is_stable = curr_err_rate < self.accepted_err_rate;
+                let is_stable = curr_err_rate <= self.accepted_err_rate;
                 
                 // Update state based on stability
                 self.agent_state = if is_stable {
@@ -119,8 +119,9 @@ impl Agent {
                     AgentType::Reactor => self.react(source).await?,
                 };
 
+
                 // Check state
-                if self.get_err_rate() < self.accepted_err_rate {
+                if self.get_err_rate() <= self.accepted_err_rate {
                     self.agent_state = AgentState::Waiting;
                 } else {
                     self.agent_state = AgentState::Unstable;
@@ -144,31 +145,36 @@ impl Agent {
         }
     }
 
-    fn get_err_rate(&self) -> f32 {
+    pub fn get_err_rate(&self) -> f32 {
         // Calculate error rate across all steps
-        let total_errors: u64 = self.steps.iter()
-            .map(|step| step.get_success_count())
-            .sum();
         let total_runs: u64 = self.steps.iter()
             .map(|step| step.get_run_count())
             .sum();
-    
+        
         if total_runs == 0 {
             return 0.0; // No runs yet, assume ok
         }
     
+        let total_failures: u64 = self.steps.iter()
+            .map(|step| step.get_run_count() - step.get_success_count())
+            .sum();
+    
         // Calculate error rate and return it
-        total_errors as f32 / total_runs as f32
+        total_failures as f32 / total_runs as f32
+    }
+
+    pub fn check_state(&self) -> &AgentState {
+        &self.agent_state
     }
 
 }
 
-// NEXT-STEP: Get this to work
+
 #[async_trait]
 impl CanReact for Agent {
-    async fn react(&self, source: DataSource) -> Result<Value> {
+    async fn react(&mut self, source: DataSource) -> Result<Value> {
         // Create a session with the agent's steps and input data
-        let mut session = Session::new(&self.steps, source);
+        let mut session = Session::new(&mut self.steps, source);
         
         // Run all steps and return the final result
         match session.run_all(true).await {
@@ -188,10 +194,10 @@ impl CanAct for Agent {
         }
     }
     
-    async fn act(&self, source: DataSource) -> Result<Value> {
+    async fn act(&mut self, source: DataSource) -> Result<Value> {
         // Create a session with empty input data
         let mut session = Session::new(
-            &self.steps, 
+            &mut self.steps, 
             source
         );
         
