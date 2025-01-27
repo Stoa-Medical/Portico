@@ -7,9 +7,6 @@
 
 /// Module with different data models
 pub mod models;
-/// API routes
-pub mod api;
-
 
 // ============ Traits ============
 use chrono::{DateTime, Utc};

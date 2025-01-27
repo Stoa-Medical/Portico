@@ -11,11 +11,13 @@ use serde_json::Value;
 use anyhow::Result;
 use uuid::Uuid;
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 
 /// Agents are units of action
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Agent {
     /// The UUID identifier
-    id: Uuid,
+    id: String,
     /// What does this agent do (as described by a human)?
     description: String,
     /// The state of the agent
@@ -36,11 +38,11 @@ pub struct Agent {
 ///  Inactive ──────► Waiting ──────► Running ──┐
 ///      ▲             │   ▲            ▲       |
 ///      │             │   │ (check)    | (run) |
-///      │             |   └───────► Unstable ◄─┘
+///      │             │   └───────► Unstable ◄─┘
 ///      |             v                |
 ///      └───────── Stopping ◄──────────┘
 /// ```
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq,  Clone, Serialize, Deserialize)]
 pub enum AgentState {
     Inactive,
     Waiting,
@@ -49,6 +51,7 @@ pub enum AgentState {
     Stopping
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AgentType {
     /// Performs a specific action based on a CRON schedule
     Actor(String),
@@ -59,7 +62,7 @@ impl Agent {
     pub fn new(description: String, accepted_err_rate: f32, steps: Vec<Step>, agent_type: AgentType) -> Self {
         // Start all agents in a waiting state
         Self {
-            id: Uuid::new_v4(),
+            id: Uuid::new_v4().to_string(),
             description,
             agent_state: AgentState::Inactive,
             steps,

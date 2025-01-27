@@ -9,11 +9,12 @@ use pyo3::types::PyDict;
 use serde_json::Value;
 
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
 use crate::{DataSource, call_llm};
 use crate::models::session::SessionError;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum StepAction {
     /// Python that will be executed within the current interpreter session
     Python(String),
@@ -21,7 +22,7 @@ pub enum StepAction {
     Prompt(String)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Step {
     pub name: String,
     pub instruction: StepAction,

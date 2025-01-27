@@ -9,3 +9,11 @@ TESTS
     - or `src/*/mod.rs` (for submodules)
 - Integration tests are in `tests/`
 - Run tests with `cargo test`
+
+
+Local toolkit:
+- brew (MacOS)
+
+Dependencies:
+- supabase
+- Atlas (https://atlasgo.io)
