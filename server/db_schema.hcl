@@ -74,7 +74,7 @@ table "agents" {
 table "steps" {
   schema = schema.public
   column "id" {
-    type = int
+    type = bigint
     null = false
     identity {
       generated = ALWAYS
@@ -122,7 +122,7 @@ table "steps" {
 table "runtime_sessions" {
   schema = schema.public
   column "id" {
-    type = int
+    type = bigint
     null = false
     identity {
       generated = ALWAYS
@@ -134,7 +134,7 @@ table "runtime_sessions" {
   }
 
   column "current_step" {
-    type = int
+    type = bigint
     null = false
   }
   column "saved_result" {
@@ -159,6 +159,96 @@ table "runtime_sessions" {
   foreign_key "rts_agent_fk" {
     columns = [column.agent_id]
     ref_columns = [table.agents.column.id]
+    on_delete = CASCADE
+  }
+}
+
+table "rts_steps" {
+  schema = schema.public
+
+  column "runtime_session_id" {
+    type = bigint
+    null = false
+  }
+
+  column "step_id" {
+    type = bigint
+    null = false
+  }
+
+  primary_key {
+    columns = [column.runtime_session_id, column.step_id]
+  }
+
+  foreign_key "rss_runtime_session_fk" {
+    columns = [column.runtime_session_id]
+    ref_columns = [table.runtime_sessions.column.id]
+    on_delete = CASCADE
+  }
+
+  foreign_key "rss_step_fk" {
+    columns = [column.step_id]
+    ref_columns = [table.steps.column.id]
+    on_delete = CASCADE
+  }
+}
+
+table "agent_steps" {
+  schema = schema.public
+
+  column "agent_id" {
+    type = varchar(36)  // UUID to match agents table
+    null = false
+  }
+
+  column "step_id" {
+    type = bigint
+    null = false
+  }
+
+  primary_key {
+    columns = [column.agent_id, column.step_id]
+  }
+
+  foreign_key "as_agent_fk" {
+    columns = [column.agent_id]
+    ref_columns = [table.agents.column.id]
+    on_delete = CASCADE
+  }
+
+  foreign_key "as_step_fk" {
+    columns = [column.step_id]
+    ref_columns = [table.steps.column.id]
+    on_delete = CASCADE
+  }
+}
+
+table "agent_rts" {
+  schema = schema.public
+
+  column "agent_id" {
+    type = varchar(36)  // UUID to match agents table
+    null = false
+  }
+
+  column "runtime_session_id" {
+    type = bigint
+    null = false
+  }
+
+  primary_key {
+    columns = [column.agent_id, column.runtime_session_id]
+  }
+
+  foreign_key "as_agent_fk" {
+    columns = [column.agent_id]
+    ref_columns = [table.agents.column.id]
+    on_delete = CASCADE
+  }
+
+  foreign_key "as_session_fk" {
+    columns = [column.runtime_session_id]
+    ref_columns = [table.runtime_sessions.column.id]
     on_delete = CASCADE
   }
 }
