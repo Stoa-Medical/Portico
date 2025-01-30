@@ -1,11 +1,11 @@
 - [x] Get supabase running locally
-- [ ] Set-up Atlas schema
-- [ ] Set-up Postgrest interface
+- [x] Set-up Atlas schema
+- [x] Set-up Postgrest interface
+- [ ] Get event loop listener going
 - Try CRUD for:
     - [ ] Agents
     - [ ] Steps
     - [ ] Session
-- [ ] Get event loop listener going
 - [ ] Write integration test for event loop listener
 === server v1 done! ===
 
