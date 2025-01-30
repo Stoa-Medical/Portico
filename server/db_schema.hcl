@@ -116,7 +116,7 @@ table "steps" {
   }
 }
 
-table "sessions" {
+table "runtime_sessions" {
   schema = schema.public
   column "id" {
     type = int
@@ -153,7 +153,7 @@ table "sessions" {
     null = false
   }
 
-  foreign_key "session_agent_fk" {
+  foreign_key "rts_agent_fk" {
     columns = [column.agent_id]
     ref_columns = [table.agents.column.id]
     on_delete = CASCADE

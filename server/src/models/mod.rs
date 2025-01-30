@@ -1,7 +1,7 @@
 /// Module for defining and managing Agents
 pub mod agents;
-/// Module for running Steps + data
-pub mod session;
+/// Module for running Steps + data (in a RuntimeSession, abbrv. rts)
+pub mod runtime;
 /// Module for defining and running Steps
 pub mod steps;
 // /// Module for interfacing with the database
@@ -133,7 +133,7 @@ res = source_data['value'] * 2
     }
 
     mod test_session {
-        use crate::models::session::Session;
+        use crate::models::runtime::RuntimeSession;
         use crate::models::steps::{Step, StepAction};
         use crate::DataSource;
         use serde_json::json;
@@ -162,10 +162,10 @@ res = source_data + 1
             let input = DataSource::Json(json!({"value": 21}));
             
             {
-                let mut session = Session::new(&mut steps, input);
-                let result = session.run_all(true).await.unwrap();
+                let mut rts = RuntimeSession::new(&mut steps, input);
+                let result = rts.run_all(true).await.unwrap();
                 assert!(result.is_some());
-                assert!(session.is_completed());
+                assert!(rts.is_completed());
             }
     
             // Verify final state
@@ -197,12 +197,12 @@ res = source_data + 1
                 let input = DataSource::Json(json!({"value": 21}));
                 let mut checkpoint = None;
                 
-                // First session - run until interruption
+                // First RuntimeSession - run until interruption
                 {
-                    let mut session = Session::new(&mut steps, input.clone());
-                    let result = session.run_n_steps(1, true).await.unwrap();
+                    let mut rts = RuntimeSession::new(&mut steps, input.clone());
+                    let result = rts.run_n_steps(1, true).await.unwrap();
                     assert!(result.is_some());
-                    checkpoint = session.save_checkpoint();
+                    checkpoint = rts.save_checkpoint();
                 }
 
                 // Verify intermediate state
@@ -210,12 +210,12 @@ res = source_data + 1
                 assert_eq!(steps[0].get_success_count(), 1);
                 assert_eq!(steps[1].get_run_count(), 0);
                 
-                // Resume session from checkpoint
+                // Resume RuntimeSession from checkpoint
                 {
-                    let mut session = Session::resume_from_checkpoint(&mut steps, input, checkpoint.unwrap());
-                    let result = session.run_all(true).await.unwrap();
+                    let mut rts = RuntimeSession::resume_from_checkpoint(&mut steps, input, checkpoint.unwrap());
+                    let result = rts.run_all(true).await.unwrap();
                     assert!(result.is_some());
-                    assert!(session.is_completed());
+                    assert!(rts.is_completed());
                 }
 
                 // Verify final state

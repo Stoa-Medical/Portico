@@ -5,7 +5,7 @@
 
 use super::steps::Step;
 use crate::{CanAct, CanReact, DataSource};
-use super::session::Session;
+use super::runtime::RuntimeSession;
 
 use serde_json::Value;
 use anyhow::Result;
@@ -176,11 +176,11 @@ impl Agent {
 #[async_trait]
 impl CanReact for Agent {
     async fn react(&mut self, source: DataSource) -> Result<Value> {
-        // Create a session with the agent's steps and input data
-        let mut session = Session::new(&mut self.steps, source);
+        // Create a RuntimeSession with the agent's steps and input data
+        let mut rts = RuntimeSession::new(&mut self.steps, source);
         
         // Run all steps and return the final result
-        match session.run_all(true).await {
+        match rts.run_all(true).await {
             Ok(Some(result)) => Ok(result),
             Ok(None) => Ok(Value::Null),
             Err(e) => Err(e.into()),
@@ -198,15 +198,15 @@ impl CanAct for Agent {
     }
     
     async fn act(&mut self, source: DataSource) -> Result<Value> {
-        // Create a session with empty input data
-        let mut session = Session::new(
+        // Create a RuntimeSession with empty input data
+        let mut rts = RuntimeSession::new(
             &mut self.steps, 
             source
         );
         
         // Run all steps and return the final result
         // The `true` parameter indicates we want to save results
-        match session.run_all(true).await {
+        match rts.run_all(true).await {
             Ok(Some(result)) => Ok(result),
             Ok(None) => Ok(Value::Null),
             Err(e) => Err(anyhow::anyhow!("Agent execution failed: {}", e))

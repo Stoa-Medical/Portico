@@ -12,11 +12,11 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::{DataSource, call_llm};
-use crate::models::session::SessionError;
+use crate::models::runtime::RtsError;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum StepAction {
-    /// Python that will be executed within the current interpreter session
+    /// Python that will be executed within the current interpreter RuntimeSession
     Python(String),
     /// An LLM prompt that will query the configured LLM
     Prompt(String)
@@ -58,8 +58,8 @@ impl Step {
                         self.success_count.fetch_add(1, Ordering::SeqCst);
                         Ok(Some(Value::String(res_str)))
                     },
-                    Err(err) => Err(SessionError::StepFailed { 
-                        step_idx: step_idx,  // This should probably come from Session
+                    Err(err) => Err(RtsError::StepFailed { 
+                        step_idx: step_idx,  // This should probably come from RuntimeSession
                         message: err.to_string() 
                     }.into())
                 }
@@ -70,8 +70,8 @@ impl Step {
                         self.success_count.fetch_add(1, Ordering::SeqCst);
                         Ok(result)
                     },
-                    Err(err) => Err(SessionError::StepFailed { 
-                        step_idx: step_idx,  // This should probably come from Session
+                    Err(err) => Err(RtsError::StepFailed { 
+                        step_idx: step_idx,  // This should probably come from RuntimeSession
                         message: err.to_string() 
                     }.into())
                 }
