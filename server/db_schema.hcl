@@ -1,12 +1,15 @@
 # Using the Atlas database build tool to manage schema
 #   docs: https://atlasgo.io/
 
-# NOTE: Before applying: `psql "postgresql://postgres:postgres@localhost:54322/postgres?sslmode=disable" -c "CREATE DATABASE server;"`
-# To apply: atlas schema apply \
-# --url "postgresql://postgres:postgres@localhost:54322/postgres?&sslmode=disable" \
-# --to "file://db_schema.hcl" \
-# --schema "public"
-# --edit
+/*
+NOTE: Before applying: `psql "postgresql://postgres:postgres@localhost:54322/postgres?sslmode=disable" -c "CREATE DATABASE server;"`
+  To apply: 
+  
+atlas schema apply \
+--url "postgresql://postgres:postgres@localhost:54322/postgres?&sslmode=disable" \
+--to "file://db_schema.hcl" \
+--schema "public"
+*/
 
 schema "public" {}
 
