@@ -7,8 +7,9 @@
 
 /// Module with different data models
 pub mod models;
+pub use models::{Agent, Step, RuntimeSession};
 
-// ============ Traits ============
+// ============ Custom Enums / Traits ============
 use chrono::{DateTime, Utc};
 use cron::Schedule;
 use std::str::FromStr;

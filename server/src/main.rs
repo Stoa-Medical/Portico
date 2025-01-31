@@ -1,107 +1,137 @@
-use anyhow::Result;
-use postgrest::Postgrest;
+use axum::{routing::get, Router};
+use socketioxide::{extract::{Data, SocketRef}, SocketIo};
+use serde_json::{json, Value};
+
+use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
-use tokio::{net::TcpListener, sync::broadcast};
-use futures::{StreamExt, TryStreamExt};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Event {
-    id: String,
-    status: String,
-    created_at: String,
-}
+use portico_server::{Agent, Step, RuntimeSession};
 
-struct SupabaseClient {
-    client: Postgrest,
-    realtime: Option<tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>>,
-}
+// TODO: Actually add application-specific logic for each of the cases
+fn on_connect(socket: SocketRef) {
+    println!("Socket connected: {}", socket.id);
 
-impl SupabaseClient {
-    fn new() -> Result<Self> {
-        dotenv::dotenv().ok();
+    socket.on("postgres_changes", |socket: SocketRef, Data::<Value>(data)| async move {
+        println!("Received postgres changes: {:?}", data);
         
-        let supabase_url = std::env::var("SUPABASE_URL")
-            .expect("SUPABASE_URL must be set");
-        let supabase_key = std::env::var("SUPABASE_KEY")
-            .expect("SUPABASE_KEY must be set");
-
-        let client = Postgrest::new(supabase_url)
-            .insert_header("apikey", &supabase_key)
-            .insert_header("Authorization", format!("Bearer {}", supabase_key));
-
-        Ok(Self { 
-            client,
-            realtime: None,
-        })
-    }
-
-    async fn connect_realtime(&mut self) -> Result<()> {
-        let ws_url = format!("{}/realtime/v1/websocket", 
-            std::env::var("SUPABASE_URL")?
-                .replace("http", "ws"));
-
-        let (ws_stream, _) = tokio_tungstenite::connect_async(ws_url).await?;
-        self.realtime = Some(ws_stream);
-        Ok(())
-    }
-
-    async fn subscribe_to_events(&mut self) -> Result<broadcast::Receiver<Event>> {
-        let (tx, rx) = broadcast::channel(100);
-        
-        if let Some(ws_stream) = &mut self.realtime {
-            let mut stream = ws_stream.try_filter(|msg| {
-                future::ready(msg.is_text() && msg.to_text().unwrap().contains("events"))
-            });
-
-            tokio::spawn(async move {
-                while let Ok(Some(msg)) = stream.next().await {
-                    if let Ok(event) = serde_json::from_str::<Event>(msg.to_text().unwrap()) {
-                        let _ = tx.send(event);
+        if let Ok(msg) = serde_json::from_value::<RealtimeMessage>(data) {
+            match msg.message_type {
+                MessageType::Insert => handle_insert(socket, msg.new).await,
+                MessageType::Update => handle_update(socket, msg.new, msg.old).await,
+                MessageType::Delete => handle_delete(socket, msg.old.unwrap_or(msg.new)).await,
+                MessageType::Error => {
+                    if let Some(errors) = msg.errors {
+                        println!("Error received: {:?}", errors);
                     }
-                }
-            });
+                },
+                _ => println!("Unhandled message type: {:?}", msg.message_type),
+            }
         }
+    });
 
-        Ok(rx)
-    }
+    // Create subscription message for Postgres changes
+    let subscribe_msg = SubscribeMessage {
+        message_type: "postgres_changes".to_string(),
+        schema: "public".to_string(),
+        table: "events".to_string(),
+        event_filter: "*".to_string(),
+    };
+
+    socket.emit("subscribe", &subscribe_msg).ok();
+}
+
+async fn handle_insert(socket: SocketRef, new_record: Value) {
+    println!("New record inserted: {:?}", new_record);
+    socket.broadcast().emit("db_insert", &new_record).await.ok();
+}
+
+async fn handle_update(socket: SocketRef, new_record: Value, old_record: Option<Value>) {
+    println!("Record updated from {:?} to {:?}", old_record, new_record);
+    socket.broadcast().emit("db_update", &json!({
+        "old": old_record,
+        "new": new_record
+    })).await.ok();
+}
+
+async fn handle_delete(socket: SocketRef, deleted_record: Value) {
+    println!("Record deleted: {:?}", deleted_record);
+    socket.broadcast().emit("db_delete", &deleted_record).await.ok();
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
-    let mut supabase = SupabaseClient::new()?;
-    supabase.connect_realtime().await?;
-    
-    let listener = TcpListener::bind("127.0.0.1:8888").await?;
-    println!("Server listening on port 8888");
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let (layer, io) = SocketIo::new_layer();
+    io.ns("/", on_connect);
 
-    let event_rx = supabase.subscribe_to_events().await?;
+    let app = Router::new()
+        .route("/", get(|| async { "Realtime Server" }))
+        .layer(layer);
 
-    loop {
-        tokio::select! {
-            Ok((socket, addr)) = listener.accept() => {
-                println!("New connection from: {}", addr);
-                tokio::spawn(async move {
-                    if let Err(e) = handle_connection(socket).await {
-                        eprintln!("Connection error: {}", e);
-                    }
-                });
-            }
-            
-            Ok(event) = event_rx.recv() => {
-                if let Err(e) = handle_event(&event).await {
-                    eprintln!("Event handling error: {}", e);
-                }
-            }
-        }
-    }
-}
+    println!("Starting server on port 3000");
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
+    axum::serve(listener, app).await?;
 
-async fn handle_connection(socket: tokio::net::TcpStream) -> Result<()> {
-    // Implement socket handling logic
     Ok(())
 }
 
-async fn handle_event(event: &Event) -> Result<()> {
-    println!("Received realtime event: {:?}", event);
-    Ok(())
+
+
+// ============ Supabase Realtime things =============
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RealtimeMessage {
+    #[serde(rename = "type")]
+    message_type: MessageType,
+    schema: String,
+    table: String,
+    commit_timestamp: String,
+    #[serde(rename = "eventType")]
+    event_type: MessageType,
+    new: Value,
+    old: Option<Value>,
+    errors: Option<ErrorPayload>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum MessageType {
+    Insert,
+    Update,
+    Delete,
+    Broadcast,
+    Presence,
+    Error,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SubscribeMessage {
+    #[serde(rename = "type")]
+    message_type: String,  // "postgres_changes"
+    schema: String,
+    table: String,
+    #[serde(rename = "filter")]
+    event_filter: String,  // "*" or specific event type
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ErrorPayload {
+    message: String,
+    code: Option<String>,
+    details: Option<Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BroadcastMessage {
+    #[serde(rename = "type")]
+    message_type: String,
+    event: String,
+    payload: Value,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PresenceState {
+    #[serde(rename = "type")]
+    message_type: String,
+    presence_ref: String,
+    joins: HashMap<String, Value>,
+    leaves: HashMap<String, Value>,
 }
