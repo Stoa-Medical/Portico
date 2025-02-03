@@ -16,6 +16,7 @@ use std::str::FromStr;
 use anyhow::Result;
 use serde_json::Value;
 use std::path::PathBuf;
+use std::collections::HashMap;
 use async_trait::async_trait;
 use tokio::fs::read_to_string;
 
@@ -55,8 +56,8 @@ pub trait CanReact {
         vec!["application/json"]
     }
 
-    /// React to a single piece of data
-    async fn react(&mut self, source: DataSource) -> Result<Value>;
+    /// React to a single piece of data. Optionally pass state via metadata
+    async fn react(&mut self, source: DataSource, metadata: &mut HashMap<String, String>) -> Result<Value>;
 }
 
 
@@ -66,8 +67,8 @@ pub trait CanAct {
     /// The CRON schedule for when this actor should run
     fn schedule(&self) -> &str;
     
-    /// The action to perform on schedule
-    async fn act(&mut self, source: DataSource) -> Result<Value>;
+    /// The action to perform on schedule. Optionally pass state via metadata
+    async fn act(&mut self, source: DataSource, metadata: &mut HashMap<String, String>) -> Result<Value>;
     
     /// Check if it's time to run based on the schedule
     fn should_run(&self, last_run: Option<DateTime<Utc>>) -> bool {

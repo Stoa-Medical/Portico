@@ -3,6 +3,10 @@ pub mod agents;
 pub use agents::Agent;
 /// Module for running Steps + data (in a RuntimeSession, abbrv. rts)
 pub mod runtime;
+/// Module for managing job requests and execution
+pub mod jobs;
+pub use jobs::{Job, JobStatus, JobError, RetryConfig};
+
 pub use runtime::RuntimeSession;
 /// Module for defining and running Steps
 pub mod steps;
@@ -373,6 +377,131 @@ res = source_data + 1
             
             assert!(result.is_err());
             assert!(strict_agent.check().is_err()); // Should be unstable
+        }
+    }
+
+    mod test_jobs {
+        use std::time::Duration;
+        use crate::models::jobs::{Job, JobStatus, RetryConfig};
+        use crate::models::agents::{Agent, AgentType};
+        use crate::models::steps::{Step, StepAction};
+        use crate::DataSource;
+        use serde_json::json;
+
+        fn create_test_agent() -> Agent {
+            let steps = vec![
+                Step::new(
+                    "test_step".to_string(),
+                    StepAction::Python(r#"
+import json
+source_data = json.loads(source)
+res = source_data['value'] * 2
+"#.to_string())
+                ),
+            ];
+
+            Agent::new(
+                "Test Agent".to_string(),
+                0.1,
+                steps,
+                AgentType::Reactor
+            )
+        }
+
+        #[test]
+        fn test_job_builder() {
+            let job = Job::builder(
+                "Test job".to_string(),
+                "test-agent-id".to_string(),
+                DataSource::Json(json!({"value": 42}))
+            )
+            .user_id("test-user".to_string())
+            .timeout(Duration::from_secs(60))
+            .retry_config(RetryConfig {
+                max_attempts: 2,
+                retry_delay: Duration::from_secs(1),
+                use_backoff: false,
+            })
+            .build();
+
+            assert_eq!(job.status, JobStatus::Pending);
+            assert_eq!(job.description, "Test job");
+            assert_eq!(job.user_id, Some("test-user".to_string()));
+            assert_eq!(job.timeout, Duration::from_secs(60));
+            assert!(job.completed_at.is_none());
+            assert!(job.error_message.is_none());
+        }
+
+        #[tokio::test]
+        async fn test_successful_execution() {
+            let mut agent = create_test_agent();
+            agent.start().unwrap();
+
+            let mut job = Job::builder(
+                "Success test".to_string(),
+                agent.id.clone(),
+                DataSource::Json(json!({"value": 21}))
+            ).build();
+
+            let result = job.execute(&mut agent).await;
+
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), json!(42));
+            assert_eq!(job.status, JobStatus::Completed);
+            assert!(job.completed_at.is_some());
+            assert!(job.error_message.is_none());
+        }
+
+        #[tokio::test]
+        async fn test_retry_behavior() {
+            let mut agent = create_test_agent();
+            agent.start().unwrap();
+
+            let mut job = Job::builder(
+                "Retry test".to_string(),
+                agent.id.clone(),
+                DataSource::Json(json!({"invalid": "data"}))
+            )
+            .retry_config(RetryConfig {
+                max_attempts: 3,
+                retry_delay: Duration::from_millis(100),
+                use_backoff: true,
+            })
+            .build();
+
+            let result = job.execute(&mut agent).await;
+
+            assert!(result.is_err());
+            assert_eq!(job.status, JobStatus::Failed);
+            assert!(job.completed_at.is_some());
+            assert!(job.error_message.is_some());
+        }
+
+        #[tokio::test]
+        async fn test_timeout_handling() {
+            let mut agent = create_test_agent();
+            agent.start().unwrap();
+
+            let mut job = Job::builder(
+                "Timeout test".to_string(),
+                agent.id.clone(),
+                DataSource::Json(json!({"value": 21}))
+            )
+            .timeout(Duration::from_nanos(1)) // Unreasonably short timeout
+            .build();
+
+            let result = job.execute(&mut agent).await;
+
+            assert!(result.is_err());
+            match result {
+                Err(e) => {
+                    assert!(matches!(e, crate::models::jobs::JobError::Timeout(_)));
+                }
+                _ => panic!("Expected timeout error"),
+            }
+            assert_eq!(job.status, JobStatus::Failed);
+            assert!(job.completed_at.is_some());
+            assert_eq!(job.error_message, Some("Job timed out".to_string()));
         }
     }
 }

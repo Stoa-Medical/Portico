@@ -5,8 +5,10 @@
 
 use super::steps::Step;
 use crate::{CanAct, CanReact, DataSource};
+use super::jobs::Job;
 use super::runtime::RuntimeSession;
 
+use std::collections::HashMap;
 use serde_json::Value;
 use anyhow::Result;
 use uuid::Uuid;
@@ -110,16 +112,17 @@ impl Agent {
         }
     }
 
-    pub async fn run(&mut self, source: DataSource) -> Result<Value> {
+    pub async fn run(&mut self, source: DataSource, job: Option<&mut Job>) -> Result<Value> {
         match self.agent_state {
             AgentState::Waiting | AgentState::Unstable => {
                 self.agent_state = AgentState::Running;
 
-                
+                let mut metadata = HashMap::<String, String>::new();
+                metadata.insert("agent_id".to_string(), Value::String(self.id.clone()));
                 // Call appropriate method based on agent type
                 let result = match &self.agent_type {
-                    AgentType::Actor(_) => self.act(source).await?,
-                    AgentType::Reactor => self.react(source).await?,
+                    AgentType::Actor(_) => self.act(source, job).await?,
+                    AgentType::Reactor => self.react(source, job).await?,
                 };
 
 
@@ -175,7 +178,7 @@ impl Agent {
 
 #[async_trait]
 impl CanReact for Agent {
-    async fn react(&mut self, source: DataSource) -> Result<Value> {
+    async fn react(&mut self, source: DataSource, job: Option<&mut Job>) -> Result<Value> {
         // Create a RuntimeSession with the agent's steps and input data
         let mut rts = RuntimeSession::new(&mut self.steps, source);
         
@@ -197,7 +200,7 @@ impl CanAct for Agent {
         }
     }
     
-    async fn act(&mut self, source: DataSource) -> Result<Value> {
+    async fn act(&mut self, source: DataSource, job: Option<&mut Job>) -> Result<Value> {
         // Create a RuntimeSession with empty input data
         let mut rts = RuntimeSession::new(
             &mut self.steps, 
@@ -205,11 +208,15 @@ impl CanAct for Agent {
         );
         
         // Run all steps and return the final result
-        // The `true` parameter indicates we want to save results
-        match rts.run_all(true).await {
+        let result = match rts.run_all(true).await {
             Ok(Some(result)) => Ok(result),
             Ok(None) => Ok(Value::Null),
             Err(e) => Err(anyhow::anyhow!("Agent execution failed: {}", e))
-        }
+        };
+
+        // Update job status if provided
+        if let Some(job) = job { job.update_status_from_result(&result); }
+
+        result
     }
 }

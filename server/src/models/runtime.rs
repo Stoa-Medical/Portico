@@ -4,6 +4,7 @@
 use crate::DataSource;
 use crate::models::steps::Step;
 use serde_json::Value;
+use super::jobs::Job;
 
 use thiserror::Error;
 
@@ -33,6 +34,8 @@ pub struct RuntimeSession<'steps> {
     pub input_data: DataSource,
     /// The end result of a RuntimeSession
     curr_result: Result<Option<Value>, RtsError>,
+    /// Optional reference to parent job for status updates
+    parent_job: Option<&'steps mut Job>,
     /// Whether the RuntimeSession ran to completion or not
     completed: bool,
     /// Current index of the RuntimeSession step
@@ -42,11 +45,12 @@ pub struct RuntimeSession<'steps> {
 }
 
 impl<'steps> RuntimeSession<'steps> {
-    pub fn new(steps: &'steps mut Vec<Step>, input_data: DataSource) -> Self {
+    pub fn new(steps: &'steps mut Vec<Step>, input_data: DataSource, parent_job: Option<&'steps mut Job>) -> Self {
         Self {
             steps,
             input_data,
             curr_result: Ok(None),
+            parent_job,
             completed: false,
             curr_idx: 0,
             res_state: vec![]
@@ -63,9 +67,10 @@ impl<'steps> RuntimeSession<'steps> {
     pub fn resume_from_checkpoint(
         steps: &'steps mut Vec<Step>, 
         input: DataSource, 
-        checkpoint: RtsCheckpoint
+        checkpoint: RtsCheckpoint,
+        parent_job: Option<&'steps mut Job>
     ) -> Self {
-        let mut rts = Self::new(steps, input);
+        let mut rts = Self::new(steps, input, parent_job);
         rts.curr_idx = checkpoint.current_step;
         rts.curr_result = Ok(checkpoint.saved_result);
         rts
@@ -74,6 +79,12 @@ impl<'steps> RuntimeSession<'steps> {
     /// Runs a single step and returns its result
     async fn run_one_step(&mut self, idx: usize) -> Result<Option<Value>, RtsError> {
         let step = &mut self.steps[idx];
+
+        // Update job status if we have a parent job
+        if let Some(job) = &mut self.parent_job {
+            job.update_status_from_step(idx, self.steps.len());
+        }
+
         let input = if idx == 0 {
             self.input_data.extract().await.map_err(|e| RtsError::StepFailed { 
                 step_idx: idx, 
@@ -93,6 +104,13 @@ impl<'steps> RuntimeSession<'steps> {
                 self.curr_idx += 1;
                 Ok(result)
             }
+                // Update job error status if we have a parent
+                if let Some(job) = &mut self.parent_job {
+                    job.update_status_from_error(&RtsError::StepFailed {
+                        step_idx: idx,
+                        message: e.to_string()
+                    });
+                }
             Err(e) => Err(RtsError::StepFailed { 
                 step_idx: idx, 
                 message: e.to_string() 
@@ -141,7 +159,12 @@ impl<'steps> RuntimeSession<'steps> {
 
         if self.curr_idx >= self.steps.len() {
             self.completed = true;
+            // Update job completion status if we have a parent
+            if let Some(job) = &mut self.parent_job {
+                job.update_status_from_result(&Ok(self.curr_result.clone()?));
+            }
         }
+
 
         Ok(self.curr_result.clone()?)
     }

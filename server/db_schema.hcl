@@ -9,6 +9,19 @@ atlas schema apply \
 --url "postgresql://postgres:postgres@localhost:54322/postgres?&sslmode=disable" \
 --to "file://db_schema.hcl" \
 --schema "public"
+
+NOTE: the Atlas HCL syntax is custom and doesn't support everything yet (e.g. `mixin`, `domain`, etc.)
+  Docs: https://atlasgo.io/atlas-schema/hcl
+
+To reset database state -- generation for the YOLO SQL below (run in `psql`):
+```sql
+-- Generate drop statements for all tables in public schema
+SELECT 'DROP TABLE IF EXISTS "' || tablename || '" CASCADE;'
+FROM pg_tables 
+WHERE schemaname = 'public' 
+  AND tablename NOT LIKE 'supabase_%';
+```
+... then copy that code and drop the tables
 */
 
 schema "public" {}
@@ -44,11 +57,15 @@ enum "step_action" {
 // public tables
 table "agents" {
   schema = schema.public
+
+  // Incrementing int ID
   column "id" {
-    type = varchar(36)  // UUID
+    type = bigint
     null = false
+    identity {
+      generated = ALWAYS
+    }
   }
-  
   primary_key {
     columns = [column.id]
   }
@@ -73,6 +90,8 @@ table "agents" {
 
 table "steps" {
   schema = schema.public
+
+  // Incrementing int ID
   column "id" {
     type = bigint
     null = false
@@ -80,7 +99,6 @@ table "steps" {
       generated = ALWAYS
     }
   }
-
   primary_key {
     columns = [column.id]
   }
@@ -108,7 +126,7 @@ table "steps" {
     default = 0
   }
   column "agent_id" {
-    type = varchar(36)
+    type = bigint
     null = false
   }
 
@@ -156,7 +174,7 @@ table "runtime_sessions" {
     default = 0
   }
   column "agent_id" {
-    type = varchar(36)
+    type = bigint
     null = false
   }
 
@@ -165,35 +183,5 @@ table "runtime_sessions" {
     ref_columns = [table.agents.column.id]
     on_delete = CASCADE
   }
+
 }
-
-table "rts_steps" {
-  schema = schema.public
-
-  column "runtime_session_id" {
-    type = bigint
-    null = false
-  }
-
-  column "step_id" {
-    type = bigint
-    null = false
-  }
-
-  primary_key {
-    columns = [column.runtime_session_id, column.step_id]
-  }
-
-  foreign_key "rss_runtime_session_fk" {
-    columns = [column.runtime_session_id]
-    ref_columns = [table.runtime_sessions.column.id]
-    on_delete = CASCADE
-  }
-
-  foreign_key "rss_step_fk" {
-    columns = [column.step_id]
-    ref_columns = [table.steps.column.id]
-    on_delete = CASCADE
-  }
-}
-

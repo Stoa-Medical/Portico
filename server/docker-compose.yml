@@ -1,21 +1,5 @@
-version: '3.8'
-
 services:
-  db:
-    image: postgres:17-alpine
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-portico}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-portico123}
-      POSTGRES_DB: ${POSTGRES_DB:-portico_db}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-portico}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+  # TODO: Add Supabase (rn, running `supabase start` -- surely there's a better way. Worst case write custom container)
 
   server:
     build: .
