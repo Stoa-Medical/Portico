@@ -12,7 +12,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::{DataSource, call_llm};
-use crate::models::runtime::RtsError;
+use crate::models::runtime_sessions::RuntimeError;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum StepAction {
@@ -58,7 +58,7 @@ impl Step {
                         self.success_count.fetch_add(1, Ordering::SeqCst);
                         Ok(Some(Value::String(res_str)))
                     },
-                    Err(err) => Err(RtsError::StepFailed { 
+                    Err(err) => Err(RuntimeError::StepFailed { 
                         step_idx: step_idx,  // This should probably come from RuntimeSession
                         message: err.to_string() 
                     }.into())
@@ -70,7 +70,7 @@ impl Step {
                         self.success_count.fetch_add(1, Ordering::SeqCst);
                         Ok(result)
                     },
-                    Err(err) => Err(RtsError::StepFailed { 
+                    Err(err) => Err(RuntimeError::StepFailed { 
                         step_idx: step_idx,  // This should probably come from RuntimeSession
                         message: err.to_string() 
                     }.into())

@@ -5,8 +5,8 @@
 
 use super::steps::Step;
 use crate::{CanAct, CanReact, DataSource};
-use super::jobs::Job;
-use super::runtime::RuntimeSession;
+use super::user_jobs::Job;
+use super::runtime_sessions::RuntimeSession;
 
 use std::collections::HashMap;
 use serde_json::Value;
@@ -173,11 +173,6 @@ impl Agent {
         &self.agent_state
     }
 
-}
-
-
-#[async_trait]
-impl CanReact for Agent {
     async fn react(&mut self, source: DataSource, job: Option<&mut Job>) -> Result<Value> {
         // Create a RuntimeSession with the agent's steps and input data
         let mut rts = RuntimeSession::new(&mut self.steps, source);
@@ -189,17 +184,7 @@ impl CanReact for Agent {
             Err(e) => Err(e.into()),
         }
     }
-}
 
-#[async_trait]
-impl CanAct for Agent {
-    fn schedule(&self) -> &str {
-        match &self.agent_type {
-            AgentType::Actor(cron_schedule) => cron_schedule,
-            _ => "0 0 * * * *"  // Default to running every hour if not an actor
-        }
-    }
-    
     async fn act(&mut self, source: DataSource, job: Option<&mut Job>) -> Result<Value> {
         // Create a RuntimeSession with empty input data
         let mut rts = RuntimeSession::new(
@@ -219,4 +204,5 @@ impl CanAct for Agent {
 
         result
     }
+
 }

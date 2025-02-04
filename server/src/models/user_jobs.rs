@@ -61,7 +61,7 @@ pub struct Job {
     /// When the job was created
     pub created_at: DateTime<Utc>,
     /// Optional user identifier who created the job
-    pub user_id: Option<String>,
+    pub user_id: Option<u64>,
     /// Description of the job's goal
     pub description: String,
     /// ID of the agent to run

@@ -4,12 +4,12 @@
 use crate::DataSource;
 use crate::models::steps::Step;
 use serde_json::Value;
-use super::jobs::Job;
+use super::user_jobs::Job;
 
 use thiserror::Error;
 
 #[derive(Error, Debug, Clone)]
-pub enum RtsError {
+pub enum RuntimeError {
     #[error("Step {step_idx} failed: {message}")]
     StepFailed { step_idx: usize, message: String },
     
@@ -21,7 +21,7 @@ pub enum RtsError {
 }
 
 #[derive(Clone)]
-pub struct RtsCheckpoint {
+pub struct RuntimeCheckpoint {
     current_step: usize,
     saved_result: Option<Value>,
 }
@@ -33,7 +33,7 @@ pub struct RuntimeSession<'steps> {
     /// The starting input of the RuntimeSession
     pub input_data: DataSource,
     /// The end result of a RuntimeSession
-    curr_result: Result<Option<Value>, RtsError>,
+    curr_result: Result<Option<Value>, RuntimeError>,
     /// Optional reference to parent job for status updates
     parent_job: Option<&'steps mut Job>,
     /// Whether the RuntimeSession ran to completion or not
@@ -41,7 +41,7 @@ pub struct RuntimeSession<'steps> {
     /// Current index of the RuntimeSession step
     curr_idx: usize,
     /// The state of the data at each step (e.g. index i is state after running step i)
-    res_state: Vec<Result<Option<Value>, RtsError>>
+    res_state: Vec<Result<Option<Value>, RuntimeError>>
 }
 
 impl<'steps> RuntimeSession<'steps> {
@@ -57,8 +57,8 @@ impl<'steps> RuntimeSession<'steps> {
         }
     }
 
-    pub fn save_checkpoint(&self) -> Option<RtsCheckpoint> {
-        Some(RtsCheckpoint {
+    pub fn save_checkpoint(&self) -> Option<RuntimeCheckpoint> {
+        Some(RuntimeCheckpoint {
             current_step: self.curr_idx,
             saved_result: self.curr_result.clone().expect("Expected non-Err checkpoint to save"),
         })
@@ -67,7 +67,7 @@ impl<'steps> RuntimeSession<'steps> {
     pub fn resume_from_checkpoint(
         steps: &'steps mut Vec<Step>, 
         input: DataSource, 
-        checkpoint: RtsCheckpoint,
+        checkpoint: RuntimeCheckpoint,
         parent_job: Option<&'steps mut Job>
     ) -> Self {
         let mut rts = Self::new(steps, input, parent_job);
@@ -77,7 +77,7 @@ impl<'steps> RuntimeSession<'steps> {
     }
 
     /// Runs a single step and returns its result
-    async fn run_one_step(&mut self, idx: usize) -> Result<Option<Value>, RtsError> {
+    async fn run_one_step(&mut self, idx: usize) -> Result<Option<Value>, RuntimeError> {
         let step = &mut self.steps[idx];
 
         // Update job status if we have a parent job
@@ -86,15 +86,15 @@ impl<'steps> RuntimeSession<'steps> {
         }
 
         let input = if idx == 0 {
-            self.input_data.extract().await.map_err(|e| RtsError::StepFailed { 
+            self.input_data.extract().await.map_err(|e| RuntimeError::StepFailed { 
                 step_idx: idx, 
                 message: e.to_string() 
             })?
         } else if idx == self.curr_idx && !self.res_state.is_empty() {
             // If retrying a step, use the previous step's result
-            self.res_state[idx-1].clone()?.ok_or(RtsError::NoInput(idx))?
+            self.res_state[idx-1].clone()?.ok_or(RuntimeError::NoInput(idx))?
         } else {
-            self.curr_result.clone()?.ok_or(RtsError::NoInput(idx))?
+            self.curr_result.clone()?.ok_or(RuntimeError::NoInput(idx))?
         };
 
         match step.run(DataSource::Json(input), idx).await {
@@ -106,19 +106,19 @@ impl<'steps> RuntimeSession<'steps> {
             }
                 // Update job error status if we have a parent
                 if let Some(job) = &mut self.parent_job {
-                    job.update_status_from_error(&RtsError::StepFailed {
+                    job.update_status_from_error(&RuntimeError::StepFailed {
                         step_idx: idx,
                         message: e.to_string()
                     });
                 }
-            Err(e) => Err(RtsError::StepFailed { 
+            Err(e) => Err(RuntimeError::StepFailed { 
                 step_idx: idx, 
                 message: e.to_string() 
             })
         }
     }
     /// Rolls back the RuntimeSession state to before the given index
-    fn rollback_to(&mut self, idx: usize, initial_res: Result<Option<Value>, RtsError>) {
+    fn rollback_to(&mut self, idx: usize, initial_res: Result<Option<Value>, RuntimeError>) {
         self.curr_result = initial_res;
         self.curr_idx = idx;
         self.res_state.truncate(idx);
@@ -134,10 +134,10 @@ impl<'steps> RuntimeSession<'steps> {
         self.curr_idx
     }
 
-    pub async fn run_n_steps(&mut self, n_steps: usize, reset_on_err: bool) -> Result<Option<Value>, RtsError> {
+    pub async fn run_n_steps(&mut self, n_steps: usize, reset_on_err: bool) -> Result<Option<Value>, RuntimeError> {
         let target_idx = self.curr_idx + n_steps;
         if target_idx > self.steps.len() {
-            return Err(RtsError::BoundsExceeded { 
+            return Err(RuntimeError::BoundsExceeded { 
                 requested: target_idx, 
                 max: self.steps.len() 
             });
@@ -169,7 +169,7 @@ impl<'steps> RuntimeSession<'steps> {
         Ok(self.curr_result.clone()?)
     }
 
-    pub async fn run_all(&mut self, reset_on_err: bool) -> Result<Option<Value>, RtsError> {
+    pub async fn run_all(&mut self, reset_on_err: bool) -> Result<Option<Value>, RuntimeError> {
         let remaining_steps = self.steps.len() - self.curr_idx;
         self.run_n_steps(remaining_steps, reset_on_err).await
     }

@@ -11,8 +11,6 @@ pub use models::{Agent, Step, RuntimeSession};
 
 // ============ Custom Enums / Traits ============
 use chrono::{DateTime, Utc};
-use cron::Schedule;
-use std::str::FromStr;
 use anyhow::Result;
 use serde_json::Value;
 use std::path::PathBuf;
@@ -36,6 +34,8 @@ impl DataSource {
                 let content = read_to_string(path).await?;
                 Ok(serde_json::from_str(&content)?)
             },
+            // Assume if URL data, it should be JSON
+            // TODO: allow HTML as option
             DataSource::Url(url) => {
                 let client = reqwest::Client::new();
                 Ok(client.get(url)
@@ -48,38 +48,34 @@ impl DataSource {
     }
 }
 
-/// Something that can respond to data
-#[async_trait]
-pub trait CanReact {
-    /// Configure what types of data this reactor accepts
-    fn accepts(&self) -> Vec<&str> {
-        vec!["application/json"]
-    }
 
-    /// React to a single piece of data. Optionally pass state via metadata
-    async fn react(&mut self, source: DataSource, metadata: &mut HashMap<String, String>) -> Result<Value>;
+
+// ============ Supabase Realtime things =============
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RealtimeMessage {
+    #[serde(rename = "type")]
+    message_type: MessageType,
+    table: String,
+    #[serde(rename = "eventType")]
+    event_type: MessageType,
+    new: Value,
 }
 
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum MessageType {
+    Insert,  // Only need this for new jobs
+    Error,   // Keep error for handling failures
+}
 
-/// Something that can act on its own (based on a schedule)
-#[async_trait]
-pub trait CanAct {
-    /// The CRON schedule for when this actor should run
-    fn schedule(&self) -> &str;
-    
-    /// The action to perform on schedule. Optionally pass state via metadata
-    async fn act(&mut self, source: DataSource, metadata: &mut HashMap<String, String>) -> Result<Value>;
-    
-    /// Check if it's time to run based on the schedule
-    fn should_run(&self, last_run: Option<DateTime<Utc>>) -> bool {
-        let schedule = Schedule::from_str(self.schedule()).ok().expect("CRON load failed -- is your syntax right?");
-        let now = Utc::now();
-        
-        match last_run {
-            None => true, // Never run before
-            Some(last) => schedule.after(&last).next().map_or(false, |next| next <= now)
-        }
-    }
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SubscribeMessage {
+    #[serde(rename = "type")]
+    message_type: String,  // "postgres_changes"
+    schema: String,        // typically "public"
+    table: String,        // "user_jobs"
+    #[serde(rename = "filter")]
+    event_filter: String,  // "INSERT"
 }
 
 

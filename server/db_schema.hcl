@@ -54,6 +54,23 @@ enum "step_action" {
   ]
 }
 
+enum "job_status" {
+  schema = schema.public
+  values = [
+    "waiting",
+    "in_progress",
+    "completed",
+    "cancelled"
+  ]
+}
+
+enum "message_type" {
+  schema = schema.public
+  values = [
+    "agent_job"
+  ]
+}
+
 // public tables
 table "agents" {
   schema = schema.public
@@ -139,6 +156,7 @@ table "steps" {
 
 table "runtime_sessions" {
   schema = schema.public
+
   column "id" {
     type = bigint
     null = false
@@ -146,7 +164,6 @@ table "runtime_sessions" {
       generated = ALWAYS
     }
   }
-
   primary_key {
     columns = [column.id]
   }
@@ -155,11 +172,11 @@ table "runtime_sessions" {
     type = bigint
     null = false
   }
-  column "initial_source" {
+  column "source_data" {
     type = json
     null = false
   }
-  column "saved_result" {
+  column "current_result" {
     type = json
     null = true
   }
@@ -168,7 +185,7 @@ table "runtime_sessions" {
     null = false
     default = false
   }
-  column "curr_idx" {
+  column "last_idx" {
     type = int
     null = false
     default = 0
@@ -184,4 +201,51 @@ table "runtime_sessions" {
     on_delete = CASCADE
   }
 
+}
+
+table "user_jobs" {
+  # TODO: Update this
+  schema = schema.public
+
+  column "id" {
+    type = bigint
+    null = false
+    identity {
+      generated = ALWAYS
+    }
+  }
+  primary_key {
+    columns = [column.id]
+  }
+
+  column "description" {
+    type = varchar(255)
+    null = false
+  }
+
+  column "requested_agent_id" {
+    type = bigint
+    null = false
+  }
+
+  column "starting_data" {
+    type = json
+    null = false
+  }
+
+  column "user_id" {
+    type = uuid
+    null = false
+  }
+
+  column "job_status" {
+    type enum.job_status
+    null = false
+  }
+}
+
+table "messages" {
+  column "message_type" {
+
+  }
 }
