@@ -8,17 +8,20 @@
 /// Module with different data models
 pub mod models;
 pub use models::{Agent, Step, RuntimeSession};
+pub use models::user_jobs::{Job, JobStatus};
 
 // ============ Custom Enums / Traits ============
-use chrono::{DateTime, Utc};
 use anyhow::Result;
 use serde_json::Value;
 use std::path::PathBuf;
-use std::collections::HashMap;
 use async_trait::async_trait;
 use tokio::fs::read_to_string;
+use serde::{Serialize, Deserialize};
+use std::env;
+use thiserror::Error;
+use reqwest::Client;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum DataSource {
     Json(Value),
     File(PathBuf),
@@ -64,27 +67,24 @@ pub struct RealtimeMessage {
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum MessageType {
-    Insert,  // Only need this for new jobs
-    Error,   // Keep error for handling failures
+    Insert,
+    Update,
+    Delete,
+    Error,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SubscribeMessage {
     #[serde(rename = "type")]
-    message_type: String,  // "postgres_changes"
-    schema: String,        // typically "public"
-    table: String,        // "user_jobs"
+    pub message_type: String,
+    pub schema: String,
+    pub table: String,
     #[serde(rename = "filter")]
-    event_filter: String,  // "INSERT"
+    pub event_filter: String,
 }
 
 
 // ============ Shared functions ============
-
-use std::env;
-use thiserror::Error;
-use reqwest::Client;
-use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum MessageContent {
@@ -136,4 +136,15 @@ pub async fn call_llm(prompt: &str, context: Value) -> Result<String, LLMError> 
         .as_str()
         .map(String::from)
         .ok_or_else(|| LLMError::InvalidResponse("No completion found".to_string()))
+}
+
+// Move trait definitions to the top with other traits
+#[async_trait]
+pub trait CanAct {
+    async fn act(&mut self, source: DataSource, job: Option<&mut Job>) -> Result<Value, anyhow::Error>;
+}
+
+#[async_trait]
+pub trait CanReact {
+    async fn react(&mut self, source: DataSource, job: Option<&mut Job>) -> Result<Value, anyhow::Error>;
 }

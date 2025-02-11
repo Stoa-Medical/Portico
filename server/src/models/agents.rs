@@ -60,6 +60,24 @@ pub enum AgentType {
     Reactor
 }
 
+#[async_trait]
+impl CanAct for Agent {
+    async fn act(&mut self, source: DataSource, job: Option<&mut Job>) -> Result<Value, anyhow::Error> {
+        let mut rts = RuntimeSession::new(&mut self.steps, source, job);
+        rts.run_all(true).await.map(|opt_val| opt_val.unwrap_or(Value::Null))
+            .map_err(|e| e.into())
+    }
+}
+
+#[async_trait]
+impl CanReact for Agent {
+    async fn react(&mut self, source: DataSource, job: Option<&mut Job>) -> Result<Value, anyhow::Error> {
+        let mut rts = RuntimeSession::new(&mut self.steps, source, job);
+        rts.run_all(true).await.map(|opt_val| opt_val.unwrap_or(Value::Null))
+            .map_err(|e| e.into())
+    }
+}
+
 impl Agent {
     pub fn new(description: String, accepted_err_rate: f32, steps: Vec<Step>, agent_type: AgentType) -> Self {
         // Start all agents in a waiting state
@@ -118,13 +136,13 @@ impl Agent {
                 self.agent_state = AgentState::Running;
 
                 let mut metadata = HashMap::<String, String>::new();
-                metadata.insert("agent_id".to_string(), Value::String(self.id.clone()));
+                metadata.insert("agent_id".to_string(), self.id.clone());
+                
                 // Call appropriate method based on agent type
                 let result = match &self.agent_type {
                     AgentType::Actor(_) => self.act(source, job).await?,
                     AgentType::Reactor => self.react(source, job).await?,
                 };
-
 
                 // Check state
                 if self.get_err_rate() <= self.accepted_err_rate {
@@ -172,37 +190,4 @@ impl Agent {
     pub fn check_state(&self) -> &AgentState {
         &self.agent_state
     }
-
-    async fn react(&mut self, source: DataSource, job: Option<&mut Job>) -> Result<Value> {
-        // Create a RuntimeSession with the agent's steps and input data
-        let mut rts = RuntimeSession::new(&mut self.steps, source);
-        
-        // Run all steps and return the final result
-        match rts.run_all(true).await {
-            Ok(Some(result)) => Ok(result),
-            Ok(None) => Ok(Value::Null),
-            Err(e) => Err(e.into()),
-        }
-    }
-
-    async fn act(&mut self, source: DataSource, job: Option<&mut Job>) -> Result<Value> {
-        // Create a RuntimeSession with empty input data
-        let mut rts = RuntimeSession::new(
-            &mut self.steps, 
-            source
-        );
-        
-        // Run all steps and return the final result
-        let result = match rts.run_all(true).await {
-            Ok(Some(result)) => Ok(result),
-            Ok(None) => Ok(Value::Null),
-            Err(e) => Err(anyhow::anyhow!("Agent execution failed: {}", e))
-        };
-
-        // Update job status if provided
-        if let Some(job) = job { job.update_status_from_result(&result); }
-
-        result
-    }
-
 }

@@ -1,10 +1,8 @@
 use std::time::Duration;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use chrono::{DateTime, Utc};
 use thiserror::Error;
-
-use serde_with::TimestampMilliseconds;
+use serde_json::Value;
 
 use crate::DataSource;
 use super::agents::Agent;
@@ -59,6 +57,7 @@ pub struct Job {
     /// Unique identifier for this job
     pub id: u64,
     /// When the job was created
+    #[serde(with = "chrono::serde::ts_milliseconds")]
     pub created_at: DateTime<Utc>,
     /// Optional user identifier who created the job
     pub user_id: Option<u64>,
@@ -76,6 +75,7 @@ pub struct Job {
     #[serde(with = "humantime_serde")]
     pub timeout: Duration,
     /// When the job completed (successfully or not)
+    #[serde(with = "chrono::serde::ts_milliseconds_option")]
     pub completed_at: Option<DateTime<Utc>>,
     /// Error message if job failed
     pub error_message: Option<String>,
@@ -88,26 +88,23 @@ impl Job {
         agent_id: String,
         input: DataSource,
     ) -> Self {
-        let id = Uuid::new_v4();
-        let created_at = Utc::now();
-        let status = JobStatus::Pending;
         Job {
-            id,
-            created_at,
-            status,
+            id: rand::random(),
+            created_at: Utc::now(),
+            user_id: None,
             description,
             agent_id,
             input,
-            user_id: None,
-            retry_config: None,
-            timeout: None,
+            status: JobStatus::Pending,
+            retry_config: RetryConfig::default(),
+            timeout: Duration::from_secs(300),
             completed_at: None,
             error_message: None,
         }
     }
 
     /// Updates job status and timestamps
-    fn update_status(&mut self, status: JobStatus, error: Option<String>) {
+    pub fn update_status(&mut self, status: JobStatus, error: Option<String>) {
         self.status = status;
         match status {
             JobStatus::Completed | JobStatus::Failed | JobStatus::Cancelled => {
@@ -115,6 +112,13 @@ impl Job {
                 self.error_message = error;
             }
             _ => {}
+        }
+    }
+
+    pub fn update_status_from_result(&mut self, result: &Result<Value, anyhow::Error>) {
+        match result {
+            Ok(_) => self.update_status(JobStatus::Completed, None),
+            Err(e) => self.update_status(JobStatus::Failed, Some(e.to_string())),
         }
     }
 
@@ -128,7 +132,7 @@ impl Job {
         while attempts < self.retry_config.max_attempts {
             match tokio::time::timeout(
                 self.timeout,
-                agent.run(self.input.clone(), &mut self)
+                agent.run(self.input.clone(), Some(self))
             ).await {
                 Ok(Ok(result)) => {
                     self.update_status(JobStatus::Completed, None);

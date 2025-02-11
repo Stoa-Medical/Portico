@@ -4,8 +4,8 @@
 use crate::DataSource;
 use crate::models::steps::Step;
 use serde_json::Value;
-use super::user_jobs::Job;
-
+use super::user_jobs::{Job, JobStatus};
+use anyhow::Result;
 use thiserror::Error;
 
 #[derive(Error, Debug, Clone)]
@@ -82,7 +82,7 @@ impl<'steps> RuntimeSession<'steps> {
 
         // Update job status if we have a parent job
         if let Some(job) = &mut self.parent_job {
-            job.update_status_from_step(idx, self.steps.len());
+            job.update_status(JobStatus::Running, None);
         }
 
         let input = if idx == 0 {
@@ -104,17 +104,18 @@ impl<'steps> RuntimeSession<'steps> {
                 self.curr_idx += 1;
                 Ok(result)
             }
-                // Update job error status if we have a parent
+            Err(e) => {
                 if let Some(job) = &mut self.parent_job {
-                    job.update_status_from_error(&RuntimeError::StepFailed {
-                        step_idx: idx,
-                        message: e.to_string()
-                    });
+                    job.update_status(
+                        JobStatus::Failed, 
+                        Some(format!("Step {} failed: {}", idx, e))
+                    );
                 }
-            Err(e) => Err(RuntimeError::StepFailed { 
-                step_idx: idx, 
-                message: e.to_string() 
-            })
+                Err(RuntimeError::StepFailed { 
+                    step_idx: idx, 
+                    message: e.to_string() 
+                })
+            }
         }
     }
     /// Rolls back the RuntimeSession state to before the given index
@@ -161,10 +162,19 @@ impl<'steps> RuntimeSession<'steps> {
             self.completed = true;
             // Update job completion status if we have a parent
             if let Some(job) = &mut self.parent_job {
-                job.update_status_from_result(&Ok(self.curr_result.clone()?));
+                match &self.curr_result {
+                    Ok(Some(result)) => {
+                        job.update_status_from_result(&Ok(result.clone()));
+                    }
+                    Ok(None) => {
+                        job.update_status_from_result(&Ok(Value::Null));
+                    }
+                    Err(e) => {
+                        job.update_status(JobStatus::Failed, Some(e.to_string()));
+                    }
+                }
             }
         }
-
 
         Ok(self.curr_result.clone()?)
     }
