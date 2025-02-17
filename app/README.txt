@@ -4,10 +4,9 @@ It has the option to 1) connect to a server to manage, or 2) run indepdently wit
 
 Proposed stack:
 - Tauri
-    - Svelte frontend
+    - Vanilla JS frontend (alternatively try Slint. Just want something simple to understand)
     - Rust backend
         - Python interpreter with PyO3
-- SQLite (embedded db)
 
 Requirements:
 1. Write data mappings in Python
