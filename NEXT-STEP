@@ -1,4 +1,178 @@
-# `Event` Implementation
+# Event Data Model Design Document
 
-- Re-architect data models with OpenTelemetry (Otel) stack in mind
-- Make jobs generic (i.e. a job in the future isn't necessarily started by a User, could be from an Agent)
+## Overview
+This document outlines the implementation of an Event data model that leverages OpenTelemetry (OTel) concepts to provide better observability and tracing capabilities across the Portico system.
+
+## Background
+Currently, the system has:
+- Agents that can act/react to data (see `agents.rs` lines 1-193)
+- Jobs that track work execution (see `user_jobs.rs` lines 1-167)
+- Runtime sessions that manage step execution (see `runtime_sessions.rs` lines 1-186)
+
+## Goals
+1. Track system events with proper context and relationships
+2. Enable distributed tracing across system components
+3. Provide better debugging and monitoring capabilities
+4. Make events generic to support both user and agent-initiated actions
+
+## Design
+
+### 1. Event Data Model
+
+```rust
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Event {
+    // OTel-inspired fields
+    trace_id: String,      // Unique identifier for the trace
+    span_id: String,       // Unique identifier for this event
+    parent_span_id: Option<String>, // Optional parent event
+    
+    // Timestamp information
+    timestamp: DateTime<Utc>,
+    duration: Option<Duration>,
+    
+    // Event context
+    name: String,          // Human-readable event name
+    event_type: EventType, // Enum of possible event types
+    status: EventStatus,   // Success, Error, etc.
+    
+    // Additional context
+    attributes: HashMap<String, Value>, // Key-value metadata
+    resource: EventResource,  // What created the event
+    events: Vec<Event>,      // Child events
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum EventType {
+    AgentAction,
+    AgentReaction,
+    JobExecution,
+    StepExecution,
+    SystemEvent,
+    UserAction,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum EventStatus {
+    Started,
+    InProgress,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum EventResource {
+    Agent(String),    // Agent ID
+    User(String),     // User ID
+    System,           // System-generated
+    Job(String),      // Job ID
+    Step(String),     // Step ID
+}
+```
+
+### 2. Database Schema Updates
+
+- Update based on the Rust enums decided on
+
+### 3. Integration Points
+
+1. **Agent Integration**
+- Update Agent struct to include trace context
+- Create events for agent state changes
+- Track agent actions/reactions as spans
+
+2. **Job Integration**
+- Create a trace for each job execution
+- Track job status changes as events
+- Link job events to agent events
+
+3. **Runtime Session Integration**
+- Create spans for step execution
+- Track step results and errors
+- Maintain parent-child relationship with job spans
+
+### 4. Implementation Phases
+
+**Phase 1: Core Event Infrastructure**
+- Implement Event struct and related types
+- Add database schema and migrations
+- Create basic event creation/query functions
+
+**Phase 2: System Integration**
+- Integrate with Agent system
+- Add Job tracking
+- Implement Step execution tracking
+
+**Phase 3: Observability Features**
+- Add trace visualization
+- Implement event querying API
+- Create monitoring dashboards
+
+## Technical Considerations
+
+### 1. Trace Context Propagation
+- Use W3C Trace Context format
+- Maintain context across async boundaries
+- Handle distributed tracing across services
+
+### 2. Performance Impact
+- Batch event writes
+- Use appropriate indexing
+- Consider event retention policies
+
+### 3. Storage Requirements
+- Estimate event volume
+- Plan for data growth
+- Consider partitioning strategies
+
+## Migration Strategy
+
+1. **Database Updates**
+- Create new events table
+- Add indexes
+- No changes needed to existing tables
+
+2. **Code Updates**
+- Add Event-related traits to existing models
+- Implement event creation in key workflows
+- Update error handling to include trace context
+
+3. **Testing Strategy**
+- Unit tests for Event model
+- Integration tests for trace context
+- Performance testing for event creation
+
+## Future Considerations
+
+1. **Export Capabilities**
+- OpenTelemetry export
+- Prometheus metrics
+- Custom analytics
+
+2. **Advanced Features**
+- Event sampling
+- Custom event attributes
+- Automated trace analysis
+
+3. **Integration Options**
+- APM tools
+- Log aggregation
+- Metrics platforms
+
+## Success Metrics
+
+1. **Technical Metrics**
+- Event creation latency
+- Storage efficiency
+- Query performance
+
+2. **Business Metrics**
+- Debug time reduction
+- System visibility improvement
+- Issue resolution time
+
+3. **User Experience**
+- Trace visualization clarity
+- Query capability satisfaction
+- Documentation completeness
