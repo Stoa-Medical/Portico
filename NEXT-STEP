@@ -1,7 +1,17 @@
+"""
+Updated docs with the suggested implementation:
+1) Use Rust OpenTelemetry SDKs. (Note: Some parts of the SDK may be unstable—check the latest status at https://github.com/open-telemetry/opentelemetry-rust)
+2) Use Cargo feature flags (e.g., "tracing") to toggle the ability to turn on/off tracing and avoid unnecessary performance overhead when tracing is disabled.
+3) Implement tracing support as Rust Traits (e.g., `TraceEnabled` for injecting trace IDs and `SpanEnabled` for managing child spans) to ensure modularity across system components.
+
+Telemetry should be configurable. And events should have enough context so telemetry works. So worth giving it a first shot now (though keep it simple as possible!)
+"""
+
 # Event Data Model Design Document
 
 ## Overview
-This document outlines the implementation of an Event data model that leverages OpenTelemetry (OTel) concepts to provide better observability and tracing capabilities across the Portico system.
+This document outlines the implementation of an Event data model that leverages OpenTelemetry (OTel) concepts to provide better observability and tracing capabilities across the Portico system.  
+<!-- Implementation Advice: Integrate the OTel SDK into your code base with clear feature toggling, ensuring that the production path remains efficient when tracing is not required. -->
 
 ## Background
 Currently, the system has:
@@ -10,10 +20,10 @@ Currently, the system has:
 - Runtime sessions that manage step execution (see `runtime_sessions.rs` lines 1-186)
 
 ## Goals
-1. Track system events with proper context and relationships
-2. Enable distributed tracing across system components
-3. Provide better debugging and monitoring capabilities
-4. Make events generic to support both user and agent-initiated actions
+1. Track system events with proper context and relationships.
+2. Enable distributed tracing across system components.
+3. Provide better debugging and monitoring capabilities.
+4. Make events generic to support both user- and agent-initiated actions.
 
 ## Design
 
@@ -41,7 +51,12 @@ pub struct Event {
     resource: EventResource,  // What created the event
     events: Vec<Event>,      // Child events
 }
+```
 
+*Note:*  
+<!-- Suggestion: Consider extending the `Event` struct by conditionally compiling in extra fields (e.g., an optional trace context) when the `tracing` feature flag is enabled. Also, implement traits such as `TraceEnabled` (to inject trace IDs) and `SpanEnabled` (to support child span additions). -->
+
+```rust
 #[derive(Debug, Serialize, Deserialize)]
 pub enum EventType {
     AgentAction,
@@ -73,106 +88,120 @@ pub enum EventResource {
 
 ### 2. Database Schema Updates
 
-- Update based on the Rust enums decided on
+- Update based on the Rust enums decided on  
+<!-- Implementation Note: When planning your migrations, ensure that any new fields added for trace context (e.g., `trace_id` or `span_id`) are properly indexed. -->
 
 ### 3. Integration Points
 
 1. **Agent Integration**
-- Update Agent struct to include trace context
-- Create events for agent state changes
-- Track agent actions/reactions as spans
+   - Update the Agent struct to include trace context.
+   - Create events for agent state changes.
+   - Track agent actions/reactions as spans.
+   
+   <!-- Integration Tip: When an agent performs an action, conditionally inject a trace context (via a `TraceEnabled` trait) if the "tracing" feature flag is active. -->
 
 2. **Job Integration**
-- Create a trace for each job execution
-- Track job status changes as events
-- Link job events to agent events
+   - Create a trace for each job execution.
+   - Track job status changes as events.
+   - Link job events to agent events.
 
 3. **Runtime Session Integration**
-- Create spans for step execution
-- Track step results and errors
-- Maintain parent-child relationship with job spans
+   - Create spans for step execution.
+   - Track step results and errors.
+   - Maintain parent-child relationship with job spans.
 
 ### 4. Implementation Phases
 
 **Phase 1: Core Event Infrastructure**
-- Implement Event struct and related types
-- Add database schema and migrations
-- Create basic event creation/query functions
+- Implement the basic `Event` struct and related types.
+- Add necessary database schema updates and migrations.
+- Create functions for basic event creation and querying.
+  
+  <!-- Implementation Advice: During this phase, introduce the Rust traits `TraceEnabled` and `SpanEnabled` to handle trace context injection and span management. Use Cargo feature flags (like `tracing`) to encapsulate any dependencies on the OpenTelemetry SDK. -->
 
 **Phase 2: System Integration**
-- Integrate with Agent system
-- Add Job tracking
-- Implement Step execution tracking
+- Integrate tracing into the Agent system.
+- Add support for Job tracking with trace context propagation.
+- Implement step execution tracking with created spans.
 
 **Phase 3: Observability Features**
-- Add trace visualization
-- Implement event querying API
-- Create monitoring dashboards
+- Add trace visualization capabilities.
+- Develop an event querying API.
+- Create monitoring dashboards.
 
 ## Technical Considerations
 
 ### 1. Trace Context Propagation
-- Use W3C Trace Context format
-- Maintain context across async boundaries
-- Handle distributed tracing across services
+- Use the W3C Trace Context format.
+- Maintain context across asynchronous boundaries.
+- Handle distributed tracing across services.
+  
+  <!-- Note: The OpenTelemetry Rust SDK supports W3C compliant trace context propagation. However, be aware that some APIs in the SDK might be experimental or unstable. Regularly review the SDK repository for updates. -->
 
 ### 2. Performance Impact
-- Batch event writes
-- Use appropriate indexing
-- Consider event retention policies
+- Batch event writes.
+- Use appropriate indexing.
+- Consider event retention policies.
+  
+  <!-- Consideration: When tracing is enabled, make sure to evaluate the overhead. Using feature flags helps mitigate performance concerns when tracing isn’t needed. -->
 
 ### 3. Storage Requirements
-- Estimate event volume
-- Plan for data growth
-- Consider partitioning strategies
+- Estimate event volume.
+- Plan for data growth.
+- Consider partitioning strategies.
 
 ## Migration Strategy
 
 1. **Database Updates**
-- Create new events table
-- Add indexes
-- No changes needed to existing tables
+   - Create a new events table.
+   - Add indexes for trace context fields.
+   - No changes needed to existing tables.
 
 2. **Code Updates**
-- Add Event-related traits to existing models
-- Implement event creation in key workflows
-- Update error handling to include trace context
+   - Add Event-related traits (e.g., `TraceEnabled`, `SpanEnabled`) to existing models.
+   - Implement event creation in key workflows ensuring conditionally compiled tracing code (using the `tracing` feature flag).
+   - Update error handling to include trace context.
+   
+   <!-- New Code Guidance:  
+   - `TraceEnabled`: Provide a method to inject trace identifiers into an event.  
+   - `SpanEnabled`: Provide a method to add child event spans.  
+   These traits allow extending observability without affecting core functionality when tracing is disabled. -->
 
 3. **Testing Strategy**
-- Unit tests for Event model
-- Integration tests for trace context
-- Performance testing for event creation
+   - Unit tests for the Event model.
+   - Integration tests for verifying trace context propagation.
+   - Performance testing focused on event creation and trace sampling.
 
 ## Future Considerations
 
 1. **Export Capabilities**
-- OpenTelemetry export
-- Prometheus metrics
-- Custom analytics
+   - OpenTelemetry export.
+   - Integration with Prometheus metrics.
+   - Custom analytics pipelines.
 
 2. **Advanced Features**
-- Event sampling
-- Custom event attributes
-- Automated trace analysis
+   - Event sampling strategies.
+   - Custom event attributes.
+   - Automated trace analysis.
 
 3. **Integration Options**
-- APM tools
-- Log aggregation
-- Metrics platforms
+   - APM tools.
+   - Log aggregation systems.
+   - Metrics platforms.
 
 ## Success Metrics
 
 1. **Technical Metrics**
-- Event creation latency
-- Storage efficiency
-- Query performance
+   - Event creation latency.
+   - Storage efficiency.
+   - Query performance.
 
 2. **Business Metrics**
-- Debug time reduction
-- System visibility improvement
-- Issue resolution time
+   - Reduction in debug time.
+   - Improvement in system visibility.
+   - Faster issue resolution times.
 
 3. **User Experience**
-- Trace visualization clarity
-- Query capability satisfaction
-- Documentation completeness
+   - Clarity in trace visualization.
+   - Satisfaction with query capabilities.
+   - Completeness of documentation.
