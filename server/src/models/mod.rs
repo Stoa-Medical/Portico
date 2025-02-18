@@ -4,8 +4,8 @@ pub use agents::Agent;
 /// Module for running Steps + data (in a RuntimeSession, abbrv. rts)
 pub mod runtime_sessions;
 /// Module for managing job requests and execution
-pub mod user_jobs;
-pub use user_jobs::{Job, JobStatus, JobError, RetryConfig};
+pub mod jobs;
+pub use jobs::{Job, JobStatus, JobError, RetryConfig};
 
 pub use runtime_sessions::RuntimeSession;
 /// Module for defining and running Steps

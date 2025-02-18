@@ -8,7 +8,7 @@
 /// Module with different data models
 pub mod models;
 pub use models::{Agent, Step, RuntimeSession};
-pub use models::user_jobs::{Job, JobStatus};
+pub use models::jobs::{Job, JobStatus};
 
 // ============ Custom Enums / Traits ============
 use anyhow::Result;

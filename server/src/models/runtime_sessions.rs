@@ -4,7 +4,7 @@
 use crate::DataSource;
 use crate::models::steps::Step;
 use serde_json::Value;
-use super::user_jobs::{Job, JobStatus};
+use super::jobs::{Job, JobStatus};
 use anyhow::Result;
 use thiserror::Error;
 

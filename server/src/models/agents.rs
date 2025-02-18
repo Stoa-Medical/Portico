@@ -5,7 +5,7 @@
 
 use super::steps::Step;
 use crate::{CanAct, CanReact, DataSource};
-use super::user_jobs::Job;
+use super::jobs::Job;
 use super::runtime_sessions::RuntimeSession;
 
 use std::collections::HashMap;
