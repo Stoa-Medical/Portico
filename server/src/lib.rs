@@ -51,7 +51,17 @@ impl DataSource {
     }
 }
 
+// ============ Trait implementations =============
 
+#[async_trait]
+pub trait Actor {
+    async fn act(&mut self, source: DataSource, job: Option<&mut Job>) -> Result<Value, anyhow::Error>;
+}
+
+#[async_trait]
+pub trait Reactor {
+    async fn react(&mut self, source: DataSource, job: Option<&mut Job>) -> Result<Value, anyhow::Error>;
+}
 
 // ============ Supabase Realtime things =============
 #[derive(Debug, Serialize, Deserialize)]
@@ -136,15 +146,4 @@ pub async fn call_llm(prompt: &str, context: Value) -> Result<String, LLMError> 
         .as_str()
         .map(String::from)
         .ok_or_else(|| LLMError::InvalidResponse("No completion found".to_string()))
-}
-
-// Move trait definitions to the top with other traits
-#[async_trait]
-pub trait CanAct {
-    async fn act(&mut self, source: DataSource, job: Option<&mut Job>) -> Result<Value, anyhow::Error>;
-}
-
-#[async_trait]
-pub trait CanReact {
-    async fn react(&mut self, source: DataSource, job: Option<&mut Job>) -> Result<Value, anyhow::Error>;
 }

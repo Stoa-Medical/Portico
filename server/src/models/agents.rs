@@ -4,7 +4,7 @@
 ///     Steps are python code, and the scaffolding is defined in `steps.rs`
 
 use super::steps::Step;
-use crate::{CanAct, CanReact, DataSource};
+use crate::{Actor, Reactor, DataSource};
 use super::jobs::Job;
 use super::runtime_sessions::RuntimeSession;
 
@@ -61,7 +61,7 @@ pub enum AgentType {
 }
 
 #[async_trait]
-impl CanAct for Agent {
+impl Actor for Agent {
     async fn act(&mut self, source: DataSource, job: Option<&mut Job>) -> Result<Value, anyhow::Error> {
         let mut rts = RuntimeSession::new(&mut self.steps, source, job);
         rts.run_all(true).await.map(|opt_val| opt_val.unwrap_or(Value::Null))
@@ -70,7 +70,7 @@ impl CanAct for Agent {
 }
 
 #[async_trait]
-impl CanReact for Agent {
+impl Reactor for Agent {
     async fn react(&mut self, source: DataSource, job: Option<&mut Job>) -> Result<Value, anyhow::Error> {
         let mut rts = RuntimeSession::new(&mut self.steps, source, job);
         rts.run_all(true).await.map(|opt_val| opt_val.unwrap_or(Value::Null))
