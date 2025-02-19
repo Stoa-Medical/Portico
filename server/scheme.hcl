@@ -33,15 +33,15 @@ WHERE schemaname = 'public'
 # """
 # TODO: Pin-down the schemas for:
 # - [x] Signal
-# - [ ] Schedule
-# - [ ] Mission
-# - [ ] Agent
-# - [ ] Step
-# - [ ] RuntimeSession
+# - [x] Mission
+# - [x] Agent
+# - [x] Step
+# - [x] RuntimeSession
 
 # - [ ] Try running this against supabase postgres schema
 # - [ ] Define a `DatabaseItem` trait in lib.rs (like the good ol' days!)
 
+# - [ ] Schedule
 # - [ ] Channel
 # """
 
@@ -76,7 +76,19 @@ table "signals" {
     }
 
     # === Relationships ===
+    column "mission_id" {
+        type = int
+        null = false
+    }
 
+    foreign_key "signal_mission_fk" {
+        columns = [
+            column.mission_id
+        ]
+        ref_columns = [
+            table.missions.column.id
+        ]
+    }
     # === Timestamps ===
     column "created_timestamp" {
         type = sql("timestamptz")
@@ -116,11 +128,6 @@ table "signals" {
         type = sql("json")
         null = true
     }
-
-    column "mission_id" {
-        type = int
-        null = false
-    }
 }
 
 
@@ -150,6 +157,28 @@ table "missions" {
     }
 
     # === Relationships ===
+    # NOTE: Create default users if automated in backend (e.g. "PORTICO_AGENT" or something)
+    # NOTE: Not sure if I can make an explicit foreign key here, so will have to trust developer to not mess up
+    column "user_requested_id" {
+        type = sql("uuid")
+        null = false
+    }
+
+    # Keep this one Agent for simplicity. Expand later with another column if needed
+    # Should still have a "primary" Agent regardless for decision making
+    column "requested_agent_id" {
+        type = int
+        null = false
+    }
+
+    foreign_key "mission_agent_fk" {
+        columns = [
+            column.requested_agent_id
+        ]
+        ref_columns = [
+            table.agents.column.id
+        ]
+    }
 
     # === Timestamps ===
     column "created_timestamp" {
@@ -172,23 +201,13 @@ table "missions" {
 
     # === Custom (table-specific) ===
     column "mission_status" {
-        type = enum.mission_status
+        type = enum.running_status
         null = false
     }
 
-    # NOTE: Create default users if automated in backend (e.g. "PORTICO_AGENT" or something)
-    column "requested_user_id" {
-        type = sql("uuid")
-        null = false
-    }
 
     column "description" {
         type = sql("varchar(255)")
-        null = false
-    }
-
-    column "requested_agent_ids" {
-        type = sql("integer[]")  # Represents in-order list of Agents (order matters for execution)
         null = false
     }
 
@@ -225,6 +244,8 @@ table "agents" {
     }
 
     # === Relationships ===
+    # An Agent is assigned to a Mission (a Mission points to an Agent)
+    # An Agent can have many Steps (a Step points to an Agent)
 
     # === Timestamps ===
     column "created_timestamp" {
@@ -286,6 +307,31 @@ table "steps" {
     }
 
     # === Relationships ===
+    # A Step is defined within an Agent, and has a unique sequence
+    # An Agent runs steps in ascending order of sequence numbers
+    column "agent_id" {
+        type = int
+        null = false
+    }
+    foreign_key "step_agent_fk" {
+        columns = [
+            column.agent_id
+        ]
+        ref_columns = [
+            table.agents.column.id
+        ]
+    }
+    column "sequence_number" {
+        type = int
+        null = false
+    }
+
+    unique "agent_step_order" {
+        columns = [
+            column.agent_id,
+            column.sequence_number
+        ]
+    }
 
     # === Timestamps ===
     column "created_timestamp" {
@@ -329,10 +375,6 @@ table "steps" {
         null = false
         default = 0
     }
-    column "agent_id" {
-        type = int
-        null = false
-    }
 }
 
 table "runtime_sessions" {
@@ -340,8 +382,9 @@ table "runtime_sessions" {
     schema = schema.public
 
     # === Ids ===
+    # NOTE: This is bigint because there could be a lot of these. Everything else should be int (update this comment if not the case)
     column "id" {
-        type = int
+        type = sql("bigint")
         null = false
         identity {
             generated = "ALWAYS"
@@ -361,6 +404,18 @@ table "runtime_sessions" {
     }
 
     # === Relationships ===
+    column "requested_by_agent_id" {
+        type = int
+        null = false
+    }
+    foreign_key "runtime_session_agent_fk" {
+        columns = [
+            column.requested_by_agent_id
+        ]
+        ref_columns = [
+            table.agents.column.id
+        ]
+    }
 
     # === Timestamps ===
     column "created_timestamp" {
@@ -382,26 +437,21 @@ table "runtime_sessions" {
     }
 
     # === Custom (table-specific) ===
-    column "completed" {
-        type = bool
+    column "runtime_session_status" {
+        type = enum.running_status
         null = false
-        default = false
     }
     column "initial_data" {
         type = sql("json")
         null = false
     }
-    column "most_recent_step_idx" {
+    column "most_recent_step_number" {
         type = int
         null = false
     }
     column "most_recent_result" {
         type = sql("json")
         null = true
-    }
-    column "requested_by_agent_id" {
-        type = int
-        null = false
     }
 }
 
@@ -455,7 +505,8 @@ enum "step_action" {
     ]
 }
 
-enum "mission_status" {
+# NOTE: This is shared with Mission + RuntimeSession
+enum "running_status" {
     schema = schema.public
     values = [
         "waiting",
