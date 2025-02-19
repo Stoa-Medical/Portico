@@ -1,55 +1,77 @@
-"""
-Updated docs with the suggested implementation:
-1) Use Rust OpenTelemetry SDKs. (Note: Some parts of the SDK may be unstable—check the latest status at https://github.com/open-telemetry/opentelemetry-rust)
-2) Use Cargo feature flags (e.g., "tracing") to toggle the ability to turn on/off tracing and avoid unnecessary performance overhead when tracing is disabled.
-3) Implement tracing support as Rust Traits (e.g., `TraceEnabled` for injecting trace IDs and `SpanEnabled` for managing child spans) to ensure modularity across system components.
-
-Telemetry should be configurable. And events should have enough context so telemetry works. So worth giving it a first shot now (though keep it simple as possible!)
-"""
-
-# Event Data Model Design Document
+# Signal Data Model Design Document
 
 ## Overview
-This document outlines the implementation of an Event data model that leverages OpenTelemetry (OTel) concepts to provide better observability and tracing capabilities across the Portico system.  
-<!-- Implementation Advice: Integrate the OTel SDK into your code base with clear feature toggling, ensuring that the production path remains efficient when tracing is not required. -->
+
+This document outlines the implementation of a **Signal** data model to support an event‐based system within the Portico server. A Signal represents any occurrence (scheduled, triggered by a user or agent, or resulting from another Signal) that is used to drive workflow initiation and system monitoring. This replaces the earlier OpenTelemetry-inspired design with a more straightforward approach aligned with the overall Portico MVP plan.
 
 ## Background
-Currently, the system has:
-- Agents that can act/react to data (see `agents.rs` lines 1-193)
-- Jobs that track work execution (see `user_jobs.rs` lines 1-167)
-- Runtime sessions that manage step execution (see `runtime_sessions.rs` lines 1-186)
+
+Portico currently has several key components:
+- **Agents** that listen for data and react or initiate actions (see `agents.rs`).
+- **Missions** that represent task requests and track execution flow (create `missions.rs`).
+- **Runtime Sessions** that manage the execution of steps (see `runtime_sessions.rs`).
+
+The system is built as an event-based architecture where a **Signal** is the core data model used to trigger actions. Rather than using complex OpenTelemetry tracing fields, Signals are keyed on simple identifiers and metadata that allow us to understand the system state and trigger missions.
 
 ## Goals
-1. Track system events with proper context and relationships.
-2. Enable distributed tracing across system components.
-3. Provide better debugging and monitoring capabilities.
-4. Make events generic to support both user- and agent-initiated actions.
+
+1. **Track System Activity:** Register Signals that capture key events and state changes across components.
+2. **Trigger Actions:** Use Signals to drive the creation of Missions and RuntimeSessions.
+3. **Improve Observability:** Enable simple logging, debugging, and monitoring through a dedicated Signal log.
+4. **Support Both User and Agent Initiatives:** Allow Signals to be generated from user actions, agent activities, or system events.
 
 ## Design
 
-### 1. Event Data Model
+### 1. Signal Data Model
 
-```rust
+We define the core **Signal** struct with the following fields:
+
+- **id:** A unique identifier for the Signal.
+- **parent_signal_id:** Optionally links this Signal to a prior Signal.
+- **timestamp:** The time the Signal was generated.
+- **duration:** Optionally, a duration indicating processing time.
+- **name:** A human-readable name or description.
+- **signal_type:** An enum describing the type of Signal.
+- **status:** The current state of the Signal.
+- **attributes:** Arbitrary key-value metadata.
+- **resource:** The originator of the Signal (e.g., Agent, User, System, Mission, or Step).
+- **child_signals:** Nested signals, if multiple layers of causation need to be tracked.
+
+The data model is implemented as follows:
+
+```rust:server/src/models/signal.rs
+/// Core representation of a system Signal.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Event {
-    // OTel-inspired fields
-    trace_id: String,      // Unique identifier for the trace
-    span_id: String,       // Unique identifier for this event
-    parent_span_id: Option<String>, // Optional parent event
+pub struct Signal {
+    /// Unique identifier for this Signal.
+    pub id: String,
     
-    // Timestamp information
-    timestamp: DateTime<Utc>,
-    duration: Option<Duration>,
+    /// Optional parent Signal ID that triggered this Signal.
+    pub parent_signal_id: Option<String>,
     
-    // Event context
-    name: String,          // Human-readable event name
-    event_type: EventType, // Enum of possible event types
-    status: EventStatus,   // Success, Error, etc.
+    /// Timestamp when the Signal was generated.
+    pub timestamp: DateTime<Utc>,
     
-    // Additional context
-    attributes: HashMap<String, Value>, // Key-value metadata
-    resource: EventResource,  // What created the event
-    events: Vec<Event>,      // Child events
+    /// Optional duration for which the Signal was active or processed.
+    pub duration: Option<Duration>,
+    
+    /// Human-readable Signal name.
+    pub name: String,
+    
+    /// The type of Signal.
+    pub signal_type: SignalType,
+    
+    /// Current status of the Signal.
+    pub status: SignalStatus,
+    
+    /// Additional metadata in key-value format.
+    pub attributes: HashMap<String, Value>,
+    
+    /// Resource identity indicating the originator of the Signal.
+    pub resource: SignalResource,
+    
+    /// Nested child Signals triggered by this Signal.
+    pub child_signals: Vec<Signal>,
 }
 ```
 
@@ -58,150 +80,209 @@ pub struct Event {
 
 ```rust
 #[derive(Debug, Serialize, Deserialize)]
-pub enum EventType {
-    AgentAction,
-    AgentReaction,
-    JobExecution,
-    StepExecution,
-    SystemEvent,
+pub enum SignalType {
+    /// A Signal from a scheduled process (e.g., CRON job).
+    Scheduled,
+    /// A Signal triggered directly by a user.
     UserAction,
+    /// A Signal triggered by an Agent.
+    AgentAction,
+    /// A Signal responding to another Signal.
+    Response,
+    /// A Signal indicating a system-generated event.
+    SystemEvent,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum EventStatus {
-    Started,
+pub enum SignalStatus {
+    /// Signal has been initiated.
+    Initiated,
+    /// Signal is currently in progress.
     InProgress,
+    /// Signal has been completed.
     Completed,
+    /// Signal processing failed.
     Failed,
+    /// Signal was cancelled.
     Cancelled,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum EventResource {
-    Agent(String),    // Agent ID
-    User(String),     // User ID
-    System,           // System-generated
-    Job(String),      // Job ID
-    Step(String),     // Step ID
+pub enum SignalResource {
+    /// Signal originated from an Agent (by Agent ID).
+    Agent(String),
+    /// Signal originated from a User (by User ID).
+    User(String),
+    /// Signal generated by the System.
+    System,
+    /// Signal related to a Job (by Job ID).
+    Job(String),
+    /// Signal related to a Step execution (by Step ID).
+    Step(String),
 }
 ```
 
 ### 2. Database Schema Updates
 
-- Update based on the Rust enums decided on  
-<!-- Implementation Note: When planning your migrations, ensure that any new fields added for trace context (e.g., `trace_id` or `span_id`) are properly indexed. -->
+To persist Signals, we add a new **signals** table. Below is the proposed schema in HCL:
+
+```hcl:server/db_schema_signals.hcl
+table "signals" {
+  schema = schema.public
+  
+  column "id" {
+    type = uuid
+    default = sql("gen_random_uuid()")
+    null = false
+  }
+  
+  column "parent_signal_id" {
+    type = uuid
+    null = true
+  }
+  
+  column "timestamp" {
+    type = timestamptz
+    null = false
+  }
+  
+  column "duration_ms" {
+    type = bigint
+    null = true
+  }
+  
+  column "name" {
+    type = text
+    null = false
+  }
+  
+  column "signal_type" {
+    type = text
+    null = false
+  }
+  
+  column "status" {
+    type = text
+    null = false
+  }
+  
+  column "attributes" {
+    type = jsonb
+    null = false
+  }
+  
+  column "resource_type" {
+    type = text
+    null = false
+  }
+  
+  column "resource_id" {
+    type = text
+    null = false
+  }
+  
+  primary_key {
+    columns = [column.id]
+  }
+  
+  index "idx_signals_parent" {
+    columns = [column.parent_signal_id]
+  }
+  
+  index "idx_signals_timestamp" {
+    columns = [column.timestamp]
+  }
+}
+```
 
 ### 3. Integration Points
 
-1. **Agent Integration**
-   - Update the Agent struct to include trace context.
-   - Create events for agent state changes.
-   - Track agent actions/reactions as spans.
-   
-   <!-- Integration Tip: When an agent performs an action, conditionally inject a trace context (via a `TraceEnabled` trait) if the "tracing" feature flag is active. -->
+Signals will integrate with existing components as follows:
 
-2. **Job Integration**
-   - Create a trace for each job execution.
-   - Track job status changes as events.
-   - Link job events to agent events.
+1. **Agent Integration**
+   - **Signal Generation:** Agents emit Signals when their state changes or execute actions.
+   - **Linking:** Agent-initiated Signals can include references to parent Signals for causation analysis.
+
+2. **Mission Integration**
+   - **Lifecycle Tracking:** A new Mission is initiated by creating a Signal and is updated as it progresses (e.g., upon initiation, during execution, on success, or error).
+   - **Correlations:** Signals from Missions can be linked hierarchically with those from Agents or Steps.
 
 3. **Runtime Session Integration**
-   - Create spans for step execution.
-   - Track step results and errors.
-   - Maintain parent-child relationship with job spans.
+   - **Step Execution:** Each Step execution within a RuntimeSession can generate a Signal capturing the input, output, and any errors.
+   - **Parent-Child Relationships:** These Signals are linked back to the originating Mission or Agent Signal.
 
 ### 4. Implementation Phases
 
-**Phase 1: Core Event Infrastructure**
-- Implement the basic `Event` struct and related types.
-- Add necessary database schema updates and migrations.
-- Create functions for basic event creation and querying.
-  
-  <!-- Implementation Advice: During this phase, introduce the Rust traits `TraceEnabled` and `SpanEnabled` to handle trace context injection and span management. Use Cargo feature flags (like `tracing`) to encapsulate any dependencies on the OpenTelemetry SDK. -->
+**Phase 1: Core Signal Infrastructure**
+- Create the `Signal` struct and enums.
+- Implement database migrations to add the `signals` table.
+- Develop basic Signal creation and query functions.
 
 **Phase 2: System Integration**
-- Integrate tracing into the Agent system.
-- Add support for Job tracking with trace context propagation.
-- Implement step execution tracking with created spans.
+- **Agents:** Update Agent logic to generate Signals during their action/reaction cycles.
+- **Missions:** Instrument Mission execution flows to create and update Signals.
+- **RuntimeSessions:** Integrate Signal generation during step execution and on error events.
 
-**Phase 3: Observability Features**
-- Add trace visualization capabilities.
-- Develop an event querying API.
-- Create monitoring dashboards.
+**Phase 3: Observability Enhancements**
+- Build APIs to query and filter Signals.
+- Develop a rudimentary dashboard/log viewer for monitoring Signals in real-time.
+- Integrate Signal correlation views to assist with debugging and auditing.
 
 ## Technical Considerations
 
-### 1. Trace Context Propagation
-- Use the W3C Trace Context format.
-- Maintain context across asynchronous boundaries.
-- Handle distributed tracing across services.
-  
-  <!-- Note: The OpenTelemetry Rust SDK supports W3C compliant trace context propagation. However, be aware that some APIs in the SDK might be experimental or unstable. Regularly review the SDK repository for updates. -->
+1. **Propagation and Causation**
+   - Maintain parent-child relationships between Signals for contextual tracing.
+   - Use simple JSON key-value pairs to capture additional metadata.
 
-### 2. Performance Impact
-- Batch event writes.
-- Use appropriate indexing.
-- Consider event retention policies.
-  
-  <!-- Consideration: When tracing is enabled, make sure to evaluate the overhead. Using feature flags helps mitigate performance concerns when tracing isn’t needed. -->
+2. **Performance Impact**
+   - Batch Signal writes where possible to reduce IO pressure.
+   - Employ appropriate indexing (e.g., timestamp and parent_signal_id).
 
-### 3. Storage Requirements
-- Estimate event volume.
-- Plan for data growth.
-- Consider partitioning strategies.
+3. **Storage and Retention**
+   - Estimate the frequency of Signals and determine retention policies.
+   - Consider table partitioning if event volume grows significantly.
 
 ## Migration Strategy
 
-1. **Database Updates**
-   - Create a new events table.
-   - Add indexes for trace context fields.
-   - No changes needed to existing tables.
+1. **Database**
+   - Create the new `signals` table.
+   - Apply necessary indexes.
+   - No changes are required to existing tables.
 
 2. **Code Updates**
-   - Add Event-related traits (e.g., `TraceEnabled`, `SpanEnabled`) to existing models.
-   - Implement event creation in key workflows ensuring conditionally compiled tracing code (using the `tracing` feature flag).
-   - Update error handling to include trace context.
-   
-   <!-- New Code Guidance:  
-   - `TraceEnabled`: Provide a method to inject trace identifiers into an event.  
-   - `SpanEnabled`: Provide a method to add child event spans.  
-   These traits allow extending observability without affecting core functionality when tracing is disabled. -->
+   - Introduce Signal-related traits and functions across Agents, Jobs, and RuntimeSessions.
+   - Gradually integrate Signal generation into key workflows with feature flags if needed.
 
-3. **Testing Strategy**
-   - Unit tests for the Event model.
-   - Integration tests for verifying trace context propagation.
-   - Performance testing focused on event creation and trace sampling.
+3. **Testing**
+   - Unit-test the Signal model.
+   - Run integration tests to ensure Signals propagate correctly between services.
+   - Conduct performance testing for Signal write and query operations.
 
 ## Future Considerations
 
 1. **Export Capabilities**
-   - OpenTelemetry export.
-   - Integration with Prometheus metrics.
-   - Custom analytics pipelines.
+   - Ability to export Signal logs for external analysis.
+   - Integration with third-party monitoring systems if needed later.
 
 2. **Advanced Features**
-   - Event sampling strategies.
-   - Custom event attributes.
-   - Automated trace analysis.
+   - Complex correlation analysis (e.g., visual trace trees).
+   - Sampling, throttling, or deduplication strategies for high-frequency Signals.
 
-3. **Integration Options**
-   - APM tools.
-   - Log aggregation systems.
-   - Metrics platforms.
+3. **Tooling and Analytics**
+   - A dedicated UI dashboard for viewing and searching Signals.
+   - Enhanced analytics to monitor system health and performance based on Signal data.
 
 ## Success Metrics
 
 1. **Technical Metrics**
-   - Event creation latency.
-   - Storage efficiency.
-   - Query performance.
+   - Latency of Signal creation and persistence.
+   - Query response times for Signal-based filters.
+   - Storage efficiency with the new schema.
 
 2. **Business Metrics**
-   - Reduction in debug time.
-   - Improvement in system visibility.
-   - Faster issue resolution times.
+   - Reduction in debug time due to improved observability.
+   - Faster detection and resolution of system issues.
 
 3. **User Experience**
-   - Clarity in trace visualization.
-   - Satisfaction with query capabilities.
-   - Completeness of documentation.
+   - Clarity and usefulness of Signal logs and dashboards.
+   - Overall satisfaction with system responsiveness and traceability.
