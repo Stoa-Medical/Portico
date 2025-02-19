@@ -26,35 +26,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     io.ns("/", |socket: SocketRef| {
         println!("Socket connected: {}", socket.id);
 
-        // Handle postgres changes for UserJob table
+        // Handle postgres changes for Signal table
         socket.on("postgres_changes", |socket: SocketRef, Data::<Value>(data)| async move {
-            println!("Received UserJob changes: {:?}", data);
+            println!("Received Signal changes: {:?}", data);
             
             if let Ok(msg) = serde_json::from_value::<RealtimeMessage>(data) {
                 match msg.message_type {
                     MessageType::Insert => {
-                        println!("New UserJob: {:?}", msg.new);
-                        socket.broadcast().emit("userjob_created", msg.new).ok();
+                        println!("New Signal: {:?}", msg.new);
+                        socket.broadcast().emit("Signal_created", msg.new).ok();
                     },
                     MessageType::Update => {
-                        println!("UserJob updated: {:?}", msg.new);
-                        socket.broadcast().emit("userjob_updated", msg.new).ok();
+                        println!("Signal updated: {:?}", msg.new);
+                        socket.broadcast().emit("Signal_updated", msg.new).ok();
                     },
                     MessageType::Delete => {
-                        println!("UserJob deleted: {:?}", msg.old.clone().unwrap_or(msg.new.clone()));
-                        socket.broadcast().emit("userjob_deleted", msg.old.clone().unwrap_or(msg.new.clone())).ok();
+                        println!("Signal deleted: {:?}", msg.old.clone().unwrap_or(msg.new.clone()));
+                        socket.broadcast().emit("Signal_deleted", msg.old.clone().unwrap_or(msg.new.clone())).ok();
                     },
                     _ => println!("Unhandled message type: {:?}", msg.message_type),
                 }
             }
         });
 
-        // Subscribe to UserJob table
+        // Subscribe to Signal table
         let subscribe_msg = SubscribeMessage {
-            message_type: "postgres_changes".to_string(),
-            schema: "public".to_string(),
-            table: "UserJob".to_string(),
-            event_filter: "*".to_string(),
+            message_type: String::from("postgres_changes"),
+            schema: String::from("public"),
+            table: String::from("Signal"),
+            event_filter: String::from("*"),
         };
         socket.emit("subscribe", subscribe_msg).ok();
     });
@@ -70,5 +70,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-
-

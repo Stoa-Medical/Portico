@@ -1,5 +1,5 @@
 # Using the Atlas database build tool to manage schema
-#     docs: https:#atlasgo.io/
+#     docs: https://atlasgo.io/
 
 /*
 NOTE: Before applying: `psql "postgresql:#postgres:postgres@localhost:54322/postgres?sslmode=disable" -c "CREATE DATABASE server;"`
