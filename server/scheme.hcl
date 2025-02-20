@@ -78,7 +78,7 @@ table "signals" {
     # === Relationships ===
     column "mission_id" {
         type = int
-        null = false
+        null = true
     }
 
     foreign_key "signal_mission_fk" {
@@ -100,12 +100,6 @@ table "signals" {
         type = sql("timestamptz")
         null = false
         default = sql("CURRENT_TIMESTAMP")
-    }
-
-    # === Provenance (auditing) ===
-    column "audit_log" {
-        type = sql("json")
-        null = false
     }
 
     # === Custom (table-specific) ===
@@ -193,12 +187,6 @@ table "missions" {
         default = sql("CURRENT_TIMESTAMP")
     }
 
-    # === Provenance (auditing) ===
-    column "audit_log" {
-        type = sql("json")
-        null = false
-    }
-
     # === Custom (table-specific) ===
     column "mission_status" {
         type = enum.running_status
@@ -258,12 +246,6 @@ table "agents" {
         type = sql("timestamptz")
         null = false
         default = sql("CURRENT_TIMESTAMP")
-    }
-
-    # === Provenance (auditing) ===
-    column "audit_log" {
-        type = sql("json")
-        null = false
     }
 
     # === Custom (table-specific) ===
@@ -346,12 +328,6 @@ table "steps" {
         default = sql("CURRENT_TIMESTAMP")
     }
 
-    # === Provenance (auditing) ===
-    column "audit_log" {
-        type = sql("json")
-        null = false
-    }
-
     # === Custom (table-specific) ===
     column "description" {
         type = sql("varchar(255)")
@@ -428,12 +404,6 @@ table "runtime_sessions" {
         type = sql("timestamptz")
         null = false
         default = sql("CURRENT_TIMESTAMP")
-    }
-
-    # === Provenance (auditing) ===
-    column "audit_log" {
-        type = sql("json")
-        null = false
     }
 
     # === Custom (table-specific) ===
