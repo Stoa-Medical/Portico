@@ -118,7 +118,7 @@ table "signals" {
         null = true
     }
 
-    column "response" {
+    column "response_data" {
         type = sql("json")
         null = true
     }
@@ -333,11 +333,11 @@ table "steps" {
         type = sql("varchar(255)")
         null = false
     }
-    column "action_type" {
-        type = enum.step_action
+    column "step_type" {
+        type = enum.step_type
         null = false
     }
-    column "action_content" {
+    column "step_content" {
         type = sql("text")
         null = false
     }
@@ -415,11 +415,11 @@ table "runtime_sessions" {
         type = sql("json")
         null = false
     }
-    column "most_recent_step_number" {
+    column "latest_step_idx" {
         type = int
         null = false
     }
-    column "most_recent_result" {
+    column "latest_result" {
         type = sql("json")
         null = true
     }
@@ -467,7 +467,7 @@ enum "agent_state" {
     ]
 }
 
-enum "step_action" {
+enum "step_type" {
     schema = schema.public
     values = [
         "python",

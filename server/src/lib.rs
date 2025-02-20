@@ -8,60 +8,79 @@
 /// Module with different data models
 pub mod models;
 pub use models::{Agent, Step, RuntimeSession};
-pub use models::jobs::{Job, JobStatus};
 
 // ============ Custom Enums / Traits ============
 use anyhow::Result;
 use serde_json::Value;
-use std::path::PathBuf;
-use async_trait::async_trait;
-use tokio::fs::read_to_string;
 use serde::{Serialize, Deserialize};
 use std::env;
 use thiserror::Error;
 use reqwest::Client;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum DataSource {
-    Json(Value),
-    File(PathBuf),
-    Url(String), // Performs a GET request and processes HTML as string
+// === Shared Enum definitions ===
+pub enum RunningStatus {
+    Pending,
+    InProgress,
+    Completed,
+    Failed
 }
 
-impl DataSource {
-    /// Extract the content into a Value
-    pub async fn extract(&self) -> Result<Value, anyhow::Error> {
-        match self {
-            DataSource::Json(value) => Ok(value.clone()),
-            DataSource::File(path) => {
-                let content = read_to_string(path).await?;
-                Ok(serde_json::from_str(&content)?)
-            },
-            // Assume if URL data, it should be JSON
-            // TODO: allow HTML as option
-            DataSource::Url(url) => {
-                let client = reqwest::Client::new();
-                Ok(client.get(url)
-                    .send()
-                    .await?
-                    .json()
-                    .await?)
-            }
-        }
+// ============ Struct definitions =============
+
+pub struct IdFields {
+    id: u64,
+    global_uuid: String
+}
+
+impl IdFields {
+    // TODO: Have some way to increment correctly
+    //    Primarily matters for `RuntimeSession` which is created here
+    //    (everything else is created in the UI, and Supabase is the source-of-truth)
+    pub fn new(id: u64, global_uuid: String) -> Self {
+        Self { id, global_uuid }
     }
 }
 
-// ============ Trait implementations =============
-
-#[async_trait]
-pub trait Actor {
-    async fn act(&mut self, source: DataSource, job: Option<&mut Job>) -> Result<Value, anyhow::Error>;
+pub struct TimestampFields {
+    created: chrono::NaiveDateTime,
+    updated: chrono::NaiveDateTime
 }
 
-#[async_trait]
-pub trait Reactor {
-    async fn react(&mut self, source: DataSource, job: Option<&mut Job>) -> Result<Value, anyhow::Error>;
+impl TimestampFields {
+    pub fn new() -> Self {
+        let now = chrono::Local::now().naive_utc();
+        Self {
+            created: now,
+            updated: now
+        }
+    }
+
+    pub fn update(&mut self) {
+        self.updated = chrono::Local::now().naive_utc();
+    }
 }
+
+
+// ============ Trait definitions =============
+
+/// Item that is in the `public` schema (Portico-custom, not Supabase-predefined)
+trait DatabaseItem {
+    /// Default implementations
+    fn try_create(&self) -> Result<()>;
+    fn try_read(&self) -> Result<()>;
+    fn try_update(&self) -> Result<()>;
+    fn try_delete(&self) -> Result<()>;
+
+    /// Struct-specific implementations
+    fn get_table_name(&self) -> &str;
+}
+
+trait AuditLogger {
+
+    fn update_log_json(&self) -> Result<()>;
+
+}
+
 
 // ============ Supabase Realtime things =============
 #[derive(Debug, Serialize, Deserialize)]
