@@ -1,288 +1,92 @@
-# Signal Data Model Design Document
+Portico MVP – Design Doc (Dev)
 
-## Overview
+Last significant update: Feb 19, 2025
 
-This document outlines the implementation of a **Signal** data model to support an event‐based system within the Portico server. A Signal represents any occurrence (scheduled, triggered by a user or agent, or resulting from another Signal) that is used to drive workflow initiation and system monitoring. This replaces the earlier OpenTelemetry-inspired design with a more straightforward approach aligned with the overall Portico MVP plan.
+Overview:
+* Data isn’t organized well, and there’s too much vaporware adding complexity instead of removing it.
+   * The “EHR” should be separately a database and a frontend. And people don’t want to build their own UIs – they want a good UI out-of-the-box (... this comes later).
+* This will free-up developers and enable them to build tools that actually service providers.
+* Ok there are 2 main services: the server and the app
+   * server – this is backend service with 2 components:
+      * Rust server event loop: schedules Agent and runs the code
+         * Based on Events that happen in the data
+      * Supabase (Postgres): handles auth + database (source of truth)
+   * app – this is a Tauri desktop app that can update servers / run in demo mode. It can do the following things:
+      * Connect to a server: authenticates properly w/ Supabase best practice
+      * UI for CRUD operations: connects to a server and configures the things
+      * “Demo mode”: guest access that runs a local session and python interpreter
 
-## Background
 
-Portico currently has several key components:
-- **Agents** that listen for data and react or initiate actions (see `agents.rs`).
-- **Missions** that represent task requests and track execution flow (create `missions.rs`).
-- **Runtime Sessions** that manage the execution of steps (see `runtime_sessions.rs`).
+Goals (min 1, max 3): 
+1. Prototype to prove traction (pitch to various people)
+2. CRUD interface and simple interface
+3. Balance scalability and hacking
 
-The system is built as an event-based architecture where a **Signal** is the core data model used to trigger actions. Rather than using complex OpenTelemetry tracing fields, Signals are keyed on simple identifiers and metadata that allow us to understand the system state and trigger missions.
 
-## Goals
+Non-Goals (min 1, max 3):
+1. No horizontal scaling thinking – just get the first thing going
+2. No crazy UX development – this thing gonna look simple
+3. No wacky local LLM dev. That’d be great one-day, today’s not the day. Together.ai is perfect at this stage
 
-1. **Track System Activity:** Register Signals that capture key events and state changes across components.
-2. **Trigger Actions:** Use Signals to drive the creation of Missions and RuntimeSessions.
-3. **Improve Observability:** Enable simple logging, debugging, and monitoring through a dedicated Signal log.
-4. **Support Both User and Agent Initiatives:** Allow Signals to be generated from user actions, agent activities, or system events.
 
-## Design
+Key Technical Decisions (min 1): 
+* Building on Supabase: handling auth, realtime, reliability of postgres
+   * Using Supabase Realtime to trigger events (this encapsulates the pubsub functionality)
+   * For reading + writing data: use plain SQL queries to guarantee ACID compliance. Keep it close to SQL – use SQLx Rust lib
+* Building with Tauri: security guarantees / improvements
+* Building with Svelte: Prefer Svelte or Vanilla JS
+* Building in Rust + PyO3 instead of pure Python: handling scalability and also keeps code thinking consistent between server+app (e.g. keeping structs in `common` lib)
+* Leaving data manipulation to the Python layer: bank on pydian being the “right” way to express data mappings. Performance negligible for this kind of stuff (handling big stuff / multithreading already with Rust, can revisit if we get there)
 
-### 1. Signal Data Model
 
-We define the core **Signal** struct with the following fields:
+Key Data Models: 
+* Signal: Something that happens and can trigger actions. 
+   * A Signal is the core “event” in this event-based architecture
+   * A Signal comes with some data
+   * A Signal has information about what happened
+   * The name “Event” is not used to avoid confusion with the OpenTelemetry MELT naming convention (this isn’t used here, though will be used later)
+      * A Signal corresponds to a “Trace” in Otel abstractions
+* Schedule: Triggers a Signal based on a CRON schedule
+* Channel: A persistent listener (traditional interface engine concept). Triggers a Signal based on the following possible areas:
+   * HTTPS endpoints
+   * FTP/SFTP endpoints (+ local file system)
+   * MLLP for HL7v2 connections (an extension of TCPIP buffers)
+   * SOAP + XML endpoints
+* Mission: a request to some Agent(s) to do some task. Might include some data to run.
+   * This is created from a Signal
+   * The actual task execution is abstracted-away to the Agent(s)
+* Agent: this represents an “AI Agent”. It does things with Steps and either starts or responds to Signals.
+* Step: a unit of action that an Agent can take. It's either deterministic (Python code) or non-deterministic (calling an LLM). 
+   * Each Step expects a JSON Value as input, and returns a Result<Value, Error> as output.
+   * A step is like a function – it defines what should be done, though the instantiation/execution happens at runtime
+* RuntimeSession: the execution environment of an Agent applying Steps to some data.
+   * This is created by an Agent and represents the execution environment + details associated with corresponding Steps
 
-- **id:** A unique identifier for the Signal.
-- **parent_signal_id:** Optionally links this Signal to a prior Signal.
-- **timestamp:** The time the Signal was generated.
-- **duration:** Optionally, a duration indicating processing time.
-- **name:** A human-readable name or description.
-- **signal_type:** An enum describing the type of Signal.
-- **status:** The current state of the Signal.
-- **attributes:** Arbitrary key-value metadata.
-- **resource:** The originator of the Signal (e.g., Agent, User, System, Mission, or Step).
-- **child_signals:** Nested signals, if multiple layers of causation need to be tracked.
+Key Interactions:
+* Signal:
+   * Creates Mission. Tracks the status and completes based on Mission result 
+* Mission:
+   * Specifies some Agent(s) to perform some task
+* Agent:
+   * Contains Steps and a described goal
+   * Starts RuntimeSession(s)
+* Step:
+   * Owned by Agents. Each Agent creates its own copies of Steps (Steps are not shared between Agents)
+   * Configured to either 1) execute Python code, or 2) call an LLM
+      * Assumes JSON input and output
+* RuntimeSession: 
+   * Started by an Agent
+   * Each RuntimeSession lives on a thread spawned by the main event threadpool
 
-The data model is implemented as follows:
+Key Workflow (server):
+1. User-specified config in `.env` variable and Dockerfiles
+2. Supabase starts in container
+3. Rust container starts (runs socketioxide)
+4. Rust container queries Supabase for initial state
+5. Rust container polls for changes in Supabase data model
+   1. Have a WebSocket listening to `Signal` via Supabase Realtime features
+   2. Respond to Signals to do simple CRUD and initiate RuntimeSessions
 
-```rust:server/src/models/signal.rs
-/// Core representation of a system Signal.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Signal {
-    /// Unique identifier for this Signal.
-    pub id: String,
-    
-    /// Optional parent Signal ID that triggered this Signal.
-    pub parent_signal_id: Option<String>,
-    
-    /// Timestamp when the Signal was generated.
-    pub timestamp: DateTime<Utc>,
-    
-    /// Optional duration for which the Signal was active or processed.
-    pub duration: Option<Duration>,
-    
-    /// Human-readable Signal name.
-    pub name: String,
-    
-    /// The type of Signal.
-    pub signal_type: SignalType,
-    
-    /// Current status of the Signal.
-    pub status: SignalStatus,
-    
-    /// Additional metadata in key-value format.
-    pub attributes: HashMap<String, Value>,
-    
-    /// Resource identity indicating the originator of the Signal.
-    pub resource: SignalResource,
-    
-    /// Nested child Signals triggered by this Signal.
-    pub child_signals: Vec<Signal>,
-}
-```
+Proposed Dev Architecture: Portico-MVP_4-Dev-Architecture (Dev-like)
 
-*Note:*  
-<!-- Suggestion: Consider extending the `Event` struct by conditionally compiling in extra fields (e.g., an optional trace context) when the `tracing` feature flag is enabled. Also, implement traits such as `TraceEnabled` (to inject trace IDs) and `SpanEnabled` (to support child span additions). -->
-
-```rust
-#[derive(Debug, Serialize, Deserialize)]
-pub enum SignalType {
-    /// A Signal from a scheduled process (e.g., CRON job).
-    Scheduled,
-    /// A Signal triggered directly by a user.
-    UserAction,
-    /// A Signal triggered by an Agent.
-    AgentAction,
-    /// A Signal responding to another Signal.
-    Response,
-    /// A Signal indicating a system-generated event.
-    SystemEvent,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum SignalStatus {
-    /// Signal has been initiated.
-    Initiated,
-    /// Signal is currently in progress.
-    InProgress,
-    /// Signal has been completed.
-    Completed,
-    /// Signal processing failed.
-    Failed,
-    /// Signal was cancelled.
-    Cancelled,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum SignalResource {
-    /// Signal originated from an Agent (by Agent ID).
-    Agent(String),
-    /// Signal originated from a User (by User ID).
-    User(String),
-    /// Signal generated by the System.
-    System,
-    /// Signal related to a Job (by Job ID).
-    Job(String),
-    /// Signal related to a Step execution (by Step ID).
-    Step(String),
-}
-```
-
-### 2. Database Schema Updates
-
-To persist Signals, we add a new **signals** table. Below is the proposed schema in HCL:
-
-```hcl:server/db_schema_signals.hcl
-table "signals" {
-  schema = schema.public
-  
-  column "id" {
-    type = uuid
-    default = sql("gen_random_uuid()")
-    null = false
-  }
-  
-  column "parent_signal_id" {
-    type = uuid
-    null = true
-  }
-  
-  column "timestamp" {
-    type = timestamptz
-    null = false
-  }
-  
-  column "duration_ms" {
-    type = bigint
-    null = true
-  }
-  
-  column "name" {
-    type = text
-    null = false
-  }
-  
-  column "signal_type" {
-    type = text
-    null = false
-  }
-  
-  column "status" {
-    type = text
-    null = false
-  }
-  
-  column "attributes" {
-    type = jsonb
-    null = false
-  }
-  
-  column "resource_type" {
-    type = text
-    null = false
-  }
-  
-  column "resource_id" {
-    type = text
-    null = false
-  }
-  
-  primary_key {
-    columns = [column.id]
-  }
-  
-  index "idx_signals_parent" {
-    columns = [column.parent_signal_id]
-  }
-  
-  index "idx_signals_timestamp" {
-    columns = [column.timestamp]
-  }
-}
-```
-
-### 3. Integration Points
-
-Signals will integrate with existing components as follows:
-
-1. **Agent Integration**
-   - **Signal Generation:** Agents emit Signals when their state changes or execute actions.
-   - **Linking:** Agent-initiated Signals can include references to parent Signals for causation analysis.
-
-2. **Mission Integration**
-   - **Lifecycle Tracking:** A new Mission is initiated by creating a Signal and is updated as it progresses (e.g., upon initiation, during execution, on success, or error).
-   - **Correlations:** Signals from Missions can be linked hierarchically with those from Agents or Steps.
-
-3. **Runtime Session Integration**
-   - **Step Execution:** Each Step execution within a RuntimeSession can generate a Signal capturing the input, output, and any errors.
-   - **Parent-Child Relationships:** These Signals are linked back to the originating Mission or Agent Signal.
-
-### 4. Implementation Phases
-
-**Phase 1: Core Signal Infrastructure**
-- Create the `Signal` struct and enums.
-- Implement database migrations to add the `signals` table.
-- Develop basic Signal creation and query functions.
-
-**Phase 2: System Integration**
-- **Agents:** Update Agent logic to generate Signals during their action/reaction cycles.
-- **Missions:** Instrument Mission execution flows to create and update Signals.
-- **RuntimeSessions:** Integrate Signal generation during step execution and on error events.
-
-**Phase 3: Observability Enhancements**
-- Build APIs to query and filter Signals.
-- Develop a rudimentary dashboard/log viewer for monitoring Signals in real-time.
-- Integrate Signal correlation views to assist with debugging and auditing.
-
-## Technical Considerations
-
-1. **Propagation and Causation**
-   - Maintain parent-child relationships between Signals for contextual tracing.
-   - Use simple JSON key-value pairs to capture additional metadata.
-
-2. **Performance Impact**
-   - Batch Signal writes where possible to reduce IO pressure.
-   - Employ appropriate indexing (e.g., timestamp and parent_signal_id).
-
-3. **Storage and Retention**
-   - Estimate the frequency of Signals and determine retention policies.
-   - Consider table partitioning if event volume grows significantly.
-
-## Migration Strategy
-
-1. **Database**
-   - Create the new `signals` table.
-   - Apply necessary indexes.
-   - No changes are required to existing tables.
-
-2. **Code Updates**
-   - Introduce Signal-related traits and functions across Agents, Jobs, and RuntimeSessions.
-   - Gradually integrate Signal generation into key workflows with feature flags if needed.
-
-3. **Testing**
-   - Unit-test the Signal model.
-   - Run integration tests to ensure Signals propagate correctly between services.
-   - Conduct performance testing for Signal write and query operations.
-
-## Future Considerations
-
-1. **Export Capabilities**
-   - Ability to export Signal logs for external analysis.
-   - Integration with third-party monitoring systems if needed later.
-
-2. **Advanced Features**
-   - Complex correlation analysis (e.g., visual trace trees).
-   - Sampling, throttling, or deduplication strategies for high-frequency Signals.
-
-3. **Tooling and Analytics**
-   - A dedicated UI dashboard for viewing and searching Signals.
-   - Enhanced analytics to monitor system health and performance based on Signal data.
-
-## Success Metrics
-
-1. **Technical Metrics**
-   - Latency of Signal creation and persistence.
-   - Query response times for Signal-based filters.
-   - Storage efficiency with the new schema.
-
-2. **Business Metrics**
-   - Reduction in debug time due to improved observability.
-   - Faster detection and resolution of system issues.
-
-3. **User Experience**
-   - Clarity and usefulness of Signal logs and dashboards.
-   - Overall satisfaction with system responsiveness and traceability.
+Proposed UI Views: <TODO – link to PenPot>
