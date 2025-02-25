@@ -1,0 +1,11 @@
+[project]
+name = "portico-bridge"
+version = "0.1.0"
+description = "Python bridge for Portico engine"
+authors = [
+    {name = "Eric Pan", email= "epan@stoamedical.io"}
+]
+requires-python = ">=3.9"
+dependencies = [
+    "supabase>=2.13.0"
+]

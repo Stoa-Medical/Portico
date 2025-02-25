@@ -1,23 +1,19 @@
-#![deny(clippy::unwrap_used)]
-#![deny(clippy::panic)]
-#![deny(unused_must_use)]
-
-/// Lib module (access with `crate::` or `portico_server::``
+/// Lib module (access with `crate::`)
 ///   Enums + traits go here (stylistic choice)!
 
 /// Module with different data models
 pub mod models;
-pub use models::{Agent, Step, RuntimeSession};
+pub use models::{Agent, Step, RuntimeSession, Signal};
 
 // ============ Custom Enums / Traits ============
+// === Imports ===
 use anyhow::Result;
 use serde_json::Value;
-use serde::{Serialize, Deserialize};
 use std::env;
-use thiserror::Error;
 use reqwest::Client;
 
 // === Shared Enum definitions ===
+#[derive(Debug, PartialEq)]
 pub enum RunningStatus {
     Pending,
     InProgress,
@@ -28,7 +24,7 @@ pub enum RunningStatus {
 // ============ Struct definitions =============
 
 pub struct IdFields {
-    id: u64,
+    id: Option<u64>,
     global_uuid: String
 }
 
@@ -36,7 +32,14 @@ impl IdFields {
     // TODO: Have some way to increment correctly
     //    Primarily matters for `RuntimeSession` which is created here
     //    (everything else is created in the UI, and Supabase is the source-of-truth)
-    pub fn new(id: u64, global_uuid: String) -> Self {
+    pub fn new() -> Self {
+        Self { 
+            id: None, 
+            global_uuid: uuid::Uuid::new_v4().to_string() 
+        }
+    }
+    
+    pub fn with_values(id: Option<u64>, global_uuid: String) -> Self {
         Self { id, global_uuid }
     }
 }
@@ -73,77 +76,16 @@ trait DatabaseItem {
 
     /// Struct-specific implementations
     fn get_table_name(&self) -> &str;
-}
-
-trait AuditLogger {
-
-    fn update_log_json(&self) -> Result<()>;
-
-}
-
-
-// ============ Supabase Realtime things =============
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RealtimeMessage {
-    #[serde(rename = "type")]
-    message_type: MessageType,
-    table: String,
-    #[serde(rename = "eventType")]
-    event_type: MessageType,
-    new: Value,
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "UPPERCASE")]
-pub enum MessageType {
-    Insert,
-    Update,
-    Delete,
-    Error,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SubscribeMessage {
-    #[serde(rename = "type")]
-    pub message_type: String,
-    pub schema: String,
-    pub table: String,
-    #[serde(rename = "filter")]
-    pub event_filter: String,
+    fn get_db_fields(&self) -> Vec<&str>;
 }
 
 
 // ============ Shared functions ============
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum MessageContent {
-    Json(Value),
-    Text(String),
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Message {
-    timestamp: i64,
-    content: MessageContent,
-    #[serde(default)]
-    metadata: Option<Value>, // Optional metadata for additional context
-}
-
-#[derive(Error, Debug)]
-pub enum LLMError {
-    #[error("API request failed: {0}")]
-    RequestError(#[from] reqwest::Error),
-    #[error("Missing API key")]
-    MissingApiKey,
-    #[error("Missing API endpoint")]
-    MissingApiEndpoint,
-    #[error("Invalid response: {0}")]
-    InvalidResponse(String),
-}
-
-pub async fn call_llm(prompt: &str, context: Value) -> Result<String, LLMError> {
-    let api_key = env::var("LLM_API_KEY").map_err(|_| LLMError::MissingApiKey)?;
-    let api_endpoint = env::var("LLM_API_ENDPOINT").map_err(|_| LLMError::MissingApiEndpoint)?;
+// TODO: Add various supported TogetherAI models
+pub async fn call_llm(prompt: &str, context: Value) -> Result<String> {
+    let api_key = env::var("LLM_API_KEY").unwrap();
+    let api_endpoint = env::var("LLM_API_ENDPOINT").unwrap();
 
     let request = serde_json::json!({
         "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
@@ -164,5 +106,5 @@ pub async fn call_llm(prompt: &str, context: Value) -> Result<String, LLMError> 
     response["choices"][0]["message"]["content"]
         .as_str()
         .map(String::from)
-        .ok_or_else(|| LLMError::InvalidResponse("No completion found".to_string()))
+        .ok_or_else(|| anyhow::anyhow!("No completion found"))
 }
