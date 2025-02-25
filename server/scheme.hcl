@@ -76,17 +76,17 @@ table "signals" {
     }
 
     # === Relationships ===
-    column "mission_id" {
+    column "agent_id" {
         type = int
         null = true
     }
 
-    foreign_key "signal_mission_fk" {
+    foreign_key "signal_agent_fk" {
         columns = [
-            column.mission_id
+            column.agent_id
         ]
         ref_columns = [
-            table.missions.column.id
+            table.agents.column.id
         ]
     }
     # === Timestamps ===
@@ -109,7 +109,7 @@ table "signals" {
     }
 
     column "signal_status" {
-        type = enum.signal_status
+        type = enum.running_status
         null = false
     }
 
@@ -122,88 +122,6 @@ table "signals" {
         type = sql("json")
         null = true
     }
-}
-
-
-table "missions" {
-    # === General ===
-    schema = schema.public
-
-    # === Ids ===
-    column "id" {
-        type = int
-        null = false
-        identity {
-            generated = "ALWAYS"
-        }
-    }
-
-    column "global_uuid" {
-        type = sql("uuid")
-        null = false
-        default = sql("gen_random_uuid()")
-    }
-
-    primary_key {
-        columns = [
-            column.id
-        ]
-    }
-
-    # === Relationships ===
-    # NOTE: Create default users if automated in backend (e.g. "PORTICO_AGENT" or something)
-    # NOTE: Not sure if I can make an explicit foreign key here, so will have to trust developer to not mess up
-    column "user_requested_id" {
-        type = sql("uuid")
-        null = false
-    }
-
-    # Keep this one Agent for simplicity. Expand later with another column if needed
-    # Should still have a "primary" Agent regardless for decision making
-    column "requested_agent_id" {
-        type = int
-        null = false
-    }
-
-    foreign_key "mission_agent_fk" {
-        columns = [
-            column.requested_agent_id
-        ]
-        ref_columns = [
-            table.agents.column.id
-        ]
-    }
-
-    # === Timestamps ===
-    column "created_timestamp" {
-        type = sql("timestamptz")
-        null = false
-        default = sql("CURRENT_TIMESTAMP")
-    }
-
-    column "last_updated_timestamp" {
-        type = sql("timestamptz")
-        null = false
-        default = sql("CURRENT_TIMESTAMP")
-    }
-
-    # === Custom (table-specific) ===
-    column "mission_status" {
-        type = enum.running_status
-        null = false
-    }
-
-
-    column "description" {
-        type = sql("varchar(255)")
-        null = false
-    }
-
-    column "initial_data" {
-        type = sql("json")
-        null = false
-    }
-
 }
 
 table "agents" {
@@ -445,17 +363,6 @@ enum "signal_type" {
     ]
 }
 
-enum "signal_status" {
-    schema = schema.public
-
-    values = [
-        "in-progress",
-        "completed",  # This means it was seen-through to completion (even if resulting data is error, workflow completed)
-        "cancelled"   # This means it was intentionally cancelled (e.g. workflow error)
-    ]
-}
-
-
 enum "agent_state" {
     schema = schema.public
     values = [
@@ -480,8 +387,8 @@ enum "running_status" {
     schema = schema.public
     values = [
         "waiting",
-        "in_progress",
-        "completed",
-        "cancelled"
+        "in-progress",
+        "completed",  # This means it was seen-through to completion (even if resulting data is error, workflow completed)
+        "cancelled"   # This means it was intentionally cancelled (e.g. workflow error)
     ]
 }
