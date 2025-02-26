@@ -28,6 +28,12 @@ pub struct IdFields {
     global_uuid: String
 }
 
+impl Default for IdFields {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IdFields {
     // TODO: Have some way to increment correctly
     //    Primarily matters for `RuntimeSession` which is created here
@@ -47,6 +53,12 @@ impl IdFields {
 pub struct TimestampFields {
     created: chrono::NaiveDateTime,
     updated: chrono::NaiveDateTime
+}
+
+impl Default for TimestampFields {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TimestampFields {
