@@ -1,15 +1,46 @@
 services:
-  # TODO: Add Supabase (rn, running `supabase start` -- surely there's a better way. Worst case write custom container)
-
-  server:
-    build: .
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-portico}:${POSTGRES_PASSWORD:-portico123}@db:5432/${POSTGRES_DB:-portico_db}
+  # Use Supabase CLI to start all Supabase services based on config.toml
+  supabase:
+    image: supabase/cli:latest
+    volumes:
+      - ./supabase:/supabase
     ports:
-      - "8080:8080"
+      - "54321:54321" # API
+      - "54322:54322" # DB
+      - "54323:54323" # Studio
+      - "54324:54324" # Inbucket
+      - "54327:54327" # Analytics
+    environment:
+      SUPABASE_ROOT_DIR: /supabase
+      # You can pass environment variables to Supabase services
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # Add other environment variables as needed
+    command: start
+
+  # Your existing services
+  bridge:
+    build: ./bridge
+    depends_on:
+      supabase:
+        condition: service_started
+    env_file:
+      - ./.env
+    environment:
+      ENGINE_URL: http://engine:8888
+    ports:
+      - "3000:3000"
+
+  engine:
+    build: ./engine
+    depends_on:
+      bridge:
+        condition: service_started
+      supabase:
+        condition: service_started
+    env_file:
+      - ./.env
+    ports:
+      - "8888:8888"
 
 volumes:
   postgres_data:
