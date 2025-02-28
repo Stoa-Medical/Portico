@@ -1,6 +1,12 @@
 <script>
     import "../app.css";
+    // import '../styles/app.postcss';
+    import { HistoryBreadcrumb } from '$lib/components';
     let { children } = $props();
 </script>
 
-{@render children?.()}
+<div class="app">
+  <main>
+    <slot />
+  </main>
+</div>
