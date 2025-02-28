@@ -16,31 +16,47 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       # Add other environment variables as needed
     command: start
+    networks:
+      - portico-network
 
-  # Your existing services
+  # Bridge service connects to Supabase and forwards signals to the engine
   bridge:
     build: ./bridge
     depends_on:
-      supabase:
-        condition: service_started
+      - supabase
     env_file:
       - ./.env
     environment:
-      ENGINE_URL: http://engine:8888
-    ports:
-      - "3000:3000"
+      SUPABASE_URL: http://supabase:54321
+      SUPABASE_KEY: ${SUPABASE_ANON_KEY}
+      ENGINE_CONTAINER_NAME: engine
+      ENGINE_PORT: 8888
+    networks:
+      - portico-network
+    restart: unless-stopped
 
+  # Engine service processes signals from the bridge
   engine:
     build: ./engine
     depends_on:
-      bridge:
-        condition: service_started
-      supabase:
-        condition: service_started
+      - bridge
     env_file:
       - ./.env
+    environment:
+      POSTGREST_URL: http://supabase:54321/rest/v1
+      SIGNAL_HOST: 0.0.0.0
+      SIGNAL_PORT: 8888
+      NUM_THREADS: 4
+      DB_POLL_INTERVAL: 5
     ports:
       - "8888:8888"
+    networks:
+      - portico-network
+    restart: unless-stopped
+
+networks:
+  portico-network:
+    driver: bridge
 
 volumes:
   postgres_data:

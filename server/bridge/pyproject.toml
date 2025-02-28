@@ -8,6 +8,7 @@ authors = [
 requires-python = ">=3.9"
 dependencies = [
     "asyncio>=3.4.3",
+    "dotenv>=0.9.9",
     "python-dotenv>=1.0.1",
     "supabase>=2.13.0",
 ]

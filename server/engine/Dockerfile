@@ -13,14 +13,21 @@ RUN cargo build --release
 
 FROM debian:bookworm-slim
 
-# Install Python in runtime stage (using apt instead of building from source)
+# Install Python in runtime stage
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# TODO: Add Atlas tool to run migrations
+# Copy the built binary from the builder stage
+COPY --from=builder /usr/src/app/target/release/portico-engine /usr/local/bin/
 
-# Copy the Rust binary from builder
-COPY --from=builder /usr/src/app/target/release/portico /usr/local/bin/
-CMD ["portico"]
+# Create a directory for any runtime files
+WORKDIR /app
+
+# Expose the port the engine listens on
+EXPOSE 8888
+
+# Run the engine
+CMD ["portico-engine"]
