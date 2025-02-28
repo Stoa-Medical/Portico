@@ -35,6 +35,9 @@
         <Button href="/steps" color="green">
           View Steps
         </Button>
+        <Button href="/analytics" color="purple">
+          Analytics
+        </Button>
         <Button href="/" color="light">
           Home
         </Button>

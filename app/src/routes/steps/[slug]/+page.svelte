@@ -279,7 +279,7 @@ if __name__ == "__main__":
       <BreadcrumbItem>Step {stepId}</BreadcrumbItem>
     </Breadcrumb>
     
-    <div class="flex justify-between items-center">
+    <div class="flex flex-col sm:flex-row gap-4 mb-4">
       <div class="flex items-center gap-3">
         <Button color="light" size="sm" on:click={goBack}>
           <ArrowLeftOutline class="mr-2 h-4 w-4" />
@@ -290,20 +290,19 @@ if __name__ == "__main__":
           {step.type}
         </Badge>
       </div>
-      
-      <div class="flex gap-2">
-        <Button color="green" on:click={executeStep}>
-          <PlayOutline class="mr-2 h-5 w-5" />
-          Execute
-        </Button>
-        <Button color="red" on:click={deleteStep}>
-          <TrashBinOutline class="mr-2 h-5 w-5" />
-          Delete
-        </Button>
-        <Button color="blue" on:click={saveChanges}>
-          Save
-        </Button>
-      </div>
+    </div>
+    <div class="flex flex-wrap gap-2 mb-6">
+      <Button color="green" on:click={executeStep}>
+        <PlayOutline class="mr-2 h-5 w-5" />
+        Execute
+      </Button>
+      <Button color="red" on:click={deleteStep}>
+        <TrashBinOutline class="mr-2 h-5 w-5" />
+        Delete
+      </Button>
+      <Button color="blue" on:click={saveChanges}>
+        Save
+      </Button>
     </div>
   </div>
   
@@ -318,7 +317,11 @@ if __name__ == "__main__":
         
         <div>
           <Label for="type" class="mb-2">Step Type</Label>
-          <Select id="type" items={stepTypes} bind:value={step.type} />
+          <Select id="type">
+            {#each stepTypes as type}
+              <option value={type} selected={type === step.type}>{type}</option>
+            {/each}
+          </Select>
         </div>
       </div>
       

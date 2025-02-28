@@ -133,7 +133,7 @@
   <div class="mb-6">
     <HistoryBreadcrumb currentTitle={agent.name} />
     
-    <div class="flex justify-between items-center">
+    <div class="flex flex-col sm:flex-row gap-4 mb-4">
       <div class="flex items-center gap-3">
         <Button color="light" size="sm" on:click={goBack}>
           <ArrowLeftOutline class="mr-2 h-4 w-4" />
@@ -144,16 +144,15 @@
           {agent.status}
         </Badge>
       </div>
-      
-      <div class="flex gap-2">
-        <Button color="red" on:click={deleteAgent}>
-          <TrashBinOutline class="mr-2 h-5 w-5" />
-          Delete
-        </Button>
-        <Button color="blue" on:click={saveChanges}>
-          Save Changes
-        </Button>
-      </div>
+    </div>
+    <div class="flex flex-wrap gap-2 mb-6">
+      <Button color="red" on:click={deleteAgent}>
+        <TrashBinOutline class="mr-2 h-5 w-5" />
+        Delete
+      </Button>
+      <Button color="blue" on:click={saveChanges}>
+        Save Changes
+      </Button>
     </div>
   </div>
   

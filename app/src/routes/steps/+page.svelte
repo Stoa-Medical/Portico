@@ -96,9 +96,9 @@
       <BreadcrumbItem>Steps</BreadcrumbItem>
     </Breadcrumb>
     
-    <div class="flex justify-between items-center">
+    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
       <Heading tag="h1" class="text-2xl font-bold">Steps</Heading>
-      <Button color="blue" on:click={() => showModal = true}>
+      <Button class="self-start" color="blue" on:click={() => showModal = true}>
         <PlusOutline class="mr-2 h-5 w-5" />
         Add Step
       </Button>
