@@ -4,7 +4,7 @@ This is a Python microservice that:
     - As-of this writing, Rust doesn't have a nice SDK for Supabase realtime.
       Also, keeping this service separate can help keep the code cleaner (separation of concerns)
 2. Feeds specific data to the `engine` Rust service using a persistent TCP/IP connection
-3. Updates 
+3. Updates the Signal row accordingly based on runtime result
 
 So the flow is:
   (the User) --> `supabase` <--> `bridge` <--> `engine`
