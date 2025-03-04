@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir uv && \
     uv pip install --system -r uv.lock
 
 # Copy application code
-COPY . .
+COPY ./src .
 
 # Run the bridge service
 CMD ["python", "main.py"] 
