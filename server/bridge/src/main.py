@@ -19,7 +19,7 @@ from supabase import create_async_client
 from dotenv import load_dotenv
 
 from src.lib import logger
-from src.lib import setup_realtime, send_signal_to_engine
+from src.lib import setup_realtime, connect_to_engine, send_signal_to_engine
 
 
 async def shutdown(channel, stop_event):
@@ -48,11 +48,14 @@ async def main():
     client = await create_async_client(supabase_url, supabase_key)
     logger.info(f"Initialized Supabase client to {supabase_url}")
 
-    # Set up Supabase realtime subscriptions
-    channel = await setup_realtime(client, engine_host, engine_port)
 
     # Send initial DB sync signal to engine
-    await send_signal_to_engine(engine_host, engine_port, {"server-init": True})
+    engine_socket_conn = await connect_to_engine(engine_host, engine_port)
+    await send_signal_to_engine(engine_socket_conn, {"server-init": True})
+
+    # Set up Supabase realtime subscriptions
+    channel = await setup_realtime(client, engine_socket_conn)
+
 
     # Use asyncio.Event for cleaner termination
     stop_event = asyncio.Event()

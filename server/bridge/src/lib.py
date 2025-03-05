@@ -8,7 +8,6 @@ from typing import Any
 from supabase import AsyncClient
 from realtime import AsyncRealtimeChannel
 
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -18,7 +17,7 @@ logger = logging.getLogger("portico-bridge")
 
 # Supabase setup
 async def setup_realtime(
-    client: AsyncClient, engine_host: str, engine_port: int
+    client: AsyncClient, conn: socket.socket
 ) -> AsyncRealtimeChannel:
     """Set up realtime subscriptions for Supabase tables"""
     channel = client.channel("db-changes")
@@ -29,7 +28,7 @@ async def setup_realtime(
         table="signals",
         schema="public",
         callback=lambda payload: asyncio.create_task(
-            _handle_new_signal(payload, client, engine_host, engine_port)
+            _handle_new_signal(payload, client, conn)
         ),
     )
 
@@ -39,7 +38,7 @@ async def setup_realtime(
         table="agents",
         schema="public",
         callback=lambda payload: asyncio.create_task(
-            _handle_agent_change(payload, engine_host, engine_port)
+            _handle_agent_change(payload, conn)
         ),
     )
 
@@ -50,13 +49,9 @@ async def setup_realtime(
 
 # Engine communication functions
 async def send_signal_to_engine(
-    host: str, port: int, data: dict[str, Any]
+    sock: socket.socket, data: dict[str, Any]
 ) -> dict[str, Any] | None:
     """Send a signal to the engine and get the response"""
-    sock = await _connect_to_engine(host, port)
-    if not sock:
-        return None
-
     try:
         # Prepare the signal message
         message = json.dumps(data).encode("utf-8")
@@ -78,16 +73,8 @@ async def send_signal_to_engine(
     except Exception as e:
         logger.error(f"Error communicating with engine: {e}")
         return None
-    finally:
-        # Close the socket
-        if sock:
-            sock.close()
 
-
-# === "Private" functions (for organization sake) ===
-
-
-async def _connect_to_engine(host: str, port: int) -> socket.socket | None:
+async def connect_to_engine(host: str, port: int) -> socket.socket | None:
     """Establish connection to the engine service"""
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -99,8 +86,11 @@ async def _connect_to_engine(host: str, port: int) -> socket.socket | None:
         return None
 
 
+# === "Private" functions (for organization sake) ===
+
+
 async def _handle_new_signal(
-    payload: dict[str, Any], client: AsyncClient, engine_host: str, engine_port: int
+    payload: dict[str, Any], client: AsyncClient, sock: socket.socket
 ) -> None:
     """Handle a new signal inserted into the signals table"""
     logger.info(f"New signal detected: {payload}")
@@ -120,8 +110,7 @@ async def _handle_new_signal(
 
         # Send signal to engine
         response = await send_signal_to_engine(
-            engine_host,
-            engine_port,
+            sock,
             {
                 "signal_id": str(signal_id),
                 "agent_id": str(agent_id),
@@ -153,13 +142,13 @@ async def _handle_new_signal(
 
 
 async def _handle_agent_change(
-    payload: dict[str, Any], engine_host: str, engine_port: int
+    payload: dict[str, Any], sock: socket.socket
 ) -> None:
     """Handle changes to agents"""
     logger.info(f"Agent change detected: {payload}")
 
     # Notify the engine to sync its agent data
-    await send_signal_to_engine(engine_host, engine_port, payload)
+    await send_signal_to_engine(sock, payload)
     logger.info("DB sync request sent to engine")
 
 
