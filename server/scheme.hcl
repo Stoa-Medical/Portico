@@ -104,8 +104,12 @@ table "signals" {
 
     # === Custom (table-specific) ===
     column "signal_type" {
-        type = enum.signal_type
+        type = sql("varchar(255)")
         null = false
+    }
+
+    check "valid_signal_type_format" {
+        expr = "signal_type ~ '^[a-z]+_[a-z-]+$'"
     }
 
     column "signal_status" {
@@ -345,23 +349,6 @@ table "runtime_sessions" {
 
 
 # ============ enum ============ 
-
-enum "signal_type" {
-    schema = schema.public
-
-    # NOTE: be intentional about naming. Should be in past-tense
-    #   Each one of these needs to be handled explicitly in the code
-    #   As default convention: try `{struct-name}_{what-happened}`
-    values = [
-        "mission_user-requested",
-        "mission_agent-requested",
-        "mission_schedule-requested",
-        "mission_channel-requested",
-        "runtime-session_completed",
-        "agent_saved",  # emit once existing Agent changes are saved
-        "step_saved"  # emit once existing Step is saved
-    ]
-}
 
 enum "agent_state" {
     schema = schema.public
