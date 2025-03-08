@@ -30,7 +30,7 @@ from supabase import create_async_client
 from dotenv import load_dotenv
 
 from src.lib import logger
-from src.lib import setup_realtime, connect_to_engine, send_signal_to_engine
+from src.lib import connect_to_engine, send_signal_to_engine, handle_new_signal
 
 
 async def shutdown(channel, stop_event):
@@ -66,7 +66,21 @@ async def main():
     await send_signal_to_engine(engine_socket_conn, {"server-init": True})
 
     # Set up Supabase realtime subscriptions
-    channel = await setup_realtime(client, engine_socket_conn)
+    channel = client.channel("db-changes")
+
+    # Subscribe to changes on the `signals` table (only when added)
+    channel.on_postgres_changes(
+        event="INSERT",
+        table="signals",
+        schema="public",
+        callback=lambda payload, handler=handle_new_signal: asyncio.create_task(
+            handler(payload, engine_socket_conn)
+        ),
+    )
+
+    # TODO: What's the right way to also listen to updates?
+    await channel.subscribe()
+    logger.info("Subscribed to Supabase realtime channels")
 
     # Use asyncio.Event for cleaner termination
     stop_event = asyncio.Event()
