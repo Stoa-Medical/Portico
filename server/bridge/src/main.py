@@ -30,13 +30,19 @@ from supabase import create_async_client
 from dotenv import load_dotenv
 
 from src.lib import logger
-from src.lib import connect_to_engine, send_signal_to_engine, handle_new_signal
+from src.lib import (
+    connect_to_engine,
+    send_signal_to_engine,
+    handle_new_signal,
+    handle_general_update,
+)
 
 
-async def shutdown(channel, stop_event):
+async def shutdown(channel_list, stop_event):
     """Handle graceful shutdown"""
     logger.info("Shutting down...")
-    await channel.unsubscribe()
+    for channel in channel_list:
+        await channel.unsubscribe()
     stop_event.set()
 
 
@@ -66,20 +72,44 @@ async def main():
     await send_signal_to_engine(engine_socket_conn, {"server-init": True})
 
     # Set up Supabase realtime subscriptions
-    channel = client.channel("db-changes")
+    channel_signals = client.channel("signal-inserts")
+    channel_agents = client.channel("agent-changes")
+    channel_steps = client.channel("step-changes")
 
     # Subscribe to changes on the `signals` table (only when added)
-    channel.on_postgres_changes(
+    channel_signals.on_postgres_changes(
         event="INSERT",
-        table="signals",
-        schema="public",
         callback=lambda payload, handler=handle_new_signal: asyncio.create_task(
             handler(payload, engine_socket_conn)
         ),
+        table="signals",
+        schema="public",
     )
 
-    # TODO: What's the right way to also listen to updates?
-    await channel.subscribe()
+    # Subscribe to Agent changes
+    channel_agents.on_postgres_changes(
+        event="*",
+        callback=lambda payload, handler=handle_general_update: asyncio.create_task(
+            handler(payload, engine_socket_conn)
+        ),
+        table="agents",
+        schema="public",
+    )
+
+    # Subscribe to Step changes
+    channel_steps.on_postgres_changes(
+        event="*",
+        callback=lambda payload, handler=handle_general_update: asyncio.create_task(
+            handler(payload, engine_socket_conn)
+        ),
+        table="steps",
+        schema="public",
+    )
+
+    # Subscribe to all the channels
+    channel_list = [channel_signals, channel_agents, channel_steps]
+    for c in channel_list:
+        await c.subscribe()
     logger.info("Subscribed to Supabase realtime channels")
 
     # Use asyncio.Event for cleaner termination
@@ -88,7 +118,7 @@ async def main():
     # Set up signal handlers for graceful shutdown
     for sig in (SIGINT, SIGTERM):
         asyncio.get_event_loop().add_signal_handler(
-            sig, lambda: asyncio.create_task(shutdown(channel, stop_event))
+            sig, lambda: asyncio.create_task(shutdown(channel_list, stop_event))
         )
 
     logger.info("Portico bridge service started. Press Ctrl+C to exit.")
