@@ -7,7 +7,18 @@ This is a Python microservice that:
 3. Updates the Signal row accordingly based on runtime result
 
 So the flow is:
-  (the User) --> `supabase` <--> `bridge` <--> `engine`
+                        Triggers:
+                        • Signals with "pending" status
+                        • Changes to Agents/Steps
+┌────────┐         ┌──────────┐         ┌────────┐         ┌────────┐
+│  User  │────────▶│`supabase`│────────▶│`bridge`│────────▶│`engine`│
+└────────┘         └──────────┘         └────────┘         └────────┘
+                        ▲                                      │
+                        └──────────────────────────────────────┘
+                                Returns:
+                                • Updates RuntimeSession
+                                • Changes Signal status
+
 """
 
 import os
@@ -32,7 +43,9 @@ async def shutdown(channel, stop_event):
 async def main():
     # Load environment variables
     if not load_dotenv():
-        raise RuntimeError("Failed to load `.env` file -- please check!")
+        raise RuntimeError(
+            "Failed to load `.env` file -- please check if it's at `bridge/.env`!"
+        )
 
     # Get configuration from environment
     supabase_url = os.getenv("SUPABASE_URL")
@@ -48,14 +61,12 @@ async def main():
     client = await create_async_client(supabase_url, supabase_key)
     logger.info(f"Initialized Supabase client to {supabase_url}")
 
-
     # Send initial DB sync signal to engine
     engine_socket_conn = await connect_to_engine(engine_host, engine_port)
     await send_signal_to_engine(engine_socket_conn, {"server-init": True})
 
     # Set up Supabase realtime subscriptions
     channel = await setup_realtime(client, engine_socket_conn)
-
 
     # Use asyncio.Event for cleaner termination
     stop_event = asyncio.Event()

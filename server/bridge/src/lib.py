@@ -17,30 +17,22 @@ logger = logging.getLogger("portico-bridge")
 
 # Supabase setup
 async def setup_realtime(
-    client: AsyncClient, conn: socket.socket
+    client: AsyncClient, sock: socket.socket
 ) -> AsyncRealtimeChannel:
     """Set up realtime subscriptions for Supabase tables"""
     channel = client.channel("db-changes")
 
-    # Subscribe to changes on the signals table
+    # Subscribe to changes on the `signals` table (only when added)
     channel.on_postgres_changes(
         event="INSERT",
         table="signals",
         schema="public",
-        callback=lambda payload: asyncio.create_task(
-            _handle_new_signal(payload, client, conn)
+        callback=lambda payload, handler=_handle_new_signal: asyncio.create_task(
+            handler(payload, sock)
         ),
     )
 
-    # Subscribe to changes on the agents table
-    channel.on_postgres_changes(
-        event="*",
-        table="agents",
-        schema="public",
-        callback=lambda payload: asyncio.create_task(
-            _handle_agent_change(payload, conn)
-        ),
-    )
+    # TODO: What's the right way to also listen to updates?
 
     await channel.subscribe()
     logger.info("Subscribed to Supabase realtime channels")
@@ -74,6 +66,7 @@ async def send_signal_to_engine(
         logger.error(f"Error communicating with engine: {e}")
         return None
 
+
 async def connect_to_engine(host: str, port: int) -> socket.socket | None:
     """Establish connection to the engine service"""
     try:
@@ -89,77 +82,25 @@ async def connect_to_engine(host: str, port: int) -> socket.socket | None:
 # === "Private" functions (for organization sake) ===
 
 
-async def _handle_new_signal(
-    payload: dict[str, Any], client: AsyncClient, sock: socket.socket
-) -> None:
+async def _handle_new_signal(payload: dict[str, Any], sock: socket.socket) -> None:
     """Handle a new signal inserted into the signals table"""
-    logger.info(f"New signal detected: {payload}")
+    logger.info(f"🔔 New signal detected: {payload}")
 
     try:
-        # Extract signal data
-        signal_data = payload.get("new", {})
-        signal_id = signal_data.get("id")
-        agent_id = signal_data.get("agent_id")
-
-        if not signal_id or not agent_id:
-            logger.error(f"Invalid signal data: {signal_data}")
-            return
-
-        # Update signal status to "processing"
-        await _update_signal(client, signal_id, {"status": "PROCESSING"})
-
         # Send signal to engine
-        response = await send_signal_to_engine(
+        await send_signal_to_engine(
             sock,
-            {
-                "signal_id": str(signal_id),
-                "agent_id": str(agent_id),
-                "starting_data": signal_data.get("initial_data", {}),
-            },
+            payload,
         )
-
-        if response and response.get("status") == "success":
-            # Store the session ID for later reference
-            session_id = response.get("session_id")
-            await _update_signal(client, signal_id, {"session_id": session_id})
-            logger.info(
-                f"Signal {signal_id} processing started with session {session_id}"
-            )
-        else:
-            # Update signal status to "failed"
-            error_msg = (
-                response.get("message")
-                if response
-                else "Failed to communicate with engine"
-            )
-            await _update_signal(
-                client, signal_id, {"status": "FAILED", "error_message": error_msg}
-            )
-            logger.error(f"Failed to process signal {signal_id}: {error_msg}")
-
+        logger.info("Sent payload")
     except Exception as e:
         logger.error(f"Error handling new signal: {e}")
 
 
-async def _handle_agent_change(
-    payload: dict[str, Any], sock: socket.socket
-) -> None:
+async def _handle_update(payload: dict[str, Any], sock: socket.socket) -> None:
     """Handle changes to agents"""
-    logger.info(f"Agent change detected: {payload}")
+    logger.info(f"🔃 Change detected: {payload}")
 
     # Notify the engine to sync its agent data
     await send_signal_to_engine(sock, payload)
     logger.info("DB sync request sent to engine")
-
-
-async def _update_signal(
-    client: AsyncClient, signal_id: str, data: dict[str, Any]
-) -> bool:
-    """Update a signal in Supabase with the provided data"""
-    try:
-        await client.table("signals").update(data).eq("id", signal_id).execute()
-        logger.info(f"Updated signal {signal_id} with data: {data}")
-        return True
-    except Exception as e:
-        logger.error(f"Error updating signal {signal_id}: {e}")
-        return False

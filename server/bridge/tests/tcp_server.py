@@ -15,6 +15,7 @@ class TcpIpServer:
     def __init__(self, host, port):
         self.host = host
         self.port = port
+        self._count = 0
         self._running = False
         self._server_thread = None
         self._conn_history = []
@@ -32,21 +33,20 @@ class TcpIpServer:
             sock.listen(1)
             sock.settimeout(1.0)  # Add timeout to allow checking _running flag
             print(f"Server listening on {self.host}:{self.port}")
-            
+
             while self._running:
                 try:
                     client, addr = sock.accept()
                     print(f"Connection from {addr}")
                     self._conn_history.append(addr)
-                    
+
                     # Handle client in a separate thread to keep server responsive
                     client_thread = threading.Thread(
-                        target=self._handle_client,
-                        args=(client, addr)
+                        target=self._handle_client, args=(client, addr)
                     )
                     client_thread.daemon = True
                     client_thread.start()
-                    
+
                 except socket.timeout:
                     # This is expected due to the timeout we set
                     continue
@@ -58,27 +58,41 @@ class TcpIpServer:
         """Handle communication with a single client"""
         try:
             client.settimeout(30.0)  # Set a reasonable timeout
-            
+
             while self._running:
                 try:
                     data = client.recv(4096)
                     if not data:
                         print(f"Client {addr} disconnected")
                         break
-                        
-                    print(f"Received data from {addr}: {data.decode()}")
-                    
+
+                    # Print out result
+                    self._count += 1
+                    try:
+                        # Try to parse and pretty print JSON data
+                        json_data = json.loads(data.decode())
+                        pretty_json = json.dumps(json_data, indent=2)
+
+                        print(
+                            f"{self._count} Received data from {addr}:\n{pretty_json}"
+                        )
+                    except json.JSONDecodeError:
+                        # If not valid JSON, print as regular string
+                        print(
+                            f"{self._count} Received data from {addr}: {data.decode()}"
+                        )
+
                     # Send a response back (optional)
                     response = {"status": "ok", "message": "received"}
                     response_data = json.dumps(response).encode("utf-8")
                     client.sendall(response_data)
-                    
+
                 except socket.timeout:
                     # Check if we should still be running
                     if not self._running:
                         break
                     continue
-                    
+
         except Exception as e:
             print(f"Error handling client {addr}: {e}")
         finally:
