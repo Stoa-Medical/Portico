@@ -2,11 +2,11 @@
 #     docs: https://atlasgo.io/
 
 /*
-NOTE: Before applying: `psql "postgresql:#postgres:postgres@localhost:54322/postgres?sslmode=disable" -c "CREATE DATABASE server;"`
+NOTE: Before applying: `psql "postgresql://postgres:postgres@localhost:54322/postgres?sslmode=disable" -c "CREATE DATABASE server;"`
     To apply: 
     
 atlas schema apply \
-  --url "postgres://postgres:postgres@localhost:54322/postgres?search_path=public&sslmode=disable" \
+  --url "postgresql://postgres:postgres@localhost:54322/postgres?search_path=public&sslmode=disable" \
   --to "file://scheme.hcl"
 
 NOTE: the Atlas HCL syntax is custom and doesn't support everything yet (e.g. `mixin`, `domain`, etc.)

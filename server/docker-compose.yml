@@ -10,11 +10,6 @@ services:
       - "54323:54323" # Studio
       - "54324:54324" # Inbucket
       - "54327:54327" # Analytics
-    environment:
-      SUPABASE_ROOT_DIR: /supabase
-      # You can pass environment variables to Supabase services
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      # Add other environment variables as needed
     command: start
     networks:
       - portico-network
@@ -23,14 +18,7 @@ services:
   bridge:
     build: ./bridge
     depends_on:
-      - supabase
-    env_file:
-      - ./.env
-    environment:
-      SUPABASE_URL: http://supabase:54321
-      SUPABASE_KEY: ${SUPABASE_ANON_KEY}
-      ENGINE_CONTAINER_NAME: engine
-      ENGINE_PORT: 8888
+      - engine
     networks:
       - portico-network
     restart: unless-stopped
@@ -39,15 +27,7 @@ services:
   engine:
     build: ./engine
     depends_on:
-      - bridge
-    env_file:
-      - ./.env
-    environment:
-      POSTGREST_URL: http://supabase:54321/rest/v1
-      SIGNAL_HOST: 0.0.0.0
-      SIGNAL_PORT: 8888
-      NUM_THREADS: 4
-      DB_POLL_INTERVAL: 5
+      - supabase
     ports:
       - "8888:8888"
     networks:

@@ -10,7 +10,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use uuid::Uuid;
-// TODO: Add other necessary imports (threadpool, git/rustic libraries, etc.)
 
 // Import our model abstractions
 use portico_engine::models::{Agent, RuntimeSession, Signal, Step};
@@ -20,18 +19,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Preps python interpreter (only needs to run once, though repeat calls are negligible)
     pyo3::prepare_freethreaded_python();
 
-    // Load environment variables
+    // Read Config
+    // - Load environment variables
     dotenv().ok();
 
-    // Read environment configuration
+    // - Read environment configuration
 
-    // Initialize thread pool based on configuration
+    // Initialize thread pool
 
-    // Pre-load state from database
+    // Load state for Agents + Steps
+    // - Connect to database
+    // - Construct single SQL query for pulling `Agents` and corresponding `Steps`
+    // - Given response, 
 
     // Start TCP/IP Listener from the bridge service
+    // - Open specified port
+    // - Wait until bridge service connects (init event received)
 
-    // Clean up resources before exiting
+    // Start event loop -- respond to bridge messages.
+    //   Event loop will run on different threads. So will need a locking mechanism to avoid race conditions
+    //   Implement as an in-memory Message queue. Clone the `Agent` + `Step` state for each Thread (so "pure" function achieved)
+    // - CREATE Signal with data: run requested Agent
+    // - CREATE Agent/Step: make a new model
+    // - UPDATE Agent/Step: update the in-memory object
+    // - DELETE Agent/Step: drop the in-memory object
+
+    // If get exit signal: clean up resources before exiting
 
     Ok(())
 }
