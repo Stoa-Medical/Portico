@@ -35,7 +35,7 @@ pub struct Agent<'a> {
 ///                    ┌────────────────┐
 ///                    │                │
 ///          (start)   v      (run)     |
-///  Inactive ──────► Waiting ──────► Running ──┐
+///  Inactive ──────► Starting ──────► Stable ──┐
 ///      ▲             │   ▲            ▲       |
 ///      │             │   │ (check)    | (run) |
 ///      │             │   └───────► Unstable ◄─┘
@@ -45,8 +45,8 @@ pub struct Agent<'a> {
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum AgentState {
     Inactive,
-    Waiting,
-    Running,
+    Starting,
+    Stable,
     Unstable,
     Stopping,
 }

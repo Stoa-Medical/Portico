@@ -354,8 +354,8 @@ enum "agent_state" {
     schema = schema.public
     values = [
         "inactive",
-        "waiting",
-        "running",
+        "starting",
+        "stable",
         "unstable",
         "stopping"
     ]
