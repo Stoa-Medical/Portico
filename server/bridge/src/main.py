@@ -69,7 +69,7 @@ async def main():
 
     # Send initial DB sync signal to engine
     engine_socket_conn = await connect_to_engine(engine_host, engine_port)
-    await send_signal_to_engine(engine_socket_conn, {"server-init": True})
+    await send_signal_to_engine(engine_socket_conn, {"server-init": True}, "msg_init")
 
     # Set up Supabase realtime subscriptions
     channel_signals = client.channel("signal-inserts")

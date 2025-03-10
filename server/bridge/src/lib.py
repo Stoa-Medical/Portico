@@ -13,7 +13,7 @@ logger = logging.getLogger("portico-bridge")
 
 # Engine communication functions
 async def send_signal_to_engine(
-    sock: socket.socket, data: dict[str, Any]
+    sock: socket.socket, data: dict[str, Any], meta: str = "🏹"
 ) -> dict[str, Any] | None:
     """Send a signal to the engine and get the response"""
     try:
@@ -22,7 +22,7 @@ async def send_signal_to_engine(
 
         # Send the message
         sock.sendall(message)
-        logger.info(f"Sent to engine: {data}")
+        logger.info(f"Sent message to engine ({meta})")
 
         # Receive the response
         response_data = sock.recv(4096)
@@ -57,19 +57,17 @@ async def handle_new_signal(payload: dict[str, Any], sock: socket.socket) -> Non
 
     try:
         # Send signal to engine
-        await send_signal_to_engine(
-            sock,
-            payload,
-        )
-        logger.info("Sent payload")
+        await send_signal_to_engine(sock, payload, "handle_new_signal")
     except Exception as e:
         logger.error(f"Error handling new signal: {e}")
 
 
 async def handle_general_update(payload: dict[str, Any], sock: socket.socket) -> None:
     """Handle changes to agents"""
-    logger.info(f"🔃 General Update detected: {payload}")
+    data = payload.get("data", {})
+    logger.info(
+        f"🔃 General Update detected: {payload.get('ids')} | {data.get('table')} | {data.get('type')}"
+    )
 
     # Notify the engine to sync its agent data
-    await send_signal_to_engine(sock, payload)
-    logger.info("DB sync request sent to engine")
+    await send_signal_to_engine(sock, payload, "handle_general_update")
