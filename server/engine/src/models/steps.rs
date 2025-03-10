@@ -1,5 +1,5 @@
-use crate::{IdFields, TimestampFields};
 use crate::models::agents::Agent;
+use crate::{IdFields, TimestampFields};
 
 use std::ffi::CString;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -8,13 +8,13 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use serde_json::Value;
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum StepType {
     Python,
-    Prompt
+    Prompt,
 }
 
 pub struct Step<'a> {
@@ -61,24 +61,20 @@ impl<'a> Step<'a> {
         self.run_count_atomic.fetch_add(1, Ordering::SeqCst);
 
         match &self.step_type {
-            StepType::Prompt => {
-                match self.call_llm(&self.step_content, &source_data).await {
-                    Ok(res_str) => {
-                        self.success_count_atomic.fetch_add(1, Ordering::SeqCst);
-                        Ok(Some(Value::String(res_str)))
-                    },
-                    Err(err) => Err(anyhow!("Step {} failed: {}", step_idx, err))
+            StepType::Prompt => match self.call_llm(&self.step_content, &source_data).await {
+                Ok(res_str) => {
+                    self.success_count_atomic.fetch_add(1, Ordering::SeqCst);
+                    Ok(Some(Value::String(res_str)))
                 }
-            }
-            StepType::Python => {
-                match self.exec_python(&source_data, &self.step_content) {
-                    Ok(result) => {
-                        self.success_count_atomic.fetch_add(1, Ordering::SeqCst);
-                        Ok(result)
-                    },
-                    Err(err) => Err(anyhow!("Step {} failed: {}", step_idx, err))
+                Err(err) => Err(anyhow!("Step {} failed: {}", step_idx, err)),
+            },
+            StepType::Python => match self.exec_python(&source_data, &self.step_content) {
+                Ok(result) => {
+                    self.success_count_atomic.fetch_add(1, Ordering::SeqCst);
+                    Ok(result)
                 }
-            }
+                Err(err) => Err(anyhow!("Step {} failed: {}", step_idx, err)),
+            },
         }
     }
 
@@ -107,11 +103,11 @@ impl<'a> Step<'a> {
             // Convert serde_json::Value to PyObject
             let py_source = serde_json::to_string(source)?;
             locals.set_item("source", py_source)?;
-            
+
             // Convert String to CString correctly
             let code_as_cstr = CString::new(the_code.as_bytes())?;
             py.run(code_as_cstr.as_c_str(), None, Some(&locals))?;
-            
+
             // Get result and convert back to serde_json::Value if it exists
             match locals.get_item("res") {
                 Ok(Some(res)) => {
@@ -120,19 +116,21 @@ impl<'a> Step<'a> {
                     Ok(Some(json_value))
                 }
                 Ok(None) => Ok(None),
-                Err(err) => Err(anyhow::anyhow!("Python error: {}", err))
+                Err(err) => Err(anyhow::anyhow!("Python error: {}", err)),
             }
         })
     }
-    
+
     // Methods to sync runtime counters with database fields
     pub fn sync_counters_to_db(&mut self) {
         self.run_count = self.run_count_atomic.load(Ordering::SeqCst);
         self.success_count = self.success_count_atomic.load(Ordering::SeqCst);
     }
-    
+
     pub fn init_atomic_counters(&mut self) {
-        self.run_count_atomic.store(self.run_count, Ordering::SeqCst);
-        self.success_count_atomic.store(self.success_count, Ordering::SeqCst);
+        self.run_count_atomic
+            .store(self.run_count, Ordering::SeqCst);
+        self.success_count_atomic
+            .store(self.success_count, Ordering::SeqCst);
     }
 }

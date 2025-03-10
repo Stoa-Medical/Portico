@@ -1,6 +1,6 @@
-use crate::{IdFields, TimestampFields, RunningStatus};
 use crate::Step;
-use anyhow::{Result, anyhow};
+use crate::{IdFields, RunningStatus, TimestampFields};
+use anyhow::{anyhow, Result};
 use serde_json::Value;
 
 #[derive(Clone)]
@@ -36,7 +36,7 @@ pub struct RuntimeSession<'a> {
     initial_data: Value,
     latest_step_idx: i32,
     latest_result: Result<Value>,
-    
+
     // Runtime fields
     steps: &'a Vec<Step<'a>>,
     curr_result: Result<Option<Value>>,
@@ -52,8 +52,8 @@ impl<'a> RuntimeSession<'a> {
         identifiers: IdFields,
         agent_id: String,
         steps: &'a Vec<Step<'a>>,
-        initial_data: Value
-    ) -> Self {        
+        initial_data: Value,
+    ) -> Self {
         Self {
             // Database fields
             identifiers,
@@ -63,7 +63,7 @@ impl<'a> RuntimeSession<'a> {
             initial_data,
             latest_step_idx: -1,
             latest_result: Ok(Value::Null),
-            
+
             // Runtime fields
             steps,
             curr_result: Ok(None),
@@ -80,17 +80,14 @@ impl<'a> RuntimeSession<'a> {
             Ok(val) => val.clone(),
             Err(_) => return None,
         };
-        
+
         Some(RuntimeCheckpoint {
             current_step: self.curr_idx,
-            saved_result
+            saved_result,
         })
     }
 
-    pub fn resume_from_checkpoint(
-        &mut self,
-        checkpoint: RuntimeCheckpoint
-    ) {
+    pub fn resume_from_checkpoint(&mut self, checkpoint: RuntimeCheckpoint) {
         self.curr_idx = checkpoint.current_step;
         self.curr_result = Ok(checkpoint.saved_result);
     }
@@ -106,7 +103,7 @@ impl<'a> RuntimeSession<'a> {
         let input = if idx == 0 {
             self.initial_data.clone()
         } else if idx == self.curr_idx && !self.res_state.is_empty() {
-            match &self.res_state[idx-1] {
+            match &self.res_state[idx - 1] {
                 Ok(Some(val)) => val.clone(),
                 _ => return Err(anyhow!("No input available for step {}", idx)),
             }
@@ -124,29 +121,29 @@ impl<'a> RuntimeSession<'a> {
                 self.curr_idx += 1;
                 self.latest_step_idx = idx as i32;
                 self.success_count += 1;
-                
+
                 // Update latest_result for database
                 if let Some(val) = &result {
                     self.latest_result = Ok(val.clone());
                 }
-                
+
                 Ok(result)
             }
             Err(e) => {
                 // Update session status
                 self.status = RunningStatus::Failed;
-                
+
                 // Create error without storing the message string
                 let error = anyhow!("Step {} failed: {}", idx, e);
-                
+
                 // Store the error in latest_result for database
                 self.latest_result = Err(anyhow!("Step {} failed: {}", idx, e));
-                
+
                 Err(error)
             }
         }
     }
-    
+
     /// Rolls back the RuntimeSession state to before the given index
     fn rollback_to(&mut self, idx: usize, initial_res: Result<Option<Value>>) {
         self.curr_result = match &initial_res {
@@ -167,7 +164,7 @@ impl<'a> RuntimeSession<'a> {
     pub fn current_step(&self) -> usize {
         self.curr_idx
     }
-    
+
     /// Returns the current error rate
     pub fn get_error_rate(&self) -> f32 {
         if self.total_count == 0 {
@@ -176,17 +173,25 @@ impl<'a> RuntimeSession<'a> {
         (self.total_count - self.success_count) as f32 / self.total_count as f32
     }
 
-    pub async fn run_n_steps(&mut self, n_steps: usize, reset_on_err: bool) -> Result<Option<Value>> {
+    pub async fn run_n_steps(
+        &mut self,
+        n_steps: usize,
+        reset_on_err: bool,
+    ) -> Result<Option<Value>> {
         let target_idx = self.curr_idx + n_steps;
         if target_idx > self.steps.len() {
-            return Err(anyhow!("Step bounds exceeded: requested {}, max {}", target_idx, self.steps.len()));
+            return Err(anyhow!(
+                "Step bounds exceeded: requested {}, max {}",
+                target_idx,
+                self.steps.len()
+            ));
         }
-    
+
         let initial_res = match &self.curr_result {
             Ok(val) => Ok(val.clone()),
             Err(e) => Err(anyhow!("{}", e)),
         };
-        
+
         for idx in self.curr_idx..target_idx {
             match self.run_one_step(idx).await {
                 Ok(_) => continue,
@@ -213,7 +218,7 @@ impl<'a> RuntimeSession<'a> {
     pub async fn run_all(&mut self, reset_on_err: bool) -> Result<SessionResult> {
         let remaining_steps = self.steps.len() - self.curr_idx;
         let result = self.run_n_steps(remaining_steps, reset_on_err).await;
-        
+
         // Create a SessionResult to return to the Agent
         let session_result = match &result {
             Ok(value) => SessionResult {
@@ -229,26 +234,26 @@ impl<'a> RuntimeSession<'a> {
                 error_rate: self.get_error_rate(),
             },
         };
-        
+
         // Return the result or propagate the error
         match result {
             Ok(_) => Ok(session_result),
             Err(_) => Ok(session_result), // We're returning the SessionResult even on error
         }
     }
-    
+
     // Methods to sync runtime state with database fields
     pub fn sync_to_db(&mut self) {
         // Update database fields based on runtime state
         self.latest_step_idx = self.curr_idx as i32 - 1;
-        
+
         // Update status based on runtime state
         if self.completed {
             self.status = RunningStatus::Completed;
         } else if self.status == RunningStatus::Pending && self.curr_idx > 0 {
             self.status = RunningStatus::InProgress;
         }
-        
+
         // Update latest_result based on curr_result
         match &self.curr_result {
             Ok(Some(val)) => self.latest_result = Ok(val.clone()),
@@ -256,16 +261,16 @@ impl<'a> RuntimeSession<'a> {
             Err(e) => self.latest_result = Err(anyhow!("{}", e)),
         }
     }
-    
+
     // Getters for database fields
     pub fn get_status(&self) -> &RunningStatus {
         &self.status
     }
-    
+
     pub fn get_latest_step_idx(&self) -> i32 {
         self.latest_step_idx
     }
-    
+
     pub fn get_latest_result(&self) -> &Result<Value> {
         &self.latest_result
     }

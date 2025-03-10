@@ -3,14 +3,14 @@
 
 /// Module with different data models
 pub mod models;
-pub use models::{Agent, Step, RuntimeSession, Signal};
+pub use models::{Agent, RuntimeSession, Signal, Step};
 
 // ============ Custom Enums / Traits ============
 // === Imports ===
 use anyhow::Result;
+use reqwest::Client;
 use serde_json::Value;
 use std::env;
-use reqwest::Client;
 
 // === Shared Enum definitions ===
 #[derive(Debug, PartialEq)]
@@ -18,14 +18,14 @@ pub enum RunningStatus {
     Pending,
     InProgress,
     Completed,
-    Failed
+    Failed,
 }
 
 // ============ Struct definitions =============
 
 pub struct IdFields {
     id: Option<u64>,
-    global_uuid: String
+    global_uuid: String,
 }
 
 impl Default for IdFields {
@@ -39,12 +39,12 @@ impl IdFields {
     //    Primarily matters for `RuntimeSession` which is created here
     //    (everything else is created in the UI, and Supabase is the source-of-truth)
     pub fn new() -> Self {
-        Self { 
-            id: None, 
-            global_uuid: uuid::Uuid::new_v4().to_string() 
+        Self {
+            id: None,
+            global_uuid: uuid::Uuid::new_v4().to_string(),
         }
     }
-    
+
     pub fn with_values(id: Option<u64>, global_uuid: String) -> Self {
         Self { id, global_uuid }
     }
@@ -52,7 +52,7 @@ impl IdFields {
 
 pub struct TimestampFields {
     created: chrono::NaiveDateTime,
-    updated: chrono::NaiveDateTime
+    updated: chrono::NaiveDateTime,
 }
 
 impl Default for TimestampFields {
@@ -66,7 +66,7 @@ impl TimestampFields {
         let now = chrono::Local::now().naive_utc();
         Self {
             created: now,
-            updated: now
+            updated: now,
         }
     }
 
@@ -74,7 +74,6 @@ impl TimestampFields {
         self.updated = chrono::Local::now().naive_utc();
     }
 }
-
 
 // ============ Trait definitions =============
 
@@ -90,7 +89,6 @@ trait DatabaseItem {
     fn get_table_name(&self) -> &str;
     fn get_db_fields(&self) -> Vec<&str>;
 }
-
 
 // ============ Shared functions ============
 
