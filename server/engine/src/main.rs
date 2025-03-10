@@ -24,13 +24,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
 
     // - Read environment configuration
+    let port: u16 = env::var("TCPIP_PORT")
+        .expect("TCPIP_PORT needs to be specified")
+        .parse()
+        .expect("TCPIP_PORT should be a number");
+    let db_url: String = env::var("POSTGRES_DB_URI")
+        .expect("POSTGRES_DB_URI needs to be specified")
+        .parse()
+        .unwrap();
+    let thread_count: u16 = env::var("RUNTIME_THREADS")
+        .expect("RUNTIME_THREADS needs to be specified")
+        .parse()
+        .expect("RUNTIME_THREADS should be a number");
+
+    println!(
+        "Configuration loaded: PORT={}, RUNTIME_THREADS={}",
+        port, thread_count
+    );
 
     // Initialize thread pool
 
     // Load state for Agents + Steps
     // - Connect to database
     // - Construct single SQL query for pulling `Agents` and corresponding `Steps`
-    // - Given response, 
+    // - Given response,
 
     // Start TCP/IP Listener from the bridge service
     // - Open specified port
