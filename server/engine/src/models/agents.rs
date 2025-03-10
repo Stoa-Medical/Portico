@@ -32,15 +32,15 @@ pub struct Agent<'a> {
 
 /// Different states for actor to be in. State diagram:
 /// ```plain
-///                    ┌────────────────┐
-///                    │                │
-///          (start)   v      (run)     |
-///  Inactive ──────► Starting ──────► Stable ──┐
-///      ▲             │   ▲            ▲       |
-///      │             │   │ (check)    | (run) |
-///      │             │   └───────► Unstable ◄─┘
-///      |             v                |
-///      └───────── Stopping ◄──────────┘
+///
+///                                     ┌──────────┐
+///          (start)                    |          |
+///  Inactive ──────► Starting ──────► Stable ──┐  |
+///      ▲             │                ▲       |  |
+///      │             │                | (run) |  |
+///      │             │             Unstable ◄─┘  |
+///      |             v                |          |
+///      └───────── Stopping ◄──────────┘◄─────────┘
 /// ```
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum AgentState {
@@ -85,9 +85,9 @@ impl<'a> Agent<'a> {
     /// Process data with this agent
     pub async fn process(&mut self, source: Value) -> Result<Value> {
         match self.agent_state {
-            AgentState::Waiting | AgentState::Unstable => {
+            AgentState::Starting | AgentState::Unstable => {
                 // Set state to Running
-                self.agent_state = AgentState::Running;
+                self.agent_state = AgentState::Stable;
 
                 // Convert Option<u64> to String
                 let agent_id = self
@@ -127,7 +127,7 @@ impl<'a> Agent<'a> {
     /// Update agent state based on session error rate
     fn update_state_from_session(&mut self, error_rate: f32) {
         self.agent_state = if error_rate <= self.accepted_err_rate {
-            AgentState::Waiting
+            AgentState::Starting
         } else {
             AgentState::Unstable
         };
@@ -136,7 +136,7 @@ impl<'a> Agent<'a> {
     pub fn start(&mut self) -> Result<()> {
         match self.agent_state {
             AgentState::Inactive => {
-                self.agent_state = AgentState::Waiting;
+                self.agent_state = AgentState::Starting;
                 Ok(())
             }
             _ => Err(anyhow!("Can only start from Inactive state")),
@@ -146,13 +146,13 @@ impl<'a> Agent<'a> {
     /// Returns Ok and sets to `Waiting` if stable, else Err and sets to `Unstable`
     pub fn check(&mut self) -> Result<()> {
         match self.agent_state {
-            AgentState::Waiting | AgentState::Unstable => {
+            AgentState::Starting | AgentState::Unstable => {
                 let curr_err_rate = self.get_err_rate();
                 let is_stable = curr_err_rate <= self.accepted_err_rate;
 
                 // Update state based on stability
                 self.agent_state = if is_stable {
-                    AgentState::Waiting
+                    AgentState::Starting
                 } else {
                     AgentState::Unstable
                 };
@@ -174,7 +174,7 @@ impl<'a> Agent<'a> {
 
     pub fn stop(&mut self) -> Result<()> {
         match self.agent_state {
-            AgentState::Running | AgentState::Unstable | AgentState::Waiting => {
+            AgentState::Stable | AgentState::Unstable | AgentState::Starting => {
                 self.agent_state = AgentState::Stopping;
                 // Cleanup logic here if needed
                 self.agent_state = AgentState::Inactive;
