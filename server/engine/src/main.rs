@@ -9,6 +9,7 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
+use tokio::runtime::Runtime;
 use uuid::Uuid;
 
 // Import our model abstractions
@@ -32,17 +33,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("POSTGRES_DB_URI needs to be specified")
         .parse()
         .unwrap();
-    let thread_count: u16 = env::var("RUNTIME_THREADS")
-        .expect("RUNTIME_THREADS needs to be specified")
+    let n_cores: u16 = std::thread::available_parallelism().unwrap().get().try_into().unwrap();
+    let thread_multiplier: u16 = env::var("RUNTIME_THREAD_MULTIPLIER")
+        .expect("RUNTIME_THREAD_MULTIPLIER needs to be specified")
         .parse()
-        .expect("RUNTIME_THREADS should be a number");
+        .expect("RUNTIME_THREAD_MULTIPLIER should be an integer");
+    let thread_count = n_cores * thread_multiplier;
 
     println!(
-        "Configuration loaded: PORT={}, RUNTIME_THREADS={}",
+        "Configuration loaded: PORT={}, thread_count={}",
         port, thread_count
     );
 
     // Initialize thread pool
+    // - Initialize Tokio thread pool with dynamic configuration
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(thread_count.try_into().unwrap())
+        .enable_all()
+        .build()?;
+
+    // - Get a handle to the runtime
+    let runtime_handle = runtime.handle().clone();
+
+    println!("Tokio runtime initialized with {} worker threads", thread_count);
+
 
     // Load state for Agents + Steps
     // - Connect to database

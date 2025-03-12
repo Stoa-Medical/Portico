@@ -7,24 +7,29 @@ pub use models::{Agent, RuntimeSession, Signal, Step};
 
 // ============ Custom Enums / Traits ============
 // === Imports ===
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use reqwest::Client;
 use serde_json::Value;
 use std::env;
+use sqlx::postgres::PgPool;
+use std::ffi::CString;
+use pyo3::prelude::*;
+use pyo3::types::PyDict;
 
 // === Shared Enum definitions ===
 #[derive(Debug, PartialEq)]
 pub enum RunningStatus {
-    Pending,
-    InProgress,
+    Waiting,
+    Running,
     Completed,
-    Failed,
+    Cancelled,
 }
 
 // ============ Struct definitions =============
 
+#[derive(Clone)]
 pub struct IdFields {
-    id: Option<u64>,
+    local_id: Option<u64>,
     global_uuid: String,
 }
 
@@ -40,16 +45,17 @@ impl IdFields {
     //    (everything else is created in the UI, and Supabase is the source-of-truth)
     pub fn new() -> Self {
         Self {
-            id: None,
+            local_id: None,
             global_uuid: uuid::Uuid::new_v4().to_string(),
         }
     }
 
-    pub fn with_values(id: Option<u64>, global_uuid: String) -> Self {
-        Self { id, global_uuid }
+    pub fn with_values(local_id: Option<u64>, global_uuid: String) -> Self {
+        Self { local_id, global_uuid }
     }
 }
 
+#[derive(Clone)]
 pub struct TimestampFields {
     created: chrono::NaiveDateTime,
     updated: chrono::NaiveDateTime,
@@ -79,14 +85,37 @@ impl TimestampFields {
 
 /// Item that is in the `public` schema (Portico-custom, not Supabase-predefined)
 trait DatabaseItem {
-    /// Default implementations
-    fn try_create(&self) -> Result<()>;
-    fn try_read(&self) -> Result<()>;
-    fn try_update(&self) -> Result<()>;
-    fn try_delete(&self) -> Result<()>;
+    // Default implementations
+    // NOTE: `read` is not implemented since this works on an already-serialized item.
+    //   So this function is mainly taking the serialized Rust state and syncing it with the database
 
-    /// Struct-specific implementations
-    fn get_table_name(&self) -> &str;
+    // TODO: Fix implementation of these: https://docs.rs/sqlx/latest/sqlx/macro.query.html#
+    async fn generate_create_query(&self) -> Result<bool> {
+        // Make CREATE query with `query!` macro
+        // Return QUERY
+        Ok(false)
+    }
+
+    async fn generate_update_query(&self) -> Result<bool> {
+        // Make UPDATE query with `query!` macro
+        // Return QUERY
+        Ok(false)
+    }
+
+    async fn generate_delete_query(&self) -> Result<bool> {
+        // Make DELETE query with `query!` macro
+        // Return QUERY
+        Ok(false)
+    }
+
+    async fn generate_select_query(pool: &PgPool) -> Result<bool> {
+        // Make DELETE query with `query!` macro
+        // Return QUERY
+        Ok(false)
+    }
+
+    // Struct-specific implementations
+    fn get_table_name(&self) -> &'static str;
     fn get_db_fields(&self) -> Vec<&str>;
 }
 
@@ -117,4 +146,34 @@ pub async fn call_llm(prompt: &str, context: Value) -> Result<String> {
         .as_str()
         .map(String::from)
         .ok_or_else(|| anyhow::anyhow!("No completion found"))
+}
+
+/// Executes provided python code
+// TODO: Refactor this to enforce that the code is a pure function, and the function should just be called
+pub fn exec_python(source: Value, the_code: &str) -> Result<Value> {
+    // Preps python interpreter (needs to run at least once, and repeat calls are negligible)
+    pyo3::prepare_freethreaded_python();
+    // Run code with independent context
+    Python::with_gil(|py| {
+        // Have clean state at each start
+        let locals = PyDict::new(py);
+        // Convert serde_json::Value to PyObject
+        let incoming_data = serde_json::to_string(&source)?;
+        locals.set_item("source", incoming_data)?;
+
+        // Convert String to CString correctly
+        let code_as_cstr = CString::new(the_code.as_bytes())?;
+        py.run(code_as_cstr.as_c_str(), None, Some(&locals))?;
+
+        // Get result and convert back to serde_json::Value if it exists
+        match locals.get_item("result") {
+            Ok(Some(res)) => {
+                let res_str = res.to_string();
+                let json_value: Value = serde_json::from_str(&res_str)?;
+                Ok(json_value)
+            }
+            Ok(None) => Err(anyhow!("Runtime error: unable to find return value (`result`)")),
+            Err(err) => Err(anyhow!("Python error: {}", err)),
+        }
+    })
 }

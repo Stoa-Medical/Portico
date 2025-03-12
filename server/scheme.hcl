@@ -3,8 +3,8 @@
 
 /*
 NOTE: Before applying: `psql "postgresql://postgres:postgres@localhost:54322/postgres?sslmode=disable" -c "CREATE DATABASE server;"`
-    To apply: 
-    
+    To apply:
+
 atlas schema apply \
   --url "postgresql://postgres:postgres@localhost:54322/postgres?search_path=public&sslmode=disable" \
   --to "file://scheme.hcl"
@@ -21,8 +21,8 @@ psql -h localhost -p 54322 -U postgres -d postgres
 ```sql
 -- Generate drop statements for all tables in public schema
 SELECT 'DROP TABLE IF EXISTS "' || tablename || '" CASCADE;'
-FROM pg_tables 
-WHERE schemaname = 'public' 
+FROM pg_tables
+WHERE schemaname = 'public'
     AND tablename NOT LIKE 'supabase_%';
 
 --- ... then copy that code and drop the tables
@@ -179,8 +179,16 @@ table "agents" {
         type = enum.agent_state
         null = false
     }
-    column "accepted_err_rate" {
+    column "accepted_completion_rate" {
         type = float
+        null = false
+    }
+    column "completion_count" {
+        type = int
+        null = false
+    }
+    column "run_count" {
+        type = int
         null = false
     }
 }
@@ -251,6 +259,10 @@ table "steps" {
     }
 
     # === Custom (table-specific) ===
+    column "name" {
+        type = sql("varchar(255)"),
+        null = true
+    }
     column "description" {
         type = sql("varchar(255)")
         null = false
@@ -348,16 +360,14 @@ table "runtime_sessions" {
 }
 
 
-# ============ enum ============ 
+# ============ enum ============
 
 enum "agent_state" {
     schema = schema.public
     values = [
         "inactive",
-        "starting",
         "stable",
-        "unstable",
-        "stopping"
+        "unstable"
     ]
 }
 
@@ -373,8 +383,8 @@ enum "step_type" {
 enum "running_status" {
     schema = schema.public
     values = [
-        "waiting",
-        "in-progress",
+        "waiting",  # This means it is on the queue
+        "running",  # This means it is actively being worked on (in the thread)
         "completed",  # This means it was seen-through to completion (even if resulting data is error, workflow completed)
         "cancelled"   # This means it was intentionally cancelled (e.g. workflow error)
     ]
