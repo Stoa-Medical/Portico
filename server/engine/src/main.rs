@@ -1,4 +1,4 @@
-use dotenv::dotenv;
+use dotenvy::dotenv;
 use pyo3::prelude::*;
 use pyo3::types::IntoPyDict;
 use serde_json::{json, Value};
