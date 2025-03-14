@@ -12,7 +12,7 @@ REPO STRUCTURE
 
 TESTS
 - Unit tests are either in:
-    - `src/lib.rs` 
+    - `src/lib.rs`
     - or `src/*/mod.rs` (for submodules)
 - Integration tests are in `tests/`
 - Run tests with `cargo test`
@@ -20,6 +20,8 @@ TESTS
 
 Local toolkit:
 - brew (MacOS)
+- cargo (Rust)
+    - `cargo install cargo-audit --features=fix`
 
 Dependencies:
 - supabase
