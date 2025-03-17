@@ -11,6 +11,8 @@ use std::thread;
 use std::time::Duration;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
+use sqlx::Pool;
+use sqlx::postgres::Postgres;
 
 // Import our model abstractions
 use portico_engine::models::{Agent, RuntimeSession, Signal, Step};
@@ -47,19 +49,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize thread pool
     // - Initialize Tokio thread pool with dynamic configuration
-    let runtime = tokio::runtime::Builder::new_multi_thread()
+    let rt: Runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(thread_count.try_into().unwrap())
         .enable_all()
         .build()?;
 
     // - Get a handle to the runtime
-    let runtime_handle = runtime.handle().clone();
+    let rt_handle = rt.handle().clone();
 
     println!("Tokio runtime initialized with {} worker threads", thread_count);
 
 
     // Load state for Agents + Steps
     // - Connect to database
+    let pool = Pool::<Postgres>::connect(&db_url);
+
     // - Construct single SQL query for pulling `Agents` and corresponding `Steps`
     // - Given response,
 
