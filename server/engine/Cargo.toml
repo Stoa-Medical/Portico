@@ -10,4 +10,4 @@ serde_json = "1.0"
 anyhow = "1.0.95"
 dotenvy = "0.15.7"
 sqlx = "0.8.3"
-portico-shared = { path = "../../shared", features = ["full-postgres"] }
+portico-shared = { path = "../../shared" }
