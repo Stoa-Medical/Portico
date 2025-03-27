@@ -25,25 +25,22 @@ FROM pg_tables
 WHERE schemaname = 'public'
     AND tablename NOT LIKE 'supabase_%';
 
+
 --- ... then copy that code and drop the tables
+
+--- If you also need to reset types:
+-- Generate drop statements for all enum types in the database
+SELECT 'DROP TYPE IF EXISTS "' || t.typname || '" CASCADE;'
+FROM pg_type t
+JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+WHERE n.nspname = 'public'
+    AND t.typtype = 'e'
+    AND t.typname NOT LIKE 'supabase_%';
+
+--- ... then do it again!
 ```
 */
 
-
-# """
-# TODO: Pin-down the schemas for:
-# - [x] Signal
-# - [x] Mission
-# - [x] Agent
-# - [x] Step
-# - [x] RuntimeSession
-
-# - [ ] Try running this against supabase postgres schema
-# - [ ] Define a `DatabaseItem` trait in lib.rs (like the good ol' days!)
-
-# - [ ] Schedule
-# - [ ] Channel
-# """
 
 schema "public" {}
 
