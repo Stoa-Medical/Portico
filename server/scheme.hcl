@@ -260,7 +260,7 @@ table "steps" {
 
     # === Custom (table-specific) ===
     column "name" {
-        type = sql("varchar(255)"),
+        type = sql("varchar(255)")
         null = true
     }
     column "description" {
