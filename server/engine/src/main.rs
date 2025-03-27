@@ -1,6 +1,4 @@
 use dotenvy::dotenv;
-use pyo3::prelude::*;
-use pyo3::types::IntoPyDict;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::env;
@@ -10,18 +8,15 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use tokio::runtime::Runtime;
-use uuid::Uuid;
-use sqlx::Pool;
-use sqlx::postgres::Postgres;
+use sqlx::postgres::PgPoolOptions;
+use anyhow::Result;
 
 // Import our model abstractions
-use portico_engine::models::{Agent, RuntimeSession, Signal, Step};
-use portico_engine::{IdFields, RunningStatus, TimestampFields};
+use portico_shared::models::{Agent, RuntimeSession, Signal, Step};
+use portico_shared::{IdFields, RunningStatus, TimestampFields};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Preps python interpreter (only needs to run once, though repeat calls are negligible)
-    pyo3::prepare_freethreaded_python();
-
+#[tokio::main]
+async fn main() -> Result<()> {
     // Read Config
     // - Load environment variables
     dotenv().ok();
@@ -47,39 +42,69 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         port, thread_count
     );
 
-    // Initialize thread pool
-    // - Initialize Tokio thread pool with dynamic configuration
-    let rt: Runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(thread_count.try_into().unwrap())
-        .enable_all()
-        .build()?;
-
-    // - Get a handle to the runtime
-    let rt_handle = rt.handle().clone();
-
-    println!("Tokio runtime initialized with {} worker threads", thread_count);
-
-
-    // Load state for Agents + Steps
-    // - Connect to database
-    let pool = Pool::<Postgres>::connect(&db_url);
-
-    // - Construct single SQL query for pulling `Agents` and corresponding `Steps`
-    // - Given response,
 
     // Start TCP/IP Listener from the bridge service
-    // - Open specified port
-    // - Wait until bridge service connects (init event received)
+    println!("Starting TCP listener on port {}", port);
+    let listener = TcpListener::bind(format!("127.0.0.1:{}", port))?;
+    println!("Waiting for bridge service to connect...");
+
+    // Accept connection and wait for init message
+    let mut stream = listener.accept()?.0;
+    println!("Connection established, waiting for init message");
+    stream.set_read_timeout(Some(Duration::from_secs(30)))?;
+
+    // Read and validate init message
+    let init_message = read_json_message(&mut stream)?;
+    if init_message.get("server-init").is_some() {
+        println!("Received init message from bridge service");
+    } else {
+        return Err(anyhow::anyhow!("Expected init message, got something else"));
+    }
+
+    println!("Bridge service initialized successfully");
+
+
+    // Connect to database
+    let pool = PgPoolOptions::new()
+        .connect(&db_url)
+        .await?;
+
+    println!("Connected to the database");
+
+
+    // Initialize process pool
+
+
+    // Pull corresponding `Agents` and corresponding `Steps`
+    let agents: Vec<Agent> = Agent::try_db_select_all(&pool);
+    let steps: Vec<Step> = Step::try_db_select_all(&pool);
+
+
+
 
     // Start event loop -- respond to bridge messages.
-    //   Event loop will run on different threads. So will need a locking mechanism to avoid race conditions
-    //   Implement as an in-memory Message queue. Clone the `Agent` + `Step` state for each Thread (so "pure" function achieved)
     // - CREATE Signal with data: run requested Agent
     // - CREATE Agent/Step: make a new model
     // - UPDATE Agent/Step: update the in-memory object
     // - DELETE Agent/Step: drop the in-memory object
+    // Event loop --
+    //   Event loop will run on different threads. So will need a locking mechanism to avoid race conditions
+    //   Implement as an in-memory Message queue. Clone the `Agent` + `Step` state for each Thread (so "pure" function achieved)
+
+
 
     // If get exit signal: clean up resources before exiting
 
     Ok(())
+}
+
+fn read_json_message(stream: &mut TcpStream) -> Result<Value> {
+    let mut buffer = [0; 1024];
+    let size = stream.read(&mut buffer)?;
+    let data = String::from_utf8_lossy(&buffer[0..size]);
+
+    match serde_json::from_str::<Value>(&data) {
+        Ok(json) => Ok(json),
+        Err(e) => Err(anyhow::anyhow!("Failed to parse JSON: {}", e))
+    }
 }

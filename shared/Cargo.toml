@@ -1,0 +1,43 @@
+[package]
+name = "portico-shared"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+# Default features
+default = ["sqlx-postgres"]
+
+# Database backend features
+sqlx-postgres = ["sqlx/postgres"]
+sqlx-sqlite = ["sqlx/sqlite"]
+sqlx-mysql = ["sqlx/mysql"]
+
+# Runtime features
+runtime-tokio = ["sqlx?/runtime-tokio"]
+runtime-async-std = ["sqlx?/runtime-async-std"]
+
+# Additional SQLx features
+tls = ["sqlx?/tls-native-tls"]
+macros = ["sqlx?/macros"]
+uuid = ["sqlx?/uuid"]
+chrono = ["sqlx?/chrono"]
+json = ["sqlx?/json"]
+
+# Combined features
+full-postgres = ["sqlx-postgres", "runtime-tokio", "tls", "macros", "uuid", "chrono", "json"]
+full-sqlite = ["sqlx-sqlite", "runtime-tokio", "tls", "macros", "uuid", "chrono", "json"]
+full-mysql = ["sqlx-mysql", "runtime-tokio", "tls", "macros", "uuid", "chrono", "json"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.12.0", features = ["v4"] }
+anyhow = "1.0.95"
+reqwest = { version = "0.12.12", features = ["json"] }
+chrono = { version = "0.4", features = ["serde"] }
+pyo3 = { version = "0.23.4", features = ["auto-initialize"] }
+# Optional SQLx with conditional features
+sqlx = { version = "0.8.3", optional = true }
+
+[dev-dependencies]
+tokio-test = "0.4.3"
