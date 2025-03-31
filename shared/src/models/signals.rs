@@ -14,7 +14,9 @@ pub struct Signal {
     agent: Agent,
     status: RunningStatus, // TODO: Should this just link to a `RuntimeSession`?
     description: String,
+    #[sqlx(json)]
     initial_data: Option<Value>,
+    #[sqlx(json)]
     result_data: Option<Value>,
     error_message: Option<String>,
 }

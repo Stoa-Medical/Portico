@@ -11,6 +11,7 @@ pub struct RuntimeSession {
     timestamps: TimestampFields,
     steps: Vec<Step>,
     status: RunningStatus,
+    #[sqlx(json)]
     source_data: Value,
     last_step_idx: Option<usize>,
     last_successful_result: Option<Value>,
