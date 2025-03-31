@@ -19,8 +19,11 @@ use serde_json::Value;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[derive(sqlx::FromRow)]
 pub struct Agent {
+    #[sqlx(flatten)]
     identifiers: IdFields,
+    #[sqlx(flatten)]
     timestamps: TimestampFields,
     description: String,
     agent_state: AgentState,

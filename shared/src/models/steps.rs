@@ -15,9 +15,11 @@ pub enum StepType {
     Prompt,
 }
 
-#[derive(Clone)]
+#[derive(Clone, sqlx::FromRow)]
 pub struct Step {
+    #[sqlx(flatten)]
     identifiers: IdFields,
+    #[sqlx(flatten)]
     timestamps: TimestampFields,
     agent_owner_uuid: Uuid,
     name: String,

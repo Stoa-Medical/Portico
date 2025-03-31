@@ -28,7 +28,7 @@ pub enum RunningStatus {
 
 // ============ Struct definitions =============
 
-#[derive(Clone)]
+#[derive(Clone, sqlx::FromRow)]
 pub struct IdFields {
     pub local_id: Option<u64>,
     pub global_uuid: String,
@@ -56,7 +56,7 @@ impl IdFields {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, sqlx::FromRow)]
 pub struct TimestampFields {
     pub created: chrono::NaiveDateTime,
     pub updated: chrono::NaiveDateTime,
@@ -87,10 +87,12 @@ impl TimestampFields {
 /// Item that is in the `public` schema (Portico-custom, not Supabase-predefined)
 #[async_trait]
 pub trait DatabaseItem: Sized {
+    fn id(&self) -> &IdFields;
     async fn try_db_create(&self, pool: &PgPool) -> Result<()>;
     async fn try_db_update(&self, pool: &PgPool) -> Result<()>;
     async fn try_db_delete(&self, pool: &PgPool) -> Result<()>;
     async fn try_db_select_all(pool: &PgPool) -> Result<Vec<Self>>;
+    async fn try_db_select_by_id(pool: &PgPool, id: &IdFields) -> Result<Option<Self>>;
 }
 
 // ============ Shared functions ============

@@ -3,9 +3,11 @@ use crate::Step;
 use anyhow::{anyhow, Result};
 use serde_json::Value;
 
-
+#[derive(sqlx::FromRow)]
 pub struct RuntimeSession {
+    #[sqlx(flatten)]
     identifiers: IdFields,
+    #[sqlx(flatten)]
     timestamps: TimestampFields,
     steps: Vec<Step>,
     status: RunningStatus,

@@ -4,8 +4,11 @@ use crate::{IdFields, TimestampFields};
 use serde_json::Value;
 use anyhow::{anyhow, Result};
 
+#[derive(sqlx::FromRow)]
 pub struct Signal {
+    #[sqlx(flatten)]
     identifiers: IdFields,
+    #[sqlx(flatten)]
     timestamps: TimestampFields,
     user_requested_uuid: String,
     agent: Agent,
