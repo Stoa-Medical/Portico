@@ -15,6 +15,7 @@ use sqlx::postgres::PgPool;
 use std::ffi::CString;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+use async_trait::async_trait;
 
 // === Shared Enum definitions ===
 #[derive(Debug, PartialEq)]
@@ -84,7 +85,7 @@ impl TimestampFields {
 // ============ Trait definitions =============
 
 /// Item that is in the `public` schema (Portico-custom, not Supabase-predefined)
-#[allow(async_fn_in_trait)]
+#[async_trait]
 pub trait DatabaseItem: Sized {
     async fn try_db_create(&self, pool: &PgPool) -> Result<()>;
     async fn try_db_update(&self, pool: &PgPool) -> Result<()>;
