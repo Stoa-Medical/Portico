@@ -17,6 +17,7 @@ use std::ffi::CString;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use async_trait::async_trait;
+use uuid;
 
 // === Shared Enum definitions ===
 #[derive(Debug, PartialEq)]
@@ -382,7 +383,7 @@ result = {"sum": source["a"] + source["b"]}
             Signal::new(
                 id_fields,
                 user_uuid,
-                agent,
+                Some(agent),
                 "Test Signal".to_string(),
                 initial_data
             )
@@ -417,7 +418,7 @@ result = {"sum": source["a"] + source["b"]}
             let mut signal = Signal::new(
                 id_fields,
                 user_uuid,
-                agent,
+                Some(agent),
                 "Test Signal".to_string(),
                 None  // No data
             );
@@ -477,7 +478,7 @@ result = {"sum": source["a"] + source["b"]}
 
             // Create session with our test step
             let source_data = json!({"value": 5});
-            let session = RuntimeSession::new(source_data, vec![step]);
+            let _session = RuntimeSession::new(source_data, vec![step]);
 
             // Since we can't directly access private fields, we'll test
             // the session through its public API in a real test
@@ -498,7 +499,7 @@ result = {"sum": source["a"] + source["b"]}
 
         #[test]
         fn test_id_fields_with_values() {
-            let local_id = Some(42u64);
+            let local_id = Some(42i64);
             let global_uuid = "test-uuid".to_string();
 
             let id = IdFields::with_values(local_id, global_uuid.clone());
