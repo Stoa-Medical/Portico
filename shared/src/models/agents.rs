@@ -32,7 +32,39 @@ pub struct Agent {
 }
 
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
+    // Expect a SQL query like:
+    // ```sql
+    // SELECT
+    // a.*,
+    // COALESCE(
+    //     (
+    //         SELECT json_agg(json_build_object(
+    //             'id', s.id,
+    //             'global_uuid', s.global_uuid,
+    //             'created_timestamp', s.created_timestamp,
+    //             'last_updated_timestamp', s.last_updated_timestamp,
+    //             'agent_id', s.agent_id,
+    //             'name', s.name,
+    //             'description', s.description,
+    //             'step_type', s.step_type,
+    //             'step_content', s.step_content,
+    //             'success_count', s.success_count,
+    //             'run_count', s.run_count
+    //         ))
+    //         FROM steps s
+    //         WHERE s.agent_id = a.id
+    //         ORDER BY s.sequence_number
+    //     ),
+    //     '[]'::json
+    // ) as steps
+    // FROM agents a
     fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
+        // Get the steps JSON array from the row
+        let steps_json: Value = row.try_get("steps")?;
+
+        // Convert the JSON array into Vec<Step> using the shared function
+        let steps = Step::from_json_array(&steps_json);
+
         Ok(Self {
             identifiers: IdFields {
                 local_id: row.try_get("id")?,
@@ -45,7 +77,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
             description: row.try_get("description")?,
             agent_state: row.try_get("agent_state")?,
             accepted_completion_rate: row.try_get("accepted_completion_rate")?,
-            steps: Vec::new(), // Steps are loaded separately since they're in a different table
+            steps,
             completion_count: Arc::new(AtomicU64::new(row.try_get::<i32, _>("completion_count")? as u64)),
             run_count: Arc::new(AtomicU64::new(row.try_get::<i32, _>("run_count")? as u64)),
         })

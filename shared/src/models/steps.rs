@@ -9,6 +9,7 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use sqlx::{Postgres, Row};
+use chrono::NaiveDateTime;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum StepType {
@@ -129,4 +130,43 @@ impl Step {
         self.success_count.load(Ordering::Relaxed)
     }
 
+    pub fn from_json(step_obj: &serde_json::Map<String, Value>) -> Option<Self> {
+        Some(Self {
+            identifiers: IdFields {
+                local_id: step_obj.get("id").and_then(|v| v.as_i64()),
+                global_uuid: step_obj.get("global_uuid").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            },
+            timestamps: TimestampFields {
+                created: NaiveDateTime::parse_from_str(
+                    &step_obj.get("created_timestamp").and_then(|v| v.as_str()).unwrap_or_default(),
+                    "%Y-%m-%d %H:%M:%S"
+                ).unwrap_or_default(),
+                updated: NaiveDateTime::parse_from_str(
+                    &step_obj.get("last_updated_timestamp").and_then(|v| v.as_str()).unwrap_or_default(),
+                    "%Y-%m-%d %H:%M:%S"
+                ).unwrap_or_default(),
+            },
+            agent_owner_uuid: Uuid::parse_str(
+                &step_obj.get("agent_id").and_then(|v| v.as_str()).unwrap_or_default()
+            ).unwrap_or_default(),
+            name: step_obj.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            description: step_obj.get("description").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            step_type: StepType::from_str(
+                step_obj.get("step_type").and_then(|v| v.as_str()).unwrap_or_default()
+            ).unwrap_or(StepType::Python),
+            step_content: step_obj.get("step_content").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            success_count: Arc::new(AtomicU64::new(step_obj.get("success_count").and_then(|v| v.as_i64()).unwrap_or(0) as u64)),
+            run_count: Arc::new(AtomicU64::new(step_obj.get("run_count").and_then(|v| v.as_i64()).unwrap_or(0) as u64)),
+        })
+    }
+
+    pub fn from_json_array(steps_json: &Value) -> Vec<Self> {
+        if let Some(steps_array) = steps_json.as_array() {
+            steps_array.iter().filter_map(|step_json| {
+                step_json.as_object().and_then(Step::from_json)
+            }).collect()
+        } else {
+            Vec::new()
+        }
+    }
 }
