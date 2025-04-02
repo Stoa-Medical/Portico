@@ -25,7 +25,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
                 created: row.try_get("created_timestamp")?,
                 updated: row.try_get("last_updated_timestamp")?,
             },
-            steps: Vec::new(), // Steps are loaded separately as they're in a different table
+            steps: Vec::new(), // TODO: Steps are loaded separately as they're in a different table
             status: row.try_get("runtime_session_status")?,
             source_data: row.try_get("initial_data")?,
             last_step_idx: Some(row.try_get("latest_step_idx")?),

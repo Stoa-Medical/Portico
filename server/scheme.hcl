@@ -100,6 +100,11 @@ table "signals" {
     }
 
     # === Custom (table-specific) ===
+    column "user_requested_uuid" {
+        type = sql("uuid")
+        null = false
+    }
+
     column "signal_type" {
         type = sql("varchar(255)")
         null = false
@@ -121,6 +126,11 @@ table "signals" {
 
     column "response_data" {
         type = sql("json")
+        null = true
+    }
+
+    column error_message {
+        type = sql("text")
         null = true
     }
 }

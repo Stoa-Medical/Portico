@@ -21,14 +21,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use sqlx::{Postgres, Row};
 
 pub struct Agent {
-    identifiers: IdFields,
-    timestamps: TimestampFields,
-    description: String,
-    agent_state: AgentState,
-    accepted_completion_rate: f32,
-    steps: Vec<Step>,
-    completion_count: Arc<AtomicU64>,
-    run_count: Arc<AtomicU64>,
+    pub identifiers: IdFields,
+    pub timestamps: TimestampFields,
+    pub description: String,
+    pub agent_state: AgentState,
+    pub accepted_completion_rate: f32,
+    pub steps: Vec<Step>,
+    pub completion_count: Arc<AtomicU64>,
+    pub run_count: Arc<AtomicU64>,
 }
 
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
