@@ -40,7 +40,7 @@ impl<'r> sqlx::Decode<'r, Postgres> for RunningStatus {
             "running" => Ok(RunningStatus::Running),
             "completed" => Ok(RunningStatus::Completed),
             "cancelled" => Ok(RunningStatus::Cancelled),
-            _ => Err("Invalid step type".into()),
+            _ => Err("Invalid running status".into()),
         }
     }
 }

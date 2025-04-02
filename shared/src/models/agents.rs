@@ -18,12 +18,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use sqlx::{Postgres, Row};
 
-#[derive(sqlx::FromRow)]
 pub struct Agent {
-    #[sqlx(flatten)]
     identifiers: IdFields,
-    #[sqlx(flatten)]
     timestamps: TimestampFields,
     description: String,
     agent_state: AgentState,
@@ -31,6 +29,27 @@ pub struct Agent {
     steps: Vec<Step>,
     completion_count: Arc<AtomicU64>,
     run_count: Arc<AtomicU64>,
+}
+
+impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
+    fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
+        Ok(Self {
+            identifiers: IdFields {
+                local_id: row.try_get("id")?,
+                global_uuid: row.try_get("global_uuid")?,
+            },
+            timestamps: TimestampFields {
+                created: row.try_get("created_timestamp")?,
+                updated: row.try_get("last_updated_timestamp")?,
+            },
+            description: row.try_get("description")?,
+            agent_state: row.try_get("agent_state")?,
+            accepted_completion_rate: row.try_get("accepted_completion_rate")?,
+            steps: Vec::new(), // Steps are loaded separately since they're in a different table
+            completion_count: Arc::new(AtomicU64::new(row.try_get::<i32, _>("completion_count")? as u64)),
+            run_count: Arc::new(AtomicU64::new(row.try_get::<i32, _>("run_count")? as u64)),
+        })
+    }
 }
 
 /// Different states for Agent to be in. State diagram:
@@ -48,6 +67,23 @@ pub enum AgentState {
     Inactive,
     Stable,
     Unstable,
+}
+
+impl sqlx::Type<Postgres> for AgentState {
+    fn type_info() -> sqlx::postgres::PgTypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("agent_state")
+    }
+}
+
+impl<'r> sqlx::Decode<'r, Postgres> for AgentState {
+    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        match value.as_str()? {
+            "inactive" => Ok(AgentState::Inactive),
+            "stable" => Ok(AgentState::Stable),
+            "unstable" => Ok(AgentState::Unstable),
+            _ => Err("Invalid agent state".into()),
+        }
+    }
 }
 
 impl Agent {
