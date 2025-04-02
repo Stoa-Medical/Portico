@@ -16,6 +16,16 @@ pub enum StepType {
     Prompt,
 }
 
+impl StepType {
+    pub fn from_str(s: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        match s {
+            "python" => Ok(StepType::Python),
+            "prompt" => Ok(StepType::Prompt),
+            _ => Err("Invalid step type".into()),
+        }
+    }
+}
+
 impl sqlx::Type<Postgres> for StepType {
     fn type_info() -> sqlx::postgres::PgTypeInfo {
         sqlx::postgres::PgTypeInfo::with_name("step_type")
@@ -24,11 +34,7 @@ impl sqlx::Type<Postgres> for StepType {
 
 impl<'r> sqlx::Decode<'r, Postgres> for StepType {
     fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        match value.as_str()? {
-            "python" => Ok(StepType::Python),
-            "prompt" => Ok(StepType::Prompt),
-            _ => Err("Invalid step type".into()),
-        }
+        Self::from_str(value.as_str()?)
     }
 }
 
