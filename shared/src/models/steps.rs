@@ -8,6 +8,7 @@ use serde_json::Value;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use sqlx::{Postgres, Row};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum StepType {
@@ -15,11 +16,25 @@ pub enum StepType {
     Prompt,
 }
 
-#[derive(Clone, sqlx::FromRow)]
+impl sqlx::Type<Postgres> for StepType {
+    fn type_info() -> sqlx::postgres::PgTypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("step_type")
+    }
+}
+
+impl<'r> sqlx::Decode<'r, Postgres> for StepType {
+    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        match value.as_str()? {
+            "Python" => Ok(StepType::Python),
+            "Prompt" => Ok(StepType::Prompt),
+            _ => Err("Invalid step type".into()),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct Step {
-    #[sqlx(flatten)]
     identifiers: IdFields,
-    #[sqlx(flatten)]
     timestamps: TimestampFields,
     agent_owner_uuid: Uuid,
     name: String,
@@ -28,6 +43,28 @@ pub struct Step {
     step_content: String,
     success_count: Arc<AtomicU64>,
     run_count: Arc<AtomicU64>,
+}
+
+impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Step {
+    fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
+        Ok(Self {
+            identifiers: IdFields {
+                local_id: row.try_get("id")?,
+                global_uuid: row.try_get("global_uuid")?,
+            },
+            timestamps: TimestampFields {
+                created: row.try_get("created_timestamp")?,
+                updated: row.try_get("last_updated_timestamp")?,
+            },
+            agent_owner_uuid: row.try_get("agent_id")?,
+            name: row.try_get("name")?,
+            description: row.try_get("description")?,
+            step_type: row.try_get("step_type")?,
+            step_content: row.try_get("step_content")?,
+            success_count: Arc::new(AtomicU64::new(row.try_get::<i32, _>("success_count")? as u64)),
+            run_count: Arc::new(AtomicU64::new(row.try_get::<i32, _>("run_count")? as u64)),
+        })
+    }
 }
 
 impl Step {

@@ -30,7 +30,7 @@ pub enum RunningStatus {
 
 #[derive(Clone, sqlx::FromRow)]
 pub struct IdFields {
-    pub local_id: Option<u64>,
+    pub local_id: Option<i64>,
     pub global_uuid: String,
 }
 
@@ -51,7 +51,7 @@ impl IdFields {
         }
     }
 
-    pub fn with_values(local_id: Option<u64>, global_uuid: String) -> Self {
+    pub fn with_values(local_id: Option<i64>, global_uuid: String) -> Self {
         Self { local_id, global_uuid }
     }
 }
