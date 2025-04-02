@@ -105,14 +105,16 @@ table "signals" {
         null = false
     }
 
+    // NOTE: This should match the regex below, please design accordingly
+    //   regex: ^[a-z]+_[a-z-]+$
     column "signal_type" {
         type = sql("varchar(255)")
         null = false
     }
 
-    check "valid_signal_type_format" {
-        expr = "signal_type ~ '^[a-z]+_[a-z-]+$'"
-    }
+    // check "valid_signal_type_format" {
+    //     expr = "signal_type ~ '^[a-z]+_[a-z-]+$'"
+    // }
 
     column "signal_status" {
         type = enum.running_status

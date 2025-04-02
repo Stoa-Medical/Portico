@@ -8,15 +8,15 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 
 pub struct Signal {
-    identifiers: IdFields,
-    timestamps: TimestampFields,
-    user_requested_uuid: String,
-    agent: Option<Agent>,
-    status: RunningStatus, // TODO: Should this just link to a `RuntimeSession`?
-    signal_type: String,
-    initial_data: Option<Value>,
-    result_data: Option<Value>,
-    error_message: Option<String>,
+    pub identifiers: IdFields,
+    pub timestamps: TimestampFields,
+    pub user_requested_uuid: String,
+    pub agent: Option<Agent>,
+    pub status: RunningStatus, // TODO: Should this just link to a `RuntimeSession`?
+    pub signal_type: String,
+    pub initial_data: Option<Value>,
+    pub result_data: Option<Value>,
+    pub error_message: Option<String>,
 }
 
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Signal {
@@ -71,7 +71,6 @@ impl Signal {
         signal_type: String,
         initial_data: Option<Value>,
     ) -> Self {
-        // Confirm `signal_type`
         Self {
             identifiers,
             timestamps: TimestampFields::new(),

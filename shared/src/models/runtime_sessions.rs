@@ -5,13 +5,13 @@ use serde_json::Value;
 use sqlx::Row;
 
 pub struct RuntimeSession {
-    identifiers: IdFields,
-    timestamps: TimestampFields,
-    steps: Vec<Step>,
-    status: RunningStatus,
-    source_data: Value,
-    last_step_idx: Option<i32>,
-    last_successful_result: Option<Value>,
+    pub identifiers: IdFields,
+    pub timestamps: TimestampFields,
+    pub steps: Vec<Step>,
+    pub status: RunningStatus,
+    pub source_data: Value,
+    pub last_step_idx: Option<i32>,
+    pub last_successful_result: Option<Value>,
 }
 
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {

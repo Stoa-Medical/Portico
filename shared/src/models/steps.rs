@@ -34,15 +34,15 @@ impl<'r> sqlx::Decode<'r, Postgres> for StepType {
 
 #[derive(Clone)]
 pub struct Step {
-    identifiers: IdFields,
-    timestamps: TimestampFields,
-    agent_owner_uuid: Uuid,
-    name: String,
-    description: Option<String>,
-    step_type: StepType,
-    step_content: String,
-    success_count: Arc<AtomicU64>,
-    run_count: Arc<AtomicU64>,
+    pub identifiers: IdFields,
+    pub timestamps: TimestampFields,
+    pub agent_owner_uuid: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub step_type: StepType,
+    pub step_content: String,
+    pub success_count: Arc<AtomicU64>,
+    pub run_count: Arc<AtomicU64>,
 }
 
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Step {
