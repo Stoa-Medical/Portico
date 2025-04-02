@@ -25,8 +25,8 @@ impl sqlx::Type<Postgres> for StepType {
 impl<'r> sqlx::Decode<'r, Postgres> for StepType {
     fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         match value.as_str()? {
-            "Python" => Ok(StepType::Python),
-            "Prompt" => Ok(StepType::Prompt),
+            "python" => Ok(StepType::Python),
+            "prompt" => Ok(StepType::Prompt),
             _ => Err("Invalid step type".into()),
         }
     }

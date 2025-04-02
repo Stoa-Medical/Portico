@@ -12,6 +12,7 @@ use reqwest::Client;
 use serde_json::Value;
 use std::env;
 use sqlx::postgres::PgPool;
+use sqlx::Postgres;
 use std::ffi::CString;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -25,6 +26,25 @@ pub enum RunningStatus {
     Completed,
     Cancelled,
 }
+
+impl sqlx::Type<Postgres> for RunningStatus {
+    fn type_info() -> sqlx::postgres::PgTypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("running_status")
+    }
+}
+
+impl<'r> sqlx::Decode<'r, Postgres> for RunningStatus {
+    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        match value.as_str()? {
+            "waiting" => Ok(RunningStatus::Waiting),
+            "running" => Ok(RunningStatus::Running),
+            "completed" => Ok(RunningStatus::Completed),
+            "cancelled" => Ok(RunningStatus::Cancelled),
+            _ => Err("Invalid step type".into()),
+        }
+    }
+}
+
 
 // ============ Struct definitions =============
 
