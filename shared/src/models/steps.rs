@@ -7,7 +7,6 @@ use serde_json::Value;
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use sqlx::{Postgres, Row};
 use chrono::NaiveDateTime;
 
@@ -39,11 +38,10 @@ impl<'r> sqlx::Decode<'r, Postgres> for StepType {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Step {
     pub identifiers: IdFields,
     pub timestamps: TimestampFields,
-    pub agent_owner_uuid: Uuid,
     pub name: String,
     pub description: Option<String>,
     pub step_type: StepType,
@@ -63,7 +61,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Step {
                 created: row.try_get("created_timestamp")?,
                 updated: row.try_get("last_updated_timestamp")?,
             },
-            agent_owner_uuid: row.try_get("agent_id")?,
+            // agent_owner_uuid: row.try_get("agent_id")?,
             name: row.try_get("name")?,
             description: row.try_get("description")?,
             step_type: row.try_get("step_type")?,
@@ -77,7 +75,6 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Step {
 impl Step {
     pub fn new(
         identifiers: IdFields,
-        agent_owner_uuid: Uuid,
         step_type: StepType,
         step_content: String,
         name: String,
@@ -88,7 +85,6 @@ impl Step {
         Self {
             identifiers,
             timestamps: TimestampFields::new(),
-            agent_owner_uuid,
             step_type,
             step_content,
             name,
@@ -146,9 +142,6 @@ impl Step {
                     "%Y-%m-%d %H:%M:%S"
                 ).unwrap_or_default(),
             },
-            agent_owner_uuid: Uuid::parse_str(
-                &step_obj.get("agent_id").and_then(|v| v.as_str()).unwrap_or_default()
-            ).unwrap_or_default(),
             name: step_obj.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
             description: step_obj.get("description").and_then(|v| v.as_str()).map(|s| s.to_string()),
             step_type: StepType::from_str(

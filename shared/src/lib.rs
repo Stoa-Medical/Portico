@@ -13,6 +13,7 @@ pub use models::{Agent, RuntimeSession, Signal, Step};
 // === Imports ===
 use anyhow::{anyhow, Result};
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::env;
 use sqlx::postgres::PgPool;
@@ -24,7 +25,7 @@ use async_trait::async_trait;
 use uuid;
 
 // === Shared Enum definitions ===
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
 pub enum RunningStatus {
     Waiting,
     Running,
@@ -53,7 +54,7 @@ impl<'r> sqlx::Decode<'r, Postgres> for RunningStatus {
 
 // ============ Struct definitions =============
 
-#[derive(Clone, Debug, sqlx::FromRow)]
+#[derive(Clone, Debug, sqlx::FromRow, Serialize, Deserialize)]
 pub struct IdFields {
     pub local_id: Option<i64>,
     pub global_uuid: String,
@@ -81,7 +82,7 @@ impl IdFields {
     }
 }
 
-#[derive(Clone, Debug, sqlx::FromRow)]
+#[derive(Clone, Debug, sqlx::FromRow, Serialize, Deserialize)]
 pub struct TimestampFields {
     pub created: chrono::NaiveDateTime,
     pub updated: chrono::NaiveDateTime,
