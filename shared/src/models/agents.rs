@@ -183,20 +183,15 @@ impl Agent {
     }
 
     fn update_stability(&mut self) -> AgentState {
-        match self.agent_state {
-            AgentState::Inactive => AgentState::Inactive,
-            _ => {
-                let curr_completion_rate = self.collect_completion_rate();
+        let curr_completion_rate = self.collect_completion_rate();
 
-                // Update state based on error rate
-                if curr_completion_rate < self.accepted_completion_rate {
-                    self.agent_state = AgentState::Unstable;
-                    AgentState::Unstable
-                } else {
-                    self.agent_state = AgentState::Stable;
-                    AgentState::Stable
-                }
-            }
+        // Update state based on error rate
+        if curr_completion_rate < self.accepted_completion_rate {
+            self.agent_state = AgentState::Unstable;
+            AgentState::Unstable
+        } else {
+            self.agent_state = AgentState::Stable;
+            AgentState::Stable
         }
     }
 
