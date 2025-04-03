@@ -4,7 +4,8 @@ To check compilation: `cargo check` or `cargo build`
 To run with database: `docker compose up`
 
 REPO STRUCTURE
-- `engine` is the core server runtime (Rust)
+- `engine` is the core server (Rust)
+- `runtime` is a script that `engine` runs on each thread
 - `supabase` is config for Supabase instance
 - `bridge` is lightweight middle service for handling Supabase stuff, e.g.:
     1. Forwarding Supabase Realtime changes

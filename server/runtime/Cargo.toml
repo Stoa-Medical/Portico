@@ -1,0 +1,7 @@
+[package]
+name = "portico-runtime"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+portico-shared = { path = "../../shared" }
