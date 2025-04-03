@@ -7,6 +7,7 @@ use sqlx::Row;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 
+#[derive(Debug)]
 pub struct Signal {
     pub identifiers: IdFields,
     pub timestamps: TimestampFields,

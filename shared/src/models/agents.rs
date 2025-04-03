@@ -20,6 +20,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use sqlx::{Postgres, Row};
 
+#[derive(Debug)]
 pub struct Agent {
     pub identifiers: IdFields,
     pub timestamps: TimestampFields,

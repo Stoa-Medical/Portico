@@ -52,7 +52,7 @@ impl<'r> sqlx::Decode<'r, Postgres> for RunningStatus {
 
 // ============ Struct definitions =============
 
-#[derive(Clone, sqlx::FromRow)]
+#[derive(Clone, Debug, sqlx::FromRow)]
 pub struct IdFields {
     pub local_id: Option<i64>,
     pub global_uuid: String,
@@ -80,7 +80,7 @@ impl IdFields {
     }
 }
 
-#[derive(Clone, sqlx::FromRow)]
+#[derive(Clone, Debug, sqlx::FromRow)]
 pub struct TimestampFields {
     pub created: chrono::NaiveDateTime,
     pub updated: chrono::NaiveDateTime,

@@ -39,7 +39,7 @@ impl<'r> sqlx::Decode<'r, Postgres> for StepType {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Step {
     pub identifiers: IdFields,
     pub timestamps: TimestampFields,

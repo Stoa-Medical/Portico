@@ -4,6 +4,7 @@ use anyhow::{anyhow, Result};
 use serde_json::Value;
 use sqlx::Row;
 
+#[derive(Debug)]
 pub struct RuntimeSession {
     pub identifiers: IdFields,
     pub timestamps: TimestampFields,

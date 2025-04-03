@@ -72,17 +72,30 @@ result = {"sum": source["a"] + source["b"]}
             let mut agent = create_test_agent();
 
             // Test initial state - agent should start inactive
-            assert!(agent.start().is_ok(), "New agent should be able to start");
+            let start_result = agent.start();
+            if start_result.is_err() {
+                println!("Failed to start agent: {:?}", start_result);
+            }
+            assert!(start_result.is_ok(), "New agent should be able to start");
 
             // Create a new agent to test the start fails when already started
             let mut another_agent = create_test_agent();
 
             // Start once
-            assert!(another_agent.start().is_ok());
+            let first_start = another_agent.start();
+            if first_start.is_err() {
+                println!("Failed first start: {:?}", first_start);
+            }
+            assert!(first_start.is_ok());
+
             // Second start should fail with the expected error
-            match another_agent.start() {
+            let second_start = another_agent.start();
+            match second_start {
                 Ok(_) => panic!("Expected error when starting an already started agent"),
-                Err(e) => assert_eq!(e.to_string(), "Can only start from Inactive state"),
+                Err(e) => {
+                    println!("Got expected error: {}", e);
+                    assert_eq!(e.to_string(), "Can only start from Inactive state");
+                }
             }
         }
 
@@ -93,25 +106,41 @@ result = {"sum": source["a"] + source["b"]}
             // Test state transitions via available methods
 
             // Start the agent - should transition to a running state
-            assert!(agent.start().is_ok(), "Agent should start successfully");
+            let start_result = agent.start();
+            if start_result.is_err() {
+                println!("Failed to start agent: {:?}", start_result);
+            }
+            assert!(start_result.is_ok(), "Agent should start successfully");
 
             // Run the agent with test data
             let source = json!({"value": 5});
-            let result = tokio_test::block_on(agent.run(source));
-            assert!(result.is_ok(), "Agent should run successfully");
+            let run_result = tokio_test::block_on(agent.run(source));
+            if run_result.is_err() {
+                println!("Failed to run agent: {:?}", run_result);
+            }
+            assert!(run_result.is_ok(), "Agent should run successfully");
 
             // Verify the step was executed
-            if let Ok(session) = result {
+            if let Ok(session) = run_result {
+                println!("Got session result: {:?}", session.last_successful_result);
                 assert_eq!(session.last_successful_result.unwrap(), json!({"value": 15}));
             }
 
             // Stop the agent - should transition back to Inactive
-            assert!(agent.stop().is_ok(), "Agent should stop successfully");
+            let stop_result = agent.stop();
+            if stop_result.is_err() {
+                println!("Failed to stop agent: {:?}", stop_result);
+            }
+            assert!(stop_result.is_ok(), "Agent should stop successfully");
 
             // Stopping an inactive agent should fail with the expected error
-            match agent.stop() {
+            let second_stop = agent.stop();
+            match second_stop {
                 Ok(_) => panic!("Expected error when stopping an inactive agent"),
-                Err(e) => assert_eq!(e.to_string(), "Can only stop from a running state"),
+                Err(e) => {
+                    println!("Got expected error: {}", e);
+                    assert_eq!(e.to_string(), "Can only stop from a running state");
+                }
             }
         }
 
@@ -124,15 +153,23 @@ result = {"sum": source["a"] + source["b"]}
             agent.run_count.store(5, Ordering::Relaxed);         // total runs
 
             // Start the agent - should transition to a running state
-            assert!(agent.start().is_ok(), "Agent should start with good completion rate");
+            let start_result = agent.start();
+            if start_result.is_err() {
+                println!("Failed to start agent: {:?}", start_result);
+            }
+            assert!(start_result.is_ok(), "Agent should start with good completion rate");
 
             // Run the agent to verify it works
             let source = json!({"value": 5});
-            let result = tokio_test::block_on(agent.run(source));
-            assert!(result.is_ok(), "Agent should run successfully");
+            let run_result = tokio_test::block_on(agent.run(source));
+            if run_result.is_err() {
+                println!("Failed to run agent: {:?}", run_result);
+            }
+            assert!(run_result.is_ok(), "Agent should run successfully");
 
             // Verify the step was executed
-            if let Ok(session) = result {
+            if let Ok(session) = run_result {
+                println!("Got session result: {:?}", session.last_successful_result);
                 assert_eq!(session.last_successful_result.unwrap(), json!({"value": 15}));
             }
         }
