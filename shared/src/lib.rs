@@ -2,6 +2,7 @@
 ///   Enums + traits go here (stylistic choice)!
 
 /// Tests
+#[cfg(test)]
 mod tests;
 
 /// Module with different data models
