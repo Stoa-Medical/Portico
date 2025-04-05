@@ -43,7 +43,6 @@ mod test_agents {
         // Create a simple step that adds 10 to the input value
         let step = Step::new(
             IdFields::new(),
-            Uuid::new_v4(),
             StepType::Python,
             "source['value'] += 10\nresult = source".to_string(),
             "Add 10".to_string(),
@@ -178,7 +177,6 @@ mod test_steps {
 
     fn create_test_step(step_type: StepType) -> Step {
         let id_fields = IdFields::new();
-        let agent_uuid = Uuid::new_v4();
         let content = match step_type {
             StepType::Python => "source['value'] += 10\nresult = source".to_string(),
             StepType::Prompt => "Add 10 to the value in the data".to_string()
@@ -186,7 +184,6 @@ mod test_steps {
 
         Step::new(
             id_fields,
-            agent_uuid,
             step_type,
             content,
             "Test Step".to_string(),
@@ -335,10 +332,8 @@ mod test_runtime_sessions {
     fn test_session_with_steps() {
         // Create a test step
         let id_fields = IdFields::new();
-        let agent_uuid = Uuid::new_v4();
         let step = Step::new(
             id_fields,
-            agent_uuid,
             StepType::Python,
             "source['value'] += 10\nresult = source".to_string(),
             "Test Step".to_string(),
