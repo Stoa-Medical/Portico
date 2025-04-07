@@ -1,6 +1,7 @@
 <!-- TODO: Below is AI boilerplate code, think through actual design -->
 
 <script>
+	import PageHeader from '../lib/components/PageHeader.svelte';
   import { 
     Card, 
     Button, 
@@ -12,15 +13,7 @@
 
 <main class="container mx-auto p-4">
   <!-- Page Header with Breadcrumb -->
-  <div class="mb-6">
-    <Breadcrumb class="mb-4">
-      <BreadcrumbItem href="/" home>Home</BreadcrumbItem>
-    </Breadcrumb>
-    
-    <div class="flex justify-between items-center">
-      <Heading tag="h1" class="text-2xl font-bold">Welcome</Heading>
-    </div>
-  </div>
+  <PageHeader title="Welcome" breadcrumbs={[{label: "Home", url: "/"}]}/>
   
   <!-- Main Content -->
   <div class="grid grid-cols-1 gap-6">
