@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Breadcrumb, BreadcrumbItem } from 'flowbite-svelte';
   export let title: string = '';
   export let breadcrumbs: { label: string; url: string }[] = [];
   export let actionBar = [];
@@ -6,16 +7,13 @@
 
 <div class="mb-6">
     <!-- Breadcrumb -->
-    <nav class="mb-4">
-      <div class="flex items-center space-x-4">
-        {#each breadcrumbs as { label, url }, i}
-          <a href={url} class="text-blue-500 hover:underline">{label}</a>
-          {#if i < breadcrumbs.length - 1}
-            <span>/</span>
-          {/if}
-        {/each}
-      </div>
-    </nav>
+    <Breadcrumb class="mb-4">
+      {#each breadcrumbs as { label, url }, index}
+        <BreadcrumbItem href={url} home={index === 0}>
+          {label}
+        </BreadcrumbItem>
+      {/each}
+    </Breadcrumb>
 
     <!-- Header Title and Actions -->
     <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
