@@ -11,24 +11,26 @@ const t = {
   },
 };
 
-test("test environment is using jsdom", () => {
-  expect(window).toBeDefined();
-  expect(document).toBeDefined();
-});
+describe("app.test.ts", () => {
+  test("test environment is using jsdom", () => {
+    expect(window).toBeDefined();
+    expect(document).toBeDefined();
+  });
 
-test("initializes application", async () => {
-  t.render();
+  test("initializes application", async () => {
+    t.render();
 
-  const welcomeText = await screen.findByText(/Welcome to the application/i);
+    const welcomeText = await screen.findByText(/Welcome to the application/i);
 
-  expect(welcomeText).toBeInTheDocument();
-});
+    expect(welcomeText).toBeInTheDocument();
+  });
 
-test("shows `Home` page location in breadcrumb", async () => {
-  t.render();
+  test("shows `Home` page location in breadcrumb", async () => {
+    t.render();
 
-  const homeBreadcrumb = t.findBreadcrumb("Home");
+    const homeBreadcrumb = t.findBreadcrumb("Home");
 
-  expect(homeBreadcrumb).toBeInTheDocument();
-  expect(homeBreadcrumb).toHaveAttribute("href", "/");
+    expect(homeBreadcrumb).toBeInTheDocument();
+    expect(homeBreadcrumb).toHaveAttribute("href", "/");
+  });
 });

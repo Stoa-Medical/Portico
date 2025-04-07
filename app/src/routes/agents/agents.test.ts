@@ -26,7 +26,7 @@ const t = {
   render: () => render(AgentsPage),
 };
 
-describe("Agents Component", () => {
+describe("agents.test.ts - Agents Page", () => {
   it("renders the list of agents", async () => {
     t.render();
 

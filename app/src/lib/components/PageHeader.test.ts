@@ -32,7 +32,7 @@ const t = {
   },
 };
 
-describe("PageHeader Component", () => {
+describe("PageHeader.test.ts - PageHeader Component", () => {
   it("renders title correctly", () => {
     t.render();
     expect(screen.getByText("Agenti")).toBeInTheDocument();
@@ -47,7 +47,7 @@ describe("PageHeader Component", () => {
   });
 
   it("renders action buttons correctly", () => {
-    render(PageHeader, { title: "Agenti", breadcrumbs, actionBar: actions });
+    t.render();
 
     actions.forEach((action) => {
       expect(screen.getByText(action.label)).toBeInTheDocument();
