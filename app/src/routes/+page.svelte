@@ -38,9 +38,6 @@
         <Button href="/analytics" color="purple">
           Analytics
         </Button>
-        <Button href="/" color="light">
-          Home
-        </Button>
       </div>
     </Card>
   </div>
