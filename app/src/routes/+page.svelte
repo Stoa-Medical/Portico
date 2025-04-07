@@ -6,8 +6,6 @@
     Card, 
     Button, 
     Heading, 
-    Breadcrumb, 
-    BreadcrumbItem,
   } from 'flowbite-svelte';
 </script>
 

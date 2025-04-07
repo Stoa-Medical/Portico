@@ -2,7 +2,7 @@
   import { Breadcrumb, BreadcrumbItem } from 'flowbite-svelte';
   export let title: string = '';
   export let breadcrumbs: { label: string; url: string }[] = [];
-  export let actionBar = [];
+  export let actionBar: any = [];
 </script>
 
 <div class="mb-6">

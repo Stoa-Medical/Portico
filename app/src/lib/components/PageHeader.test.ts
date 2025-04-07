@@ -22,10 +22,12 @@ const actions = [
   },
 ];
 
+const defaultTitle = "Agenti";
+
 const t = {
   render: () => {
     return render(PageHeader, {
-      title: "Agenti",
+      title: defaultTitle,
       breadcrumbs,
       actionBar: actions,
     });
@@ -35,7 +37,7 @@ const t = {
 describe("PageHeader.test.ts - PageHeader Component", () => {
   it("renders title correctly", () => {
     t.render();
-    expect(screen.getByText("Agenti")).toBeInTheDocument();
+    expect(screen.getByText(defaultTitle)).toBeInTheDocument();
   });
 
   it("renders breadcrumbs correctly", () => {
@@ -55,7 +57,6 @@ describe("PageHeader.test.ts - PageHeader Component", () => {
   });
 
   it("calls the correct action when a button is clicked", async () => {
-    const [addAgentAction, deleteAction] = actions;
     t.render();
 
     const addButton = screen.getByText("Add Agent");
@@ -64,6 +65,7 @@ describe("PageHeader.test.ts - PageHeader Component", () => {
     await fireEvent.click(addButton);
     await fireEvent.click(deleteButton);
 
+    const [addAgentAction, deleteAction] = actions;
     expect(addAgentAction.onClick).toHaveBeenCalledTimes(1);
     expect(deleteAction.onClick).toHaveBeenCalledTimes(1);
   });

@@ -3,8 +3,6 @@
     Card, 
     Button, 
     Heading, 
-    Breadcrumb, 
-    BreadcrumbItem,
     Table,
     TableBody,
     TableBodyCell,
@@ -176,8 +174,7 @@
 
 <main class="container mx-auto p-4">
   <!-- Page Header with Breadcrumb -->
-  <PageHeader title="Agents" breadcrumbs={breadcrumbs} actionBar={getActions()}
-  />
+  <PageHeader title="Agents" breadcrumbs={breadcrumbs} actionBar={getActions()}/>
   
   <!-- Master-Detail View -->
   <div class="grid grid-cols-1 {selectedAgent ? 'lg:grid-cols-3 gap-6' : ''}">
@@ -230,7 +227,7 @@
               Back
             </Button>
             <Heading tag="h2" class="text-xl font-bold">{selectedAgent.name}</Heading>
-            <Badge color={selectedAgent.isActive ? 'green' : 'gray'}>
+            <Badge color={selectedAgent.isActive ? 'green' : 'none'}>
               {selectedAgent.status}
             </Badge>
           </div>
