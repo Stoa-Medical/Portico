@@ -25,6 +25,7 @@
     TabItem
   } from 'flowbite-svelte';
   import { PlusOutline, ArrowLeftOutline, TrashBinOutline } from 'flowbite-svelte-icons';
+  import PageHeader from '../../lib/components/PageHeader.svelte';
   import { getAgents, getAgentSteps } from './api';
   
   let agents;
@@ -39,7 +40,7 @@
   
   // Selected agent for detail view
   let selectedAgent = null;
-  
+
   // Modal state
   let showModal = false;
   
@@ -156,37 +157,27 @@
     }
   }
 
+  const breadcrumbs = [
+    { label: 'Home', url: '/' },
+    { label: 'Agents', url: '/agents' }
+  ];
+
+  const getActions = () => selectedAgent
+    ? [
+        { label: 'Delete', onClick: deleteAgent, icon: TrashBinOutline, color: 'red' },
+        { label: 'Save Changes', onClick: saveChanges, color: 'blue' }
+      ]
+    : [
+        { label: 'Add Agent', onClick: () => showModal = true, icon: PlusOutline, color: 'blue' }
+      ];
+
   loadAgents();
 </script>
 
 <main class="container mx-auto p-4">
   <!-- Page Header with Breadcrumb -->
-  <div class="mb-6">
-    <Breadcrumb class="mb-4">
-      <BreadcrumbItem href="/" home>Home</BreadcrumbItem>
-      <BreadcrumbItem>Agents</BreadcrumbItem>
-    </Breadcrumb>
-    
-    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-      <Heading tag="h1" class="text-2xl font-bold">Agents</Heading>
-      {#if !selectedAgent}
-        <Button class="self-start" color="blue" on:click={() => showModal = true}>
-          <PlusOutline class="mr-2 h-5 w-5" />
-          Add Agent
-        </Button>
-      {:else}
-        <div class="flex flex-wrap gap-2">
-          <Button color="red" on:click={deleteAgent}>
-            <TrashBinOutline class="mr-2 h-5 w-5" />
-            Delete
-          </Button>
-          <Button color="blue" on:click={saveChanges}>
-            Save Changes
-          </Button>
-        </div>
-      {/if}
-    </div>
-  </div>
+  <PageHeader title="Agents" breadcrumbs={breadcrumbs} actionBar={getActions()}
+  />
   
   <!-- Master-Detail View -->
   <div class="grid grid-cols-1 {selectedAgent ? 'lg:grid-cols-3 gap-6' : ''}">
