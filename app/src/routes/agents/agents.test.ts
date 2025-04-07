@@ -22,10 +22,13 @@ vi.mock("./api", () => ({
   getAgentSteps: vi.fn().mockReturnValue([]),
 }));
 
+const t = {
+  render: () => render(AgentsPage),
+};
+
 describe("Agents Component", () => {
   it("renders the list of agents", async () => {
-    // When AgentsPage is rendered:
-    render(AgentsPage);
+    t.render();
 
     // Then ensure agents are fetched and rendered:
     const agent1 = await screen.findByText("Test Agent 1");

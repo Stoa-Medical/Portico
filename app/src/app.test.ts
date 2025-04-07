@@ -1,13 +1,23 @@
 import { render, screen, within } from "@testing-library/svelte";
 import Routes from "./routes/+page.svelte";
 
+const t = {
+  render: () => render(Routes),
+  findBreadcrumb: (name) => {
+    const breadcrumbNav = screen.getByRole("navigation", {
+      name: /breadcrumb/i,
+    });
+    return within(breadcrumbNav).getByText(name);
+  },
+};
+
 test("test environment is using jsdom", () => {
   expect(window).toBeDefined();
   expect(document).toBeDefined();
 });
 
 test("initializes application", async () => {
-  render(Routes);
+  t.render();
 
   const welcomeText = await screen.findByText(/Welcome to the application/i);
 
@@ -15,10 +25,9 @@ test("initializes application", async () => {
 });
 
 test("shows `Home` page location in breadcrumb", async () => {
-  render(Routes);
+  t.render();
 
-  const breadcrumbNav = screen.getByRole("navigation", { name: /breadcrumb/i });
-  const homeBreadcrumb = within(breadcrumbNav).getByText("Home");
+  const homeBreadcrumb = t.findBreadcrumb("Home");
 
   expect(homeBreadcrumb).toBeInTheDocument();
   expect(homeBreadcrumb).toHaveAttribute("href", "/");
