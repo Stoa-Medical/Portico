@@ -1,4 +1,4 @@
-import { render, screen, within, fireEvent } from "@testing-library/svelte";
+import { render, screen, within } from "@testing-library/svelte";
 import Routes from "./routes/+page.svelte";
 
 test("test environment is using jsdom", () => {

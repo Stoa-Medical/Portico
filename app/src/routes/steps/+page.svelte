@@ -106,7 +106,7 @@
   </div>
   
   <!-- Steps List -->
-  <Card>
+  <Card class="max-w-full">
     <Table hoverable={true}>
       <TableHead>
         <TableHeadCell>Name</TableHeadCell>

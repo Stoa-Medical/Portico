@@ -237,7 +237,7 @@
   <div class="grid grid-cols-1 {selectedAgent ? 'lg:grid-cols-3 gap-6' : ''}">
     <!-- Agents List (Master View) -->
     <div class="{selectedAgent ? 'hidden lg:block' : 'block'}">
-      <Card>
+    <Card class="max-w-full">
         <Table hoverable={true}>
           <TableHead>
             <TableHeadCell>Name</TableHeadCell>

@@ -24,11 +24,11 @@
   
   <!-- Main Content -->
   <div class="grid grid-cols-1 gap-6">
-    <Card>
+    <Card class="overflow-x-auto max-w-full">
       <Heading tag="h2" class="mb-4">Navigation</Heading>
       <p class="mb-4">Welcome to the application. Use the links below to navigate:</p>
       
-      <div class="flex flex-col space-y-4 sm:flex-row sm:space-y-0 sm:space-x-4">
+      <div class="flex flex-col sm:flex-row sm:space-y-0 sm:space-x-4 w-full">
         <Button href="/agents" color="blue">
           View Agents
         </Button>
