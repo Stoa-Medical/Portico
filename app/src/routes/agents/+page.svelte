@@ -179,7 +179,7 @@
   <PageHeader title="Agents" breadcrumbs={breadcrumbs} actionBar={getActions()}/>
   
   <!-- Master-Detail View -->
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+  <div class="grid grid-cols-1 mt-6">
     <!-- Agents List (Master View) -->
     <div class="{selectedAgent ? 'hidden lg:block' : 'block'}">
       <Card class="max-w-full">
@@ -221,8 +221,8 @@
     
     <!-- Agent Details (Detail View) -->
     {#if selectedAgent}
-      <div class="col-span-1 lg:col-span-2">
-        <Card>
+      <div class="col-span-2 lg:col-span-3 mt-6">
+        <Card class="max-w-full">
           <div class="mb-4 flex items-center gap-3">
             <Button color="light" size="sm" class="lg:hidden" on:click={backToList}>
               <ArrowLeftOutline class="mr-2 h-4 w-4" />
