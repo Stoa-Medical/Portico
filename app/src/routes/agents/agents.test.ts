@@ -39,7 +39,7 @@ describe("agents.test.ts - Agents Page", () => {
   it("renders the list of agents", async () => {
     t.render();
 
-    // Then agents are fetched and rendered:
+    // Then agents are fetched and rendered
     const agent1 = await screen.findByText("Test Agent 1");
     const agent2 = await screen.findByText("Test Agent 2");
 
@@ -94,23 +94,23 @@ describe("agents.test.ts - Agents Page", () => {
   it("allows a user to edit an existing agent", async () => {
     t.render();
 
-    // Open the details of "Test Agent 1"
+    // When you click on "Test Agent 1"
     const agent1 = await screen.findByText("Test Agent 1");
     fireEvent.click(agent1);
 
     await screen.findByText("General");
 
-    // Modify the name field
+    // Then update the agent name
     const nameInput = screen.getByLabelText("Agent Name");
     fireEvent.input(nameInput, {
       target: { value: "Test Updated Agent Name" },
     });
 
-    // Save changes
+    // After saving the changes
     const saveButton = screen.getByText("Save Changes");
     fireEvent.click(saveButton);
 
-    // Assert that the updated name appears in the table
+    // Then the updated name will appear in the table
     const updatedAgentInTable = await t.findInTable("Test Updated Agent Name");
     expect(updatedAgentInTable).toBeInTheDocument();
   });
