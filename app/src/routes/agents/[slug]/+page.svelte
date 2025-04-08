@@ -157,7 +157,7 @@
   </div>
   
   <!-- Agent Configuration Tabs -->
-  <Card>
+  <Card class="max-w-full">
     <Tabs style="underline">
       <TabItem open title="General">
         <div class="space-y-6 py-4">

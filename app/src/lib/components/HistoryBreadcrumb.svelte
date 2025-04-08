@@ -1,8 +1,7 @@
 <script>
   import { page } from '$app/stores';
   import { Breadcrumb, BreadcrumbItem } from 'flowbite-svelte';
-  import { onNavigate } from '$app/navigation';
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount } from 'svelte';
   
   let history = [];
   let currentPath = '';
