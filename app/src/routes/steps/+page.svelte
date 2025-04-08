@@ -90,7 +90,7 @@
 
   const breadcrumbs = [
     { label: "Home", url: "/" },
-    { label: "Steps", url: "/steps" },
+    { label: "Step Templates", url: "/steps" },
   ];
   const actionBar = [{
     label: "Add Step",
@@ -102,8 +102,7 @@
 
 <main class="container mx-auto p-4">
   <!-- Page Header with Breadcrumb -->
-  <PageHeader title="Steps" breadcrumbs={breadcrumbs} actionBar={actionBar}/>
-
+  <PageHeader title="Step Templates" breadcrumbs={breadcrumbs} actionBar={actionBar}/>
   
   <!-- Steps List -->
   <Card class="max-w-full">

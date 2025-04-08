@@ -23,6 +23,7 @@ export type Agent = {
 
 export type Step = {
   id: number;
+  agentId: number;
   name: string;
   type: "Python" | "Prompt" | string;
   lastEdited: string;
@@ -96,18 +97,21 @@ let currentAgents: Agent[] = [
 let currentAgentSteps: Step[] = [
   {
     id: 1,
+    agentId: 1,
     name: "Data Collection",
     type: "Python",
     lastEdited: "2 hours ago",
   },
   {
     id: 2,
+    agentId: 1,
     name: "Text Analysis",
     type: "Prompt",
     lastEdited: "1 day ago",
   },
   {
     id: 3,
+    agentId: 1,
     name: "Data Visualization",
     type: "Python",
     lastEdited: "3 days ago",
@@ -133,9 +137,8 @@ export const deleteAgent = async (
   return currentAgents;
 };
 
-// TODO: Link steps to agent in data structure:
 export const getSteps = (agentId: number): Step[] => {
-  return currentAgentSteps;
+  return currentAgentSteps.filter((step) => step.agentId === agentId);
 };
 
 export const saveSteps = async (step: Step): Promise<Step[]> => {
