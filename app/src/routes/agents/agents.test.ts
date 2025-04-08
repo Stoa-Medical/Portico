@@ -29,6 +29,10 @@ vi.mock("./api", async () => {
 
 const t = {
   render: () => render(AgentsPage),
+  findInTable: async (text) => {
+    const table = await screen.findByRole("table");
+    return within(table).getByText(text);
+  },
 };
 
 describe("agents.test.ts - Agents Page", () => {
@@ -82,8 +86,7 @@ describe("agents.test.ts - Agents Page", () => {
     fireEvent.click(submitButton);
 
     // Then the new agent is added to the table
-    const table = await screen.findByRole("table");
-    const newAgentInTable = within(table).getByText("New Agent Test");
+    const newAgentInTable = await t.findInTable("New Agent Test");
 
     expect(newAgentInTable).toBeInTheDocument();
   });
@@ -108,10 +111,7 @@ describe("agents.test.ts - Agents Page", () => {
     fireEvent.click(saveButton);
 
     // Assert that the updated name appears in the table
-    const table = await screen.findByRole("table");
-    const updatedAgentInTable = within(table).getByText(
-      "Test Updated Agent Name"
-    );
+    const updatedAgentInTable = await t.findInTable("Test Updated Agent Name");
     expect(updatedAgentInTable).toBeInTheDocument();
   });
 });
