@@ -24,7 +24,7 @@
   } from 'flowbite-svelte';
   import { PlusOutline, ArrowLeftOutline, TrashBinOutline } from 'flowbite-svelte-icons';
   import PageHeader from '../../lib/components/PageHeader.svelte';
-  import { getAgents, getAgentSteps } from './api';
+  import { getAgents, getSteps } from './api';
   
   let agents;
 
@@ -343,7 +343,7 @@
                   </Button>
                 </div>
                 
-                {#if getAgentSteps(selectedAgent.id).length > 0}
+                {#if getSteps(selectedAgent.id).length > 0}
                   <Table hoverable={true}>
                     <TableHead>
                       <TableHeadCell>Name</TableHeadCell>
@@ -352,7 +352,7 @@
                       <TableHeadCell>Actions</TableHeadCell>
                     </TableHead>
                     <TableBody>
-                      {#each getAgentSteps(selectedAgent.id) as step}
+                      {#each getSteps(selectedAgent.id) as step}
                         <TableBodyRow>
                           <TableBodyCell>{step.name}</TableBodyCell>
                           <TableBodyCell>

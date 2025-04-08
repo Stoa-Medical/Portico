@@ -1,4 +1,34 @@
-let currentAgents = [
+type AgentLLMConfig = {
+  temperature: number;
+  maxTokens: number;
+  topP: number;
+  frequencyPenalty: number;
+  presencePenalty: number;
+};
+
+type Agent = {
+  id: number;
+  name: string;
+  status: "Active" | "Idle" | "Inactive";
+  type: "Assistant" | "Researcher" | "Analyst" | string;
+  lastActive: string;
+  description: string;
+  settings: AgentLLMConfig;
+  capabilities: string[];
+  isActive: boolean;
+  model: string;
+  apiKey: string;
+  createdAt: string;
+};
+
+type Step = {
+  id: number;
+  name: string;
+  type: "Python" | "Prompt" | string;
+  lastEdited: string;
+};
+
+let currentAgents: Agent[] = [
   {
     id: 1,
     name: "Agent Smith",
@@ -63,7 +93,7 @@ let currentAgents = [
   },
 ];
 
-let currentAgentSteps = [
+let currentAgentSteps: Step[] = [
   {
     id: 1,
     name: "Data Collection",
@@ -84,31 +114,33 @@ let currentAgentSteps = [
   },
 ];
 
-export const getAgents = async () => {
+export const getAgents = async (): Promise<Agent[]> => {
   return currentAgents;
 };
 
-export const saveAgent = async (agent) => {
+export const saveAgent = async (agent: Agent): Promise<Agent[]> => {
   currentAgents = currentAgents.concat(agent);
   return currentAgents;
 };
 
-export const deleteAgent = async (agentIdToDelete: number) => {
+export const deleteAgent = async (
+  agentIdToDelete: number
+): Promise<Agent[]> => {
   currentAgents = currentAgents.filter((agent) => agent.id !== agentIdToDelete);
   return currentAgents;
 };
 
 // TODO: Link steps to agent in data structure:
-export const getSteps = (agentId: number) => {
+export const getSteps = (agentId: number): Step[] => {
   return currentAgentSteps;
 };
 
-export const saveSteps = (step) => {
+export const saveSteps = async (step: Step): Promise<Step[]> => {
   currentAgentSteps = currentAgentSteps.concat(step);
   return currentAgentSteps;
 };
 
-export const deleteSteps = (stepIdToDelete: number) => {
+export const deleteSteps = async (stepIdToDelete: number): Promise<Step[]> => {
   currentAgentSteps = currentAgentSteps.filter(
     (step) => step.id !== stepIdToDelete
   );
