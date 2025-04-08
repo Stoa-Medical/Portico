@@ -1,4 +1,4 @@
-use crate::{IdFields, TimestampFields, call_llm, exec_python};
+use crate::{IdFields, TimestampFields, call_llm, exec_python, DatabaseItem};
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -7,8 +7,9 @@ use serde_json::Value;
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use sqlx::{Postgres, Row};
+use sqlx::{Postgres, Row, PgPool, postgres::PgArgumentBuffer};
 use chrono::NaiveDateTime;
+use async_trait::async_trait;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum StepType {
@@ -24,6 +25,13 @@ impl StepType {
             _ => Err("Invalid step type".into()),
         }
     }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            StepType::Python => "python",
+            StepType::Prompt => "prompt",
+        }
+    }
 }
 
 impl sqlx::Type<Postgres> for StepType {
@@ -35,6 +43,14 @@ impl sqlx::Type<Postgres> for StepType {
 impl<'r> sqlx::Decode<'r, Postgres> for StepType {
     fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         Self::from_str(value.as_str()?)
+    }
+}
+
+impl<'q> sqlx::Encode<'q, Postgres> for StepType {
+    fn encode_by_ref(&self, buf: &mut PgArgumentBuffer) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Send + Sync>> {
+        let s = self.as_str();
+        buf.extend_from_slice(s.as_bytes());
+        Ok(sqlx::encode::IsNull::No)
     }
 }
 
@@ -161,5 +177,102 @@ impl Step {
         } else {
             Vec::new()
         }
+    }
+}
+
+#[async_trait]
+impl DatabaseItem for Step {
+    fn id(&self) -> &IdFields {
+        &self.identifiers
+    }
+
+    async fn try_db_create(&self, pool: &PgPool) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO steps (
+                global_uuid, name, description, step_type, step_content,
+                success_count, run_count, created_timestamp, last_updated_timestamp
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            "#
+        )
+        .bind(&self.identifiers.global_uuid)
+        .bind(&self.name)
+        .bind(&self.description)
+        .bind(&self.step_type)
+        .bind(&self.step_content)
+        .bind(self.success_count.load(Ordering::Relaxed) as i32)
+        .bind(self.run_count.load(Ordering::Relaxed) as i32)
+        .bind(&self.timestamps.created)
+        .bind(&self.timestamps.updated)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn try_db_update(&self, pool: &PgPool) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE steps
+            SET name = $1,
+                description = $2,
+                step_type = $3,
+                step_content = $4,
+                success_count = $5,
+                run_count = $6,
+                last_updated_timestamp = $7
+            WHERE global_uuid = $8
+            "#
+        )
+        .bind(&self.name)
+        .bind(&self.description)
+        .bind(&self.step_type)
+        .bind(&self.step_content)
+        .bind(self.success_count.load(Ordering::Relaxed) as i32)
+        .bind(self.run_count.load(Ordering::Relaxed) as i32)
+        .bind(&self.timestamps.updated)
+        .bind(&self.identifiers.global_uuid)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn try_db_delete(&self, pool: &PgPool) -> Result<()> {
+        sqlx::query("DELETE FROM steps WHERE global_uuid = $1")
+            .bind(&self.identifiers.global_uuid)
+            .execute(pool)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn try_db_select_all(pool: &PgPool) -> Result<Vec<Self>> {
+        let rows = sqlx::query_as::<_, Step>(
+            r#"
+            SELECT * FROM steps
+            "#
+        )
+        .fetch_all(pool)
+        .await?;
+
+        Ok(rows)
+    }
+
+    async fn try_db_select_by_id(pool: &PgPool, id: &IdFields) -> Result<Option<Self>> {
+        let row = if let Some(local_id) = id.local_id {
+            sqlx::query_as::<_, Step>("SELECT * FROM steps WHERE id = $1")
+                .bind(local_id)
+                .fetch_optional(pool)
+                .await?
+        } else {
+            sqlx::query_as::<_, Step>("SELECT * FROM steps WHERE global_uuid = $1")
+                .bind(&id.global_uuid)
+                .fetch_optional(pool)
+                .await?
+        };
+
+        Ok(row)
     }
 }

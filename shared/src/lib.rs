@@ -16,7 +16,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::env;
-use sqlx::postgres::PgPool;
+use sqlx::postgres::{PgPool, PgArgumentBuffer};
 use sqlx::Postgres;
 use std::ffi::CString;
 use pyo3::prelude::*;
@@ -31,6 +31,17 @@ pub enum RunningStatus {
     Running,
     Completed,
     Cancelled,
+}
+
+impl RunningStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RunningStatus::Waiting => "waiting",
+            RunningStatus::Running => "running",
+            RunningStatus::Completed => "completed",
+            RunningStatus::Cancelled => "cancelled",
+        }
+    }
 }
 
 impl sqlx::Type<Postgres> for RunningStatus {
@@ -51,6 +62,13 @@ impl<'r> sqlx::Decode<'r, Postgres> for RunningStatus {
     }
 }
 
+impl<'q> sqlx::Encode<'q, Postgres> for RunningStatus {
+    fn encode_by_ref(&self, buf: &mut PgArgumentBuffer) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Send + Sync>> {
+        let s = self.as_str();
+        buf.extend_from_slice(s.as_bytes());
+        Ok(sqlx::encode::IsNull::No)
+    }
+}
 
 // ============ Struct definitions =============
 
@@ -110,6 +128,7 @@ impl TimestampFields {
 
 // ============ Trait definitions =============
 
+// TODO: NEXT STEP -- implement this for the different models
 /// Item that is in the `public` schema (Portico-custom, not Supabase-predefined)
 #[async_trait]
 pub trait DatabaseItem: Sized {

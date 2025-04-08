@@ -1,8 +1,9 @@
-use crate::{IdFields, RunningStatus, TimestampFields};
+use crate::{IdFields, RunningStatus, TimestampFields, DatabaseItem};
 use crate::Step;
 use anyhow::{anyhow, Result};
 use serde_json::Value;
-use sqlx::Row;
+use sqlx::{Row, PgPool};
+use async_trait::async_trait;
 
 #[derive(Debug)]
 pub struct RuntimeSession {
@@ -118,5 +119,213 @@ impl RuntimeSession {
         // Store the final result and return it
         self.last_successful_result = Some(current_value.clone());
         Ok(current_value)
+    }
+}
+
+#[async_trait]
+impl DatabaseItem for RuntimeSession {
+    fn id(&self) -> &IdFields {
+        &self.identifiers
+    }
+
+    async fn try_db_create(&self, pool: &PgPool) -> Result<()> {
+        // First create the session record
+        let record = sqlx::query(
+            r#"
+            INSERT INTO runtime_sessions (
+                global_uuid, runtime_session_status, initial_data,
+                latest_step_idx, latest_result, created_timestamp, last_updated_timestamp
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING id
+            "#
+        )
+        .bind(&self.identifiers.global_uuid)
+        .bind(&self.status)
+        .bind(&self.source_data)
+        .bind(&self.last_step_idx)
+        .bind(&self.last_successful_result)
+        .bind(&self.timestamps.created)
+        .bind(&self.timestamps.updated)
+        .fetch_one(pool)
+        .await?;
+
+        let session_id: i64 = record.get("id");
+
+        // Then create step records if any exist
+        for (idx, step) in self.steps.iter().enumerate() {
+            sqlx::query(
+                r#"
+                INSERT INTO steps (
+                    global_uuid, runtime_session_id, sequence_number, name, description,
+                    step_type, step_content, success_count, run_count,
+                    created_timestamp, last_updated_timestamp
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                "#
+            )
+            .bind(&step.identifiers.global_uuid)
+            .bind(session_id)
+            .bind(idx as i32)
+            .bind(&step.name)
+            .bind(&step.description)
+            .bind(&step.step_type)
+            .bind(&step.step_content)
+            .bind(step.get_success_count() as i32)
+            .bind(step.get_run_count() as i32)
+            .bind(&step.timestamps.created)
+            .bind(&step.timestamps.updated)
+            .execute(pool)
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn try_db_update(&self, pool: &PgPool) -> Result<()> {
+        // Update the session record
+        sqlx::query(
+            r#"
+            UPDATE runtime_sessions
+            SET runtime_session_status = $1,
+                initial_data = $2,
+                latest_step_idx = $3,
+                latest_result = $4,
+                last_updated_timestamp = $5
+            WHERE global_uuid = $6
+            "#
+        )
+        .bind(&self.status)
+        .bind(&self.source_data)
+        .bind(&self.last_step_idx)
+        .bind(&self.last_successful_result)
+        .bind(&self.timestamps.updated)
+        .bind(&self.identifiers.global_uuid)
+        .execute(pool)
+        .await?;
+
+        // Steps should be updated through their own DatabaseItem implementation
+        // since they have their own identifiers and lifecycle
+
+        Ok(())
+    }
+
+    async fn try_db_delete(&self, pool: &PgPool) -> Result<()> {
+        // First delete associated steps
+        if let Some(id) = self.identifiers.local_id {
+            sqlx::query("DELETE FROM steps WHERE runtime_session_id = $1")
+                .bind(id)
+                .execute(pool)
+                .await?;
+        }
+
+        // Then delete the session
+        sqlx::query("DELETE FROM runtime_sessions WHERE global_uuid = $1")
+            .bind(&self.identifiers.global_uuid)
+            .execute(pool)
+            .await?;
+
+        Ok(())
+    }
+
+    async fn try_db_select_all(pool: &PgPool) -> Result<Vec<Self>> {
+        let rows = sqlx::query_as::<_, Self>(
+            r#"
+            SELECT
+                rs.*,
+                COALESCE(
+                    (
+                        SELECT json_agg(json_build_object(
+                            'id', s.id,
+                            'global_uuid', s.global_uuid,
+                            'created_timestamp', s.created_timestamp,
+                            'last_updated_timestamp', s.last_updated_timestamp,
+                            'name', s.name,
+                            'description', s.description,
+                            'step_type', s.step_type,
+                            'step_content', s.step_content,
+                            'success_count', s.success_count,
+                            'run_count', s.run_count
+                        ))
+                        FROM steps s
+                        WHERE s.runtime_session_id = rs.id
+                        ORDER BY s.sequence_number
+                    ),
+                    '[]'::json
+                ) as steps
+            FROM runtime_sessions rs
+            "#
+        )
+        .fetch_all(pool)
+        .await?;
+
+        Ok(rows)
+    }
+
+    async fn try_db_select_by_id(pool: &PgPool, id: &IdFields) -> Result<Option<Self>> {
+        let query = if let Some(local_id) = id.local_id {
+            sqlx::query_as::<_, Self>(
+                r#"
+                SELECT
+                    rs.*,
+                    COALESCE(
+                        (
+                            SELECT json_agg(json_build_object(
+                                'id', s.id,
+                                'global_uuid', s.global_uuid,
+                                'created_timestamp', s.created_timestamp,
+                                'last_updated_timestamp', s.last_updated_timestamp,
+                                'name', s.name,
+                                'description', s.description,
+                                'step_type', s.step_type,
+                                'step_content', s.step_content,
+                                'success_count', s.success_count,
+                                'run_count', s.run_count
+                            ))
+                            FROM steps s
+                            WHERE s.runtime_session_id = rs.id
+                            ORDER BY s.sequence_number
+                        ),
+                        '[]'::json
+                    ) as steps
+                FROM runtime_sessions rs
+                WHERE rs.id = $1
+                "#
+            )
+            .bind(local_id)
+        } else {
+            sqlx::query_as::<_, Self>(
+                r#"
+                SELECT
+                    rs.*,
+                    COALESCE(
+                        (
+                            SELECT json_agg(json_build_object(
+                                'id', s.id,
+                                'global_uuid', s.global_uuid,
+                                'created_timestamp', s.created_timestamp,
+                                'last_updated_timestamp', s.last_updated_timestamp,
+                                'name', s.name,
+                                'description', s.description,
+                                'step_type', s.step_type,
+                                'step_content', s.step_content,
+                                'success_count', s.success_count,
+                                'run_count', s.run_count
+                            ))
+                            FROM steps s
+                            WHERE s.runtime_session_id = rs.id
+                            ORDER BY s.sequence_number
+                        ),
+                        '[]'::json
+                    ) as steps
+                FROM runtime_sessions rs
+                WHERE rs.global_uuid = $1
+                "#
+            )
+            .bind(&id.global_uuid)
+        };
+
+        let result = query.fetch_optional(pool).await?;
+        Ok(result)
     }
 }
