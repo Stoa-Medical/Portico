@@ -87,4 +87,31 @@ describe("agents.test.ts - Agents Page", () => {
 
     expect(newAgentInTable).toBeInTheDocument();
   });
+
+  it("allows a user to edit an existing agent", async () => {
+    t.render();
+
+    // Open the details of "Test Agent 1"
+    const agent1 = await screen.findByText("Test Agent 1");
+    fireEvent.click(agent1);
+
+    await screen.findByText("General");
+
+    // Modify the name field
+    const nameInput = screen.getByLabelText("Agent Name");
+    fireEvent.input(nameInput, {
+      target: { value: "Test Updated Agent Name" },
+    });
+
+    // Save changes
+    const saveButton = screen.getByText("Save Changes");
+    fireEvent.click(saveButton);
+
+    // Assert that the updated name appears in the table
+    const table = await screen.findByRole("table");
+    const updatedAgentInTable = within(table).getByText(
+      "Test Updated Agent Name"
+    );
+    expect(updatedAgentInTable).toBeInTheDocument();
+  });
 });
