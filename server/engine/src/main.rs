@@ -8,6 +8,7 @@ use anyhow::{anyhow, Result};
 
 use portico_engine::{read_json_message, BridgeMessage};
 use portico_shared::models::{Agent, RuntimeSession};
+use portico_shared::DatabaseItem;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -52,9 +53,9 @@ async fn main() -> Result<()> {
         .await
         .expect("Failed to fetch agents from database");
 
-    let agent_map: HashMap<&str, Agent> = agents
+    let agent_map: HashMap<String, Agent> = agents
         .into_iter()
-        .map(|agent| (&agent.identifiers.global_uuid, agent))
+        .map(|agent| (agent.identifiers.clone().global_uuid, agent))
         .collect();
 
     // Start event loop -- wait and listen to `listener`
