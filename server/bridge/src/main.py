@@ -74,7 +74,7 @@ async def main():
     # Set up Supabase realtime subscriptions
     channel_signals = client.channel("signal-inserts")
     channel_agents = client.channel("agent-changes")
-    channel_steps = client.channel("step-changes")
+    # channel_steps = client.channel("step-changes")
 
     # Subscribe to changes on the `signals` table (only when added)
     channel_signals.on_postgres_changes(
@@ -96,15 +96,15 @@ async def main():
         schema="public",
     )
 
-    # Subscribe to Step changes
-    channel_steps.on_postgres_changes(
-        event="*",
-        callback=lambda payload, handler=handle_general_update: asyncio.create_task(
-            handler(payload, engine_socket_conn)
-        ),
-        table="steps",
-        schema="public",
-    )
+    # # Subscribe to Step changes
+    # channel_steps.on_postgres_changes(
+    #     event="*",
+    #     callback=lambda payload, handler=handle_general_update: asyncio.create_task(
+    #         handler(payload, engine_socket_conn)
+    #     ),
+    #     table="steps",
+    #     schema="public",
+    # )
 
     # Subscribe to all the channels
     channel_list = [channel_signals, channel_agents, channel_steps]

@@ -1,27 +1,18 @@
 use dotenvy::dotenv;
-use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::env;
-use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
-use std::sync::{Arc, Mutex};
-use std::thread;
+use std::net::TcpListener;
 use std::time::Duration;
-use tokio::runtime::Runtime;
 use sqlx::postgres::PgPoolOptions;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
-use portico_engine::read_json_message;
-use portico_shared::models::{Agent, RuntimeSession, Signal, Step};
-use portico_shared::{IdFields, RunningStatus, TimestampFields};
+use portico_engine::{read_json_message, BridgeMessage};
+use portico_shared::models::{Agent, RuntimeSession};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // Read Config
-    // - Load environment variables
     dotenv().ok();
-
-    // - Read environment configuration
     let port: u16 = env::var("TCPIP_PORT")
         .expect("TCPIP_PORT needs to be specified")
         .parse()
@@ -43,38 +34,53 @@ async fn main() -> Result<()> {
 
     // Read and validate init message
     let init_message = read_json_message(&mut stream)?;
-    if init_message.get("server-init").is_some() {
+    if let BridgeMessage::ServerInit(true) = init_message {
         println!("Received init message from bridge service");
     } else {
-        return Err(anyhow::anyhow!("Expected init message, got something else"));
+        return Err(anyhow!("Expected init message with server-init: true, got something else"));
     }
-
     println!("Bridge service initialized successfully");
 
-    // Connect to database
-    let pool = PgPoolOptions::new()
+    // Connect to database (share pooled connection)
+    let db_conn_pool = PgPoolOptions::new()
         .connect(&db_url)
         .await?;
-
     println!("Connected to the database successfully");
 
     // Pull corresponding `Agents` and corresponding `Steps`
-    let agents: Vec<Agent> = Agent::try_db_select_all(&pool);
+    let agents: Vec<Agent> = Agent::try_db_select_all(&db_conn_pool)
+        .await
+        .expect("Failed to fetch agents from database");
 
-    // Start event loop -- respond to bridge messages.
+    let agent_map: HashMap<&str, Agent> = agents
+        .into_iter()
+        .map(|agent| (&agent.identifiers.global_uuid, agent))
+        .collect();
+
+    // Start event loop -- wait and listen to `listener`
+    // TODO: Can this be an async loop? E.g. incoming messages aren't blocked
     loop {
-        // - CREATE Signal with data: run requested Agent
-        // - CREATE Agent/Step: make a new model
-        // - UPDATE Agent/Step: update the in-memory object
-        // - DELETE Agent/Step: drop the in-memory object
-        // Event loop --
-        //   Event loop will run on different threads. So will need a locking mechanism to avoid race conditions
-        //   Implement as an in-memory Message queue. Clone the `Agent` + `Step` state for each Thread (so "pure" function achieved)
+        // Accept new messages from the bridge service
+        match read_json_message(&mut stream) {
+            Ok(message) => {
+                println!("Received message: {:?}", message);
+                // Process message here
+                // TODO: Implement message handling logic
+            },
+            Err(e) => {
+                // Check if the error is due to connection being closed
+                if e.to_string().contains("connection reset") ||
+                   e.to_string().contains("broken pipe") ||
+                   e.to_string().contains("connection refused") {
+                    println!("Bridge service disconnected: {}", e);
+                    break;
+                }
 
+                // Log other errors but continue the loop
+                eprintln!("Error reading message: {}", e);
+            }
+        }
     }
-
-
-    // If get exit signal: clean up resources before exiting
 
     Ok(())
 }
