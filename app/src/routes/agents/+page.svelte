@@ -51,15 +51,20 @@
   };
   
   // Agent types for dropdown
-  const agentTypes = ['Assistant', 'Researcher', 'Analyst', 'Custom'];
+  const agentTypes = [
+    { value: 'Assistant', name: 'Assistant' },
+    { value: 'Researcher', name: 'Researcher' },
+    { value: 'Analyst', name: 'Analyst' },
+    { value: 'Custom', name: 'Custom' }
+  ];
   
   // Available models
   const models = [
-    'gpt-4',
-    'gpt-3.5-turbo',
-    'claude-3-opus',
-    'claude-3-sonnet',
-    'llama-3'
+    { value: 'gpt-4', name: 'GPT-4' },
+    { value: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
+    { value: 'claude-3-opus', name: 'Claude 3 Opus' },
+    { value: 'claude-3-sonnet', name: 'Claude 3 Sonnet' },
+    { value: 'llama-3', name: 'Llama 3' }
   ];
   
   // Available capabilities
@@ -174,10 +179,10 @@
   <PageHeader title="Agents" breadcrumbs={breadcrumbs} actionBar={getActions()}/>
   
   <!-- Master-Detail View -->
-  <div class="grid grid-cols-1 {selectedAgent ? 'lg:grid-cols-3 gap-6' : ''}">
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
     <!-- Agents List (Master View) -->
     <div class="{selectedAgent ? 'hidden lg:block' : 'block'}">
-    <Card class="max-w-full">
+      <Card class="max-w-full">
         <Table hoverable={true}>
           <TableHead>
             <TableHeadCell>Name</TableHeadCell>
