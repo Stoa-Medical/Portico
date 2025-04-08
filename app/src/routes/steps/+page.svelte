@@ -1,4 +1,5 @@
 <script>
+  import PageHeader from './../../lib/components/PageHeader.svelte';
   import { 
     Card, 
     Button, 
@@ -86,24 +87,23 @@
   function navigateToStep(id) {
     window.location.href = `/steps/${id}`;
   }
+
+  const breadcrumbs = [
+    { label: "Home", url: "/" },
+    { label: "Steps", url: "/steps" },
+  ];
+  const actionBar = [{
+    label: "Add Step",
+    icon: PlusOutline,
+    color: "blue",
+    onClick: () => showModal = true
+  }];
 </script>
 
 <main class="container mx-auto p-4">
   <!-- Page Header with Breadcrumb -->
-  <div class="mb-6">
-    <Breadcrumb class="mb-4">
-      <BreadcrumbItem href="/" home>Home</BreadcrumbItem>
-      <BreadcrumbItem>Steps</BreadcrumbItem>
-    </Breadcrumb>
-    
-    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-      <Heading tag="h1" class="text-2xl font-bold">Steps</Heading>
-      <Button class="self-start" color="blue" on:click={() => showModal = true}>
-        <PlusOutline class="mr-2 h-5 w-5" />
-        Add Step
-      </Button>
-    </div>
-  </div>
+  <PageHeader title="Steps" breadcrumbs={breadcrumbs} actionBar={actionBar}/>
+
   
   <!-- Steps List -->
   <Card class="max-w-full">
