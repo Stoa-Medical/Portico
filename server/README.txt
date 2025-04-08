@@ -5,8 +5,6 @@ To run with database: `docker compose up`
 
 REPO STRUCTURE
 - `engine` is the core server (Rust)
-- `runtime` is a script that `engine` runs on a separate process
-    - Each process has its own async runtime
 - `supabase` is config for Supabase instance
 - `bridge` is lightweight middle service for handling Supabase stuff, e.g.:
     1. Forwarding Supabase Realtime changes

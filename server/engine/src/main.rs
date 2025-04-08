@@ -51,27 +51,27 @@ async fn main() -> Result<()> {
 
     println!("Bridge service initialized successfully");
 
-
     // Connect to database
     let pool = PgPoolOptions::new()
         .connect(&db_url)
         .await?;
 
-    println!("Connected to the database");
+    println!("Connected to the database successfully");
 
     // Pull corresponding `Agents` and corresponding `Steps`
     let agents: Vec<Agent> = Agent::try_db_select_all(&pool);
-    let steps: Vec<Step> = Step::try_db_select_all(&pool);
 
     // Start event loop -- respond to bridge messages.
-    // - CREATE Signal with data: run requested Agent
-    // - CREATE Agent/Step: make a new model
-    // - UPDATE Agent/Step: update the in-memory object
-    // - DELETE Agent/Step: drop the in-memory object
-    // Event loop --
-    //   Event loop will run on different threads. So will need a locking mechanism to avoid race conditions
-    //   Implement as an in-memory Message queue. Clone the `Agent` + `Step` state for each Thread (so "pure" function achieved)
+    loop {
+        // - CREATE Signal with data: run requested Agent
+        // - CREATE Agent/Step: make a new model
+        // - UPDATE Agent/Step: update the in-memory object
+        // - DELETE Agent/Step: drop the in-memory object
+        // Event loop --
+        //   Event loop will run on different threads. So will need a locking mechanism to avoid race conditions
+        //   Implement as an in-memory Message queue. Clone the `Agent` + `Step` state for each Thread (so "pure" function achieved)
 
+    }
 
 
     // If get exit signal: clean up resources before exiting
