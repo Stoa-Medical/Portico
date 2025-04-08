@@ -24,7 +24,7 @@
   } from 'flowbite-svelte';
   import { PlusOutline, ArrowLeftOutline, TrashBinOutline } from 'flowbite-svelte-icons';
   import PageHeader from '../../lib/components/PageHeader.svelte';
-  import { getAgents, getSteps } from './api';
+  import { getAgents, getSteps, deleteAgent } from './api';
   
   let agents;
 
@@ -132,9 +132,10 @@
   }
   
   // Handle agent deletion
-  function deleteAgent() {
+  async function deleteAgentClick () {
     if (confirm('Are you sure you want to delete this agent?')) {
-      agents = agents.filter(a => a.id !== selectedAgent.id);
+      const deleteAgentResponse = await deleteAgent(selectedAgent.id);
+      agents = deleteAgentResponse;
       selectedAgent = null;
     }
   }
@@ -162,7 +163,7 @@
 
   const getActions = () => selectedAgent
     ? [
-        { label: 'Delete', onClick: deleteAgent, icon: TrashBinOutline, color: 'red' },
+        { label: 'Delete', onClick: deleteAgentClick, icon: TrashBinOutline, color: 'red' },
         { label: 'Save Changes', onClick: saveChanges, color: 'blue' }
       ]
     : [

@@ -6,7 +6,7 @@ type AgentLLMConfig = {
   presencePenalty: number;
 };
 
-type Agent = {
+export type Agent = {
   id: number;
   name: string;
   status: "Active" | "Idle" | "Inactive";
@@ -21,7 +21,7 @@ type Agent = {
   createdAt: string;
 };
 
-type Step = {
+export type Step = {
   id: number;
   name: string;
   type: "Python" | "Prompt" | string;

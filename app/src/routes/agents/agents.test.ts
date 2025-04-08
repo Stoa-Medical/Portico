@@ -1,26 +1,31 @@
-import { render, screen } from "@testing-library/svelte";
+import { render, screen, fireEvent } from "@testing-library/svelte";
 import AgentsPage from "./+page.svelte";
+import { deleteAgent } from "./api";
 
 // Mocking the `api.js` file
-vi.mock("./api", () => ({
-  getAgents: vi.fn().mockResolvedValue([
-    {
-      id: 1,
-      name: "Test Agent 1",
-      type: "Assistant",
-      status: "Active",
-      lastActive: "2025-04-07",
-    },
-    {
-      id: 2,
-      name: "Test Agent 2",
-      type: "Researcher",
-      status: "Inactive",
-      lastActive: "2025-04-06",
-    },
-  ]),
-  getAgentSteps: vi.fn().mockReturnValue([]),
-}));
+vi.mock("./api", async () => {
+  const originalModule = await vi.importActual("./api");
+  return {
+    getAgents: vi.fn().mockResolvedValue([
+      {
+        id: 1,
+        name: "Test Agent 1",
+        type: "Assistant",
+        status: "Active",
+        lastActive: "2025-04-07",
+      },
+      {
+        id: 2,
+        name: "Test Agent 2",
+        type: "Researcher",
+        status: "Inactive",
+        lastActive: "2025-04-06",
+      },
+    ]),
+    getAgentSteps: vi.fn().mockReturnValue([]),
+    deleteAgent: originalModule.deleteAgent,
+  };
+});
 
 const t = {
   render: () => render(AgentsPage),
@@ -30,11 +35,29 @@ describe("agents.test.ts - Agents Page", () => {
   it("renders the list of agents", async () => {
     t.render();
 
-    // Then ensure agents are fetched and rendered:
+    // Then agents are fetched and rendered:
     const agent1 = await screen.findByText("Test Agent 1");
     const agent2 = await screen.findByText("Test Agent 2");
 
     expect(agent1).toBeInTheDocument();
     expect(agent2).toBeInTheDocument();
+  });
+
+  it("allows a user to delete an existing agent from the list", async () => {
+    t.render();
+
+    // When the user opens the agent
+    const agent1 = await screen.findByText("Test Agent 1");
+    fireEvent.click(agent1);
+
+    // Set up confirmation to click OK on the confirm dialog (simulated)
+    vi.spyOn(window, "confirm").mockReturnValueOnce(true);
+
+    // Then clicks the delete button and confirms
+    const deleteButton = await screen.findByText("Delete");
+    await fireEvent.click(deleteButton);
+
+    // Then the agent is removed from the list
+    expect(screen.queryByText("Test Agent 1")).not.toBeInTheDocument();
   });
 });
