@@ -119,7 +119,10 @@ export const getAgents = async (): Promise<Agent[]> => {
 };
 
 export const saveAgent = async (agent: Agent): Promise<Agent[]> => {
-  currentAgents = currentAgents.concat(agent);
+  currentAgents = currentAgents.concat({
+    ...agent,
+    id: currentAgents.length + 1,
+  });
   return currentAgents;
 };
 

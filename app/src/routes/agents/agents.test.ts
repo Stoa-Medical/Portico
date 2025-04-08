@@ -1,6 +1,5 @@
-import { render, screen, fireEvent } from "@testing-library/svelte";
+import { render, within, screen, fireEvent } from "@testing-library/svelte";
 import AgentsPage from "./+page.svelte";
-import { deleteAgent } from "./api";
 
 // Mocking the `api.js` file
 vi.mock("./api", async () => {
@@ -24,6 +23,7 @@ vi.mock("./api", async () => {
     ]),
     getAgentSteps: vi.fn().mockReturnValue([]),
     deleteAgent: originalModule.deleteAgent,
+    saveAgent: originalModule.saveAgent,
   };
 });
 
@@ -59,5 +59,32 @@ describe("agents.test.ts - Agents Page", () => {
 
     // Then the agent is removed from the list
     expect(screen.queryByText("Test Agent 1")).not.toBeInTheDocument();
+  });
+
+  it("allows a user to create a new agent", async () => {
+    t.render();
+
+    // When you click the 'Add Agent' button in the action bar
+    const addButton = await screen.findByText("Add Agent");
+    fireEvent.click(addButton);
+
+    // Wait for the modal to appear by checking for the title
+    const modalTitle = await screen.findByText("Add New Agent");
+    expect(modalTitle).toBeInTheDocument();
+
+    // Then fill out the agent name
+    fireEvent.input(screen.getByPlaceholderText("Enter agent name"), {
+      target: { value: "New Agent Test" },
+    });
+
+    // Then submit the modal form
+    const submitButton = await screen.findByText("Create");
+    fireEvent.click(submitButton);
+
+    // Then the new agent is added to the table
+    const table = await screen.findByRole("table");
+    const newAgentInTable = within(table).getByText("New Agent Test");
+
+    expect(newAgentInTable).toBeInTheDocument();
   });
 });

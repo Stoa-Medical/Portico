@@ -24,7 +24,7 @@
   } from 'flowbite-svelte';
   import { PlusOutline, ArrowLeftOutline, TrashBinOutline } from 'flowbite-svelte-icons';
   import PageHeader from '../../lib/components/PageHeader.svelte';
-  import { getAgents, getSteps, deleteAgent } from './api';
+  import { getAgents, getSteps, deleteAgent, saveAgent } from './api';
   
   let agents;
 
@@ -43,7 +43,7 @@
   let showModal = false;
   
   // Form data for new agent
-  let newAgent = {
+  let agentFormData = {
     name: '',
     type: 'Assistant',
     description: '',
@@ -76,17 +76,13 @@
   ];
   
   // Handle form submission
-  function handleSubmit() {
-    // Add new agent to the list
-    const id = agents.length > 0 ? Math.max(...agents.map(a => a.id)) + 1 : 1;
-    
-    const newAgentComplete = {
-      id,
-      name: newAgent.name,
-      status: newAgent.isActive ? 'Active' : 'Inactive',
-      type: newAgent.type,
+  async function handleSubmit() {
+    const newAgent = {
+      name: agentFormData.name,
+      status: agentFormData.isActive ? 'Active' : 'Inactive',
+      type: agentFormData.type,
       lastActive: 'Just now',
-      description: newAgent.description,
+      description: agentFormData.description,
       settings: {
         temperature: 0.7,
         maxTokens: 2048,
@@ -95,25 +91,25 @@
         presencePenalty: 0.5
       },
       capabilities: ['Text Generation'],
-      isActive: newAgent.isActive,
+      isActive: agentFormData.isActive,
       model: 'gpt-4',
       apiKey: 'sk-••••••••••••••••••••••••',
       createdAt: new Date().toISOString().split('T')[0]
     };
     
-    agents = [...agents, newAgentComplete];
+    agents = await saveAgent(newAgent);
     
     // Reset form and close modal
     resetForm();
     showModal = false;
     
     // Select the newly created agent
-    selectedAgent = newAgentComplete;
+    selectedAgent = newAgent;
   }
   
   // Reset form fields
   function resetForm() {
-    newAgent = {
+    agentFormData = {
       name: '',
       type: 'Assistant',
       description: '',
@@ -392,30 +388,30 @@
   
   <!-- Add Agent Modal -->
   <Modal title="Add New Agent" bind:open={showModal} autoclose>
-    <form on:submit|preventDefault={handleSubmit} class="space-y-4">
+    <form on:submit={handleSubmit} class="space-y-4">
       <div>
         <Label for="name" class="mb-2">Agent Name</Label>
-        <Input id="name" placeholder="Enter agent name" required bind:value={newAgent.name} />
+        <Input id="name" placeholder="Enter agent name" required bind:value={agentFormData.name} />
       </div>
       
       <div>
         <Label for="type" class="mb-2">Agent Type</Label>
-        <Select id="type" items={agentTypes} bind:value={newAgent.type} />
+        <Select id="type" items={agentTypes} bind:value={agentFormData.type} />
       </div>
       
       <div>
         <Label for="description" class="mb-2">Description</Label>
-        <Textarea id="description" placeholder="Enter agent description" rows="3" bind:value={newAgent.description} />
+        <Textarea id="description" placeholder="Enter agent description" rows="3" bind:value={agentFormData.description} />
       </div>
       
       <div class="flex items-center gap-2">
-        <Checkbox id="isActive" bind:checked={newAgent.isActive} />
+        <Checkbox id="isActive" bind:checked={agentFormData.isActive} />
         <Label for="isActive">Active</Label>
       </div>
       
       <div class="flex justify-end gap-4">
         <Button color="alternative" on:click={() => { showModal = false; resetForm(); }}>Cancel</Button>
-        <Button type="submit" color="blue">Add Agent</Button>
+        <Button type="submit" on:click={handleSubmit} color="blue">Create</Button>
       </div>
     </form>
   </Modal>
