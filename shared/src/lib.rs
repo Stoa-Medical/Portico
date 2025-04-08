@@ -123,14 +123,32 @@ pub trait DatabaseItem: Sized {
 
 // ============ Shared functions ============
 
-// TODO: Add various supported TogetherAI models
+// Prefer JSON-mode supported models. Docs: https://docs.together.ai/docs/json-mode
+pub enum JsonModeLLMs {
+    MetaLlama33_70b,
+    Qwen25_72b,
+    DeepseekV3_671b,
+}
+
+impl std::fmt::Display for JsonModeLLMs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let model_name = match self {
+            JsonModeLLMs::MetaLlama33_70b => "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            JsonModeLLMs::DeepseekV3_671b => "deepseek-ai/DeepSeek-V3",
+            JsonModeLLMs::Qwen25_72b => "Qwen/Qwen2.5-VL-72B-Instruct",
+        };
+        write!(f, "{}", model_name)
+    }
+}
+
+// TODO: Add options to use different LLMs
 pub async fn call_llm(prompt: &str, context: Value) -> Result<String> {
     let api_key = env::var("LLM_API_KEY").unwrap();
     let api_endpoint = env::var("LLM_API_ENDPOINT").unwrap();
 
     let request = serde_json::json!({
-        "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-        "prompt": format!("{} | Context: {}", prompt, context),
+        "model": JsonModeLLMs::MetaLlama33_70b.to_string(),
+        "prompt": format!("{} | Context: ```json\n{}\n```", prompt, context),
         "max_tokens": 1000,
         "temperature": 0.7
     });
