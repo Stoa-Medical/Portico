@@ -9,8 +9,8 @@ type AgentLLMConfig = {
 export type Agent = {
   id: number;
   name: string;
-  status: "Active" | "Idle" | "Inactive";
-  type: "Assistant" | "Researcher" | "Analyst" | string;
+  status: string;
+  type: string;
   lastActive: string;
   description: string;
   settings: AgentLLMConfig;
@@ -28,6 +28,13 @@ export type Step = {
   type: "Python" | "Prompt" | string;
   lastEdited: string;
 };
+
+// Omit "id" field for creation:
+export type CreateAgentPayload = Omit<Agent, "id">;
+
+// Allow partial Step and Agent updates:
+export type UpdateStepPayload = Partial<Step> & { id: number };
+export type UpdateAgentPayload = Partial<Agent> & { id: number };
 
 let currentAgents: Agent[] = [
   {
@@ -122,11 +129,22 @@ export const getAgents = async (): Promise<Agent[]> => {
   return currentAgents;
 };
 
-export const saveAgent = async (agent: Agent): Promise<Agent[]> => {
+export const saveAgent = async (
+  agent: CreateAgentPayload
+): Promise<Agent[]> => {
   currentAgents = currentAgents.concat({
     ...agent,
     id: currentAgents.length + 1,
   });
+  return currentAgents;
+};
+
+export const updateAgent = async (
+  updatedAgent: UpdateAgentPayload
+): Promise<Agent[]> => {
+  currentAgents = currentAgents.map((agent) =>
+    agent.id === updatedAgent.id ? { ...agent, ...updatedAgent } : agent
+  );
   return currentAgents;
 };
 
@@ -141,12 +159,24 @@ export const getSteps = (agentId: number): Step[] => {
   return currentAgentSteps.filter((step) => step.agentId === agentId);
 };
 
-export const saveSteps = async (step: Step): Promise<Step[]> => {
-  currentAgentSteps = currentAgentSteps.concat(step);
+export const saveStep = async (step: Step): Promise<Step[]> => {
+  currentAgentSteps = currentAgentSteps.concat({
+    ...step,
+    id: currentAgentSteps.length + 1,
+  });
   return currentAgentSteps;
 };
 
-export const deleteSteps = async (stepIdToDelete: number): Promise<Step[]> => {
+export const updateStep = async (
+  updatedStep: UpdateStepPayload
+): Promise<Step[]> => {
+  currentAgentSteps = currentAgentSteps.map((step) =>
+    step.id === updatedStep.id ? { ...step, ...updatedStep } : step
+  );
+  return currentAgentSteps;
+};
+
+export const deleteStep = async (stepIdToDelete: number): Promise<Step[]> => {
   currentAgentSteps = currentAgentSteps.filter(
     (step) => step.id !== stepIdToDelete
   );
