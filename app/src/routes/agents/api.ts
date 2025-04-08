@@ -88,8 +88,13 @@ export const getAgents = async () => {
   return currentAgents;
 };
 
-export const saveAgent = async (agentConfig) => {
-  currentAgents = currentAgents.concat(agentConfig);
+export const saveAgent = async (agent) => {
+  currentAgents = currentAgents.concat(agent);
+  return currentAgents;
+};
+
+export const deleteAgent = async (agentIdToDelete: number) => {
+  currentAgents = currentAgents.filter((agent) => agent.id !== agentIdToDelete);
   return currentAgents;
 };
 
@@ -98,12 +103,14 @@ export const getSteps = (agentId: number) => {
   return currentAgentSteps;
 };
 
-export const saveSteps = (stepConfig) => {
-  currentAgentSteps = currentAgentSteps.concat(stepConfig);
+export const saveSteps = (step) => {
+  currentAgentSteps = currentAgentSteps.concat(step);
   return currentAgentSteps;
 };
 
-export const deleteSteps = (stepId: number) => {
-  currentAgentSteps = currentAgentSteps.filter((step) => step.id !== stepId);
+export const deleteSteps = (stepIdToDelete: number) => {
+  currentAgentSteps = currentAgentSteps.filter(
+    (step) => step.id !== stepIdToDelete
+  );
   return currentAgentSteps;
 };
