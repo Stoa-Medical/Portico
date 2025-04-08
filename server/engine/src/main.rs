@@ -2,11 +2,17 @@ use dotenvy::dotenv;
 use std::collections::HashMap;
 use std::env;
 use std::net::TcpListener;
+use std::sync::Arc;
 use std::time::Duration;
 use sqlx::postgres::PgPoolOptions;
 use anyhow::{anyhow, Result};
+use tokio::sync::RwLock;
 
-use portico_engine::{read_json_message, BridgeMessage};
+use portico_engine::{
+    read_json_message, BridgeMessage,
+    handle_create_signal, handle_create_agent,
+    handle_update_agent, handle_delete_agent
+};
 use portico_shared::models::{Agent, RuntimeSession};
 use portico_shared::DatabaseItem;
 
@@ -53,20 +59,60 @@ async fn main() -> Result<()> {
         .await
         .expect("Failed to fetch agents from database");
 
-    let agent_map: HashMap<String, Agent> = agents
-        .into_iter()
-        .map(|agent| (agent.identifiers.clone().global_uuid, agent))
-        .collect();
+    // Create a thread-safe agent map
+    let agent_map: Arc<RwLock<HashMap<String, Agent>>> = Arc::new(RwLock::new(
+        agents
+            .into_iter()
+            .map(|agent| (agent.identifiers.global_uuid.clone(), agent))
+            .collect()
+    ));
 
     // Start event loop -- wait and listen to `listener`
-    // TODO: Can this be an async loop? E.g. incoming messages aren't blocked
     loop {
         // Accept new messages from the bridge service
         match read_json_message(&mut stream) {
             Ok(message) => {
                 println!("Received message: {:?}", message);
-                // Process message here
-                // TODO: Implement message handling logic
+
+                // Process message based on its type
+                match message {
+                    BridgeMessage::ServerInit(_) => {
+                        // Already handled during initialization
+                        println!("Received duplicate ServerInit message");
+                    },
+                    BridgeMessage::CreateSignal(data) => {
+                        // Handle signal creation
+                        let agent_map_clone = agent_map.clone();
+                        let pool_clone = db_conn_pool.clone();
+                        tokio::spawn(async move {
+                            handle_create_signal(data, agent_map_clone, pool_clone).await;
+                        });
+                    },
+                    BridgeMessage::CreateAgent(data) => {
+                        // Handle agent creation
+                        let agent_map_clone = agent_map.clone();
+                        let pool_clone = db_conn_pool.clone();
+                        tokio::spawn(async move {
+                            handle_create_agent(data, agent_map_clone, pool_clone).await;
+                        });
+                    },
+                    BridgeMessage::UpdateAgent(data) => {
+                        // Handle agent update
+                        let agent_map_clone = agent_map.clone();
+                        let pool_clone = db_conn_pool.clone();
+                        tokio::spawn(async move {
+                            handle_update_agent(data, agent_map_clone, pool_clone).await;
+                        });
+                    },
+                    BridgeMessage::DeleteAgent(data) => {
+                        // Handle agent deletion
+                        let agent_map_clone = agent_map.clone();
+                        let pool_clone = db_conn_pool.clone();
+                        tokio::spawn(async move {
+                            handle_delete_agent(data, agent_map_clone, pool_clone).await;
+                        });
+                    },
+                }
             },
             Err(e) => {
                 // Check if the error is due to connection being closed
