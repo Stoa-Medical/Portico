@@ -5,6 +5,7 @@ import { PlusOutline, TrashBinOutline } from "flowbite-svelte-icons";
 const breadcrumbs = [
   { label: "Home", url: "/" },
   { label: "Agents", url: "/agents" },
+  { label: "Agent Detail", url: "/agents/1" },
 ];
 
 const actions = [
