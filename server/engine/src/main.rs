@@ -11,7 +11,7 @@ use tokio::runtime::Runtime;
 use sqlx::postgres::PgPoolOptions;
 use anyhow::Result;
 
-// Import our model abstractions
+use portico_engine::read_json_message;
 use portico_shared::models::{Agent, RuntimeSession, Signal, Step};
 use portico_shared::{IdFields, RunningStatus, TimestampFields};
 
@@ -30,18 +30,6 @@ async fn main() -> Result<()> {
         .expect("POSTGRES_DB_URI needs to be specified")
         .parse()
         .unwrap();
-    let n_cores: u16 = std::thread::available_parallelism().unwrap().get().try_into().unwrap();
-    let thread_multiplier: u16 = env::var("RUNTIME_THREAD_MULTIPLIER")
-        .expect("RUNTIME_THREAD_MULTIPLIER needs to be specified")
-        .parse()
-        .expect("RUNTIME_THREAD_MULTIPLIER should be an integer");
-    let thread_count = n_cores * thread_multiplier;
-
-    println!(
-        "Configuration loaded: PORT={}, thread_count={}",
-        port, thread_count
-    );
-
 
     // Start TCP/IP Listener from the bridge service
     println!("Starting TCP listener on port {}", port);
@@ -71,16 +59,9 @@ async fn main() -> Result<()> {
 
     println!("Connected to the database");
 
-
-    // Initialize process pool
-
-
     // Pull corresponding `Agents` and corresponding `Steps`
     let agents: Vec<Agent> = Agent::try_db_select_all(&pool);
     let steps: Vec<Step> = Step::try_db_select_all(&pool);
-
-
-
 
     // Start event loop -- respond to bridge messages.
     // - CREATE Signal with data: run requested Agent
@@ -96,15 +77,4 @@ async fn main() -> Result<()> {
     // If get exit signal: clean up resources before exiting
 
     Ok(())
-}
-
-fn read_json_message(stream: &mut TcpStream) -> Result<Value> {
-    let mut buffer = [0; 1024];
-    let size = stream.read(&mut buffer)?;
-    let data = String::from_utf8_lossy(&buffer[0..size]);
-
-    match serde_json::from_str::<Value>(&data) {
-        Ok(json) => Ok(json),
-        Err(e) => Err(anyhow::anyhow!("Failed to parse JSON: {}", e))
-    }
 }

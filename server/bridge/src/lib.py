@@ -20,12 +20,24 @@ async def send_signal_to_engine(
         # Prepare the signal message
         message = json.dumps(data).encode("utf-8")
 
-        # Send the message
-        sock.sendall(message)
+        # Prefix with message length (4 bytes, big-endian)
+        message_length = len(message)
+        length_prefix = message_length.to_bytes(4, byteorder="big")
+
+        # Send the length prefix followed by the message
+        sock.sendall(length_prefix + message)
         logger.info(f"Sent message to engine ({meta})")
 
-        # Receive the response
-        response_data = sock.recv(4096)
+        # Receive the response - first read 4-byte length
+        length_data = sock.recv(4)
+        if not length_data or len(length_data) < 4:
+            logger.error("Failed to receive message length from engine")
+            return None
+
+        response_length = int.from_bytes(length_data, byteorder="big")
+
+        # Now read the exact message length
+        response_data = sock.recv(response_length)
         if not response_data:
             logger.error("Received empty response from engine")
             return None
