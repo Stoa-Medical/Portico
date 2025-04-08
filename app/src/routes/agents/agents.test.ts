@@ -33,6 +33,13 @@ const t = {
     const table = await screen.findByRole("table");
     return within(table).getByText(text);
   },
+  clickOnAgent: async (agentName = "Test Agent 1") => {
+    const agent = await screen.findByText(agentName);
+    fireEvent.click(agent);
+
+    // Wait for agent panel to open (Check for "General" tab)
+    await screen.findByText("General");
+  },
 };
 
 describe("agents.test.ts - Agents Page", () => {
@@ -50,9 +57,8 @@ describe("agents.test.ts - Agents Page", () => {
   it("allows a user to delete an existing agent from the list", async () => {
     t.render();
 
-    // When the user opens the agent
-    const agent1 = await screen.findByText("Test Agent 1");
-    fireEvent.click(agent1);
+    // When you click on "Test Agent 1"
+    await t.clickOnAgent();
 
     // Set up confirmation to click OK on the confirm dialog (simulated)
     vi.spyOn(window, "confirm").mockReturnValueOnce(true);
@@ -95,10 +101,7 @@ describe("agents.test.ts - Agents Page", () => {
     t.render();
 
     // When you click on "Test Agent 1"
-    const agent1 = await screen.findByText("Test Agent 1");
-    fireEvent.click(agent1);
-
-    await screen.findByText("General");
+    await t.clickOnAgent();
 
     // Then update the agent name
     const nameInput = screen.getByLabelText("Agent Name");
@@ -113,5 +116,20 @@ describe("agents.test.ts - Agents Page", () => {
     // Then the updated name will appear in the table
     const updatedAgentInTable = await t.findInTable("Test Updated Agent Name");
     expect(updatedAgentInTable).toBeInTheDocument();
+  });
+
+  it.skip("allows a user to add steps an existing agent", async () => {
+    t.render();
+
+    // When you click on "Test Agent 1"
+    await t.clickOnAgent();
+
+    // Click Add step
+
+    // Configure Step
+
+    // Click Save
+
+    // Should go back to agent with new step in step list
   });
 });
