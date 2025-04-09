@@ -245,6 +245,96 @@ impl JsonLike for Step {
             Err(anyhow!("Expected JSON object"))
         }
     }
+
+    fn update_from_json(&mut self, obj: Value) -> Result<Vec<String>> {
+        let mut updated_fields = Vec::new();
+
+        if let Some(obj_map) = obj.as_object() {
+            for (key, value) in obj_map {
+                match key.as_str() {
+                    "name" => {
+                        if let Some(new_name) = value.as_str() {
+                            if self.name != new_name {
+                                self.name = new_name.to_string();
+                                updated_fields.push(key.to_string());
+                            }
+                        }
+                    },
+                    "description" => {
+                        if value.is_null() {
+                            if self.description.is_some() {
+                                self.description = None;
+                                updated_fields.push(key.to_string());
+                            }
+                        } else if let Some(new_desc) = value.as_str() {
+                            let current = self.description.as_deref().unwrap_or("");
+                            if current != new_desc {
+                                self.description = Some(new_desc.to_string());
+                                updated_fields.push(key.to_string());
+                            }
+                        }
+                    },
+                    "step_type" => {
+                        if let Some(type_str) = value.as_str() {
+                            match StepType::from_str(type_str) {
+                                Ok(new_type) => {
+                                    if self.step_type.as_str() != new_type.as_str() {
+                                        self.step_type = new_type;
+                                        updated_fields.push(key.to_string());
+                                    }
+                                },
+                                Err(e) => return Err(anyhow!("Invalid step type '{}': {}", type_str, e)),
+                            }
+                        }
+                    },
+                    "step_content" => {
+                        if let Some(new_content) = value.as_str() {
+                            if self.step_content != new_content {
+                                self.step_content = new_content.to_string();
+                                updated_fields.push(key.to_string());
+                            }
+                        }
+                    },
+                    "success_count" => {
+                        if let Some(count) = value.as_u64() {
+                            let current = self.success_count.load(Ordering::Relaxed);
+                            if current != count {
+                                self.success_count.store(count, Ordering::Relaxed);
+                                updated_fields.push(key.to_string());
+                            }
+                        }
+                    },
+                    "run_count" => {
+                        if let Some(count) = value.as_u64() {
+                            let current = self.run_count.load(Ordering::Relaxed);
+                            if current != count {
+                                self.run_count.store(count, Ordering::Relaxed);
+                                updated_fields.push(key.to_string());
+                            }
+                        }
+                    },
+                    // Skip fields that shouldn't be updated directly
+                    "id" | "global_uuid" | "created_timestamp" | "last_updated_timestamp" => {
+                        // These fields are skipped intentionally
+                    },
+                    // Unknown fields
+                    _ => {
+                        // Optionally: log or warn about unknown fields
+                    }
+                }
+            }
+
+            // If any fields were updated, update the timestamp
+            if !updated_fields.is_empty() {
+                self.timestamps.update();
+                updated_fields.push("last_updated_timestamp".to_string());
+            }
+
+            Ok(updated_fields)
+        } else {
+            Err(anyhow!("Expected JSON object"))
+        }
+    }
 }
 
 #[async_trait]
