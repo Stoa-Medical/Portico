@@ -24,8 +24,10 @@
   } from 'flowbite-svelte';
   import { PlusOutline, ArrowLeftOutline, TrashBinOutline } from 'flowbite-svelte-icons';
   import PageHeader from '../../lib/components/PageHeader.svelte';
+  import StepConfig from '../../lib/components/StepConfig.svelte';
   import { getAgents, getSteps, deleteAgent, saveAgent } from './api';
-  
+
+
   let agents;
 
   const loadAgents = async () => {
@@ -36,8 +38,9 @@
     }
   }
   
-  // Selected agent for detail view
+  // Selected resources for detail views
   let selectedAgent = null;
+  let selectedStep = null;
 
   // Modal state
   let showModal = false;
@@ -183,7 +186,7 @@
     <!-- Agents List (Master View) -->
     <div class="{selectedAgent ? 'hidden lg:block' : 'block'}">
       <Card class="max-w-full">
-        <Table hoverable={true}>
+        <Table hoverable={true} data-testid="agents-table">
           <TableHead>
             <TableHeadCell>Name</TableHeadCell>
             <TableHeadCell>Type</TableHeadCell>
@@ -346,7 +349,7 @@
                 </div>
                 
                 {#if getSteps(selectedAgent.id).length > 0}
-                  <Table hoverable={true}>
+                  <Table hoverable={true} data-testid="steps-table">
                     <TableHead>
                       <TableHeadCell>Name</TableHeadCell>
                       <TableHeadCell>Type</TableHeadCell>
@@ -365,12 +368,25 @@
                           <TableBodyCell>{step.lastEdited}</TableBodyCell>
                           <TableBodyCell>
                             <div class="flex gap-2">
-                              <Button size="xs" color="light" href={`/steps/${step.id}`}>
-                                View
-                              </Button>
+                              {#if selectedStep?.id === step.id}
+                                <Button size="xs" color="none" on:click={() => selectedStep = null}>
+                                  Close
+                                </Button>
+                              {:else}
+                                <Button size="xs" color="light" on:click={() => selectedStep = step}>
+                                  View
+                                </Button>
+                              {/if}
                             </div>
                           </TableBodyCell>
                         </TableBodyRow>
+                        {#if selectedStep?.id === step.id}
+                        <tr>
+                          <td colspan="4" class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                            <StepConfig bind:step={selectedStep} agents={agents} />
+                          </td>
+                        </tr>
+                      {/if}
                       {/each}
                     </TableBody>
                   </Table>

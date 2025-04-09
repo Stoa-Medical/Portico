@@ -25,6 +25,7 @@ export type Step = {
   id: number;
   agentId: number;
   name: string;
+  content: string;
   type: "Python" | "Prompt" | string;
   lastEdited: string;
 };
@@ -101,6 +102,32 @@ let currentAgents: Agent[] = [
   },
 ];
 
+const defaultPythonContent = `import pandas as pd
+import matplotlib.pyplot as plt
+
+# Load the data
+def process_data(file_path):
+    df = pd.read_csv(file_path)
+
+    # Clean the data
+    df = df.dropna()
+
+    # Perform analysis
+    summary = df.describe()
+
+    # Create visualization
+    plt.figure(figsize=(10, 6))
+    df.plot(kind='bar')
+    plt.title('Data Analysis')
+    plt.savefig('analysis_result.png')
+
+    return summary
+
+# Main function
+if __name__ == "__main__":
+    result = process_data('data.csv')
+    print(result)`;
+
 let currentAgentSteps: Step[] = [
   {
     id: 1,
@@ -108,6 +135,7 @@ let currentAgentSteps: Step[] = [
     name: "Data Collection",
     type: "Python",
     lastEdited: "2 hours ago",
+    content: defaultPythonContent,
   },
   {
     id: 2,
@@ -115,6 +143,11 @@ let currentAgentSteps: Step[] = [
     name: "Text Analysis",
     type: "Prompt",
     lastEdited: "1 day ago",
+    content: `You are an AI assistant that helps with data analysis.
+Please analyze the following data and provide insights:
+{{data}}
+
+Focus on trends, anomalies, and potential actionable insights.`,
   },
   {
     id: 3,
@@ -122,6 +155,7 @@ let currentAgentSteps: Step[] = [
     name: "Data Visualization",
     type: "Python",
     lastEdited: "3 days ago",
+    content: defaultPythonContent,
   },
 ];
 

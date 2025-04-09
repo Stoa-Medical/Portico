@@ -1,7 +1,6 @@
 <script>
   import { 
     Card, 
-    Button, 
     Heading, 
     Breadcrumb, 
     BreadcrumbItem,
@@ -15,9 +14,6 @@
     Tabs,
     TabItem,
     Select,
-    Dropdown,
-    DropdownItem,
-    DropdownDivider
   } from 'flowbite-svelte';
   import { ChartPieOutline, ChartBars3FromLeftOutline, ChartLineUpOutline, CalendarMonthOutline } from 'flowbite-svelte-icons';
   import { onMount } from 'svelte';
