@@ -25,7 +25,7 @@ use async_trait::async_trait;
 use uuid;
 
 // === Shared Enum definitions ===
-#[derive(Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
 pub enum RunningStatus {
     Waiting,
     Running,
@@ -138,6 +138,11 @@ pub trait DatabaseItem: Sized {
     async fn try_db_delete(&self, pool: &PgPool) -> Result<()>;
     async fn try_db_select_all(pool: &PgPool) -> Result<Vec<Self>>;
     async fn try_db_select_by_id(pool: &PgPool, id: &IdFields) -> Result<Option<Self>>;
+}
+
+pub trait JsonLike {
+    fn to_json(&self) -> Value;
+    fn from_json(obj: Value) -> Result<Self> where Self:Sized;
 }
 
 // ============ Shared functions ============
