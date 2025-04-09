@@ -24,8 +24,10 @@
   } from 'flowbite-svelte';
   import { PlusOutline, ArrowLeftOutline, TrashBinOutline } from 'flowbite-svelte-icons';
   import PageHeader from '../../lib/components/PageHeader.svelte';
-  import { getAgents, getSteps, deleteAgent, saveAgent } from './api';
-  
+  import StepConfig from '../../lib/components/StepConfig.svelte';
+  import { getAgents, getSteps, deleteAgent, saveAgent, saveStep } from './api';
+
+
   let agents;
 
   const loadAgents = async () => {
@@ -36,8 +38,9 @@
     }
   }
   
-  // Selected agent for detail view
+  // Selected resources for detail views
   let selectedAgent = null;
+  let selectedStep = null;
 
   // Modal state
   let showModal = false;
@@ -51,15 +54,20 @@
   };
   
   // Agent types for dropdown
-  const agentTypes = ['Assistant', 'Researcher', 'Analyst', 'Custom'];
+  const agentTypes = [
+    { value: 'Assistant', name: 'Assistant' },
+    { value: 'Researcher', name: 'Researcher' },
+    { value: 'Analyst', name: 'Analyst' },
+    { value: 'Custom', name: 'Custom' }
+  ];
   
   // Available models
   const models = [
-    'gpt-4',
-    'gpt-3.5-turbo',
-    'claude-3-opus',
-    'claude-3-sonnet',
-    'llama-3'
+    { value: 'gpt-4', name: 'GPT-4' },
+    { value: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
+    { value: 'claude-3-opus', name: 'Claude 3 Opus' },
+    { value: 'claude-3-sonnet', name: 'Claude 3 Sonnet' },
+    { value: 'llama-3', name: 'Llama 3' }
   ];
   
   // Available capabilities
@@ -174,11 +182,11 @@
   <PageHeader title="Agents" breadcrumbs={breadcrumbs} actionBar={getActions()}/>
   
   <!-- Master-Detail View -->
-  <div class="grid grid-cols-1 {selectedAgent ? 'lg:grid-cols-3 gap-6' : ''}">
+  <div class="grid grid-cols-1 mt-6">
     <!-- Agents List (Master View) -->
     <div class="{selectedAgent ? 'hidden lg:block' : 'block'}">
-    <Card class="max-w-full">
-        <Table hoverable={true}>
+      <Card class="max-w-full">
+        <Table hoverable={true} data-testid="agents-table">
           <TableHead>
             <TableHeadCell>Name</TableHeadCell>
             <TableHeadCell>Type</TableHeadCell>
@@ -216,8 +224,8 @@
     
     <!-- Agent Details (Detail View) -->
     {#if selectedAgent}
-      <div class="col-span-1 lg:col-span-2">
-        <Card>
+      <div class="col-span-2 lg:col-span-3 mt-6">
+        <Card class="max-w-full">
           <div class="mb-4 flex items-center gap-3">
             <Button color="light" size="sm" class="lg:hidden" on:click={backToList}>
               <ArrowLeftOutline class="mr-2 h-4 w-4" />
@@ -341,7 +349,7 @@
                 </div>
                 
                 {#if getSteps(selectedAgent.id).length > 0}
-                  <Table hoverable={true}>
+                  <Table hoverable={true} data-testid="steps-table">
                     <TableHead>
                       <TableHeadCell>Name</TableHeadCell>
                       <TableHeadCell>Type</TableHeadCell>
@@ -360,12 +368,25 @@
                           <TableBodyCell>{step.lastEdited}</TableBodyCell>
                           <TableBodyCell>
                             <div class="flex gap-2">
-                              <Button size="xs" color="light" href={`/steps/${step.id}`}>
-                                View
-                              </Button>
+                              {#if selectedStep?.id === step.id}
+                                <Button size="xs" color="none" on:click={() => selectedStep = null}>
+                                  Close
+                                </Button>
+                              {:else}
+                                <Button size="xs" color="light" on:click={() => selectedStep = step}>
+                                  View
+                                </Button>
+                              {/if}
                             </div>
                           </TableBodyCell>
                         </TableBodyRow>
+                        {#if selectedStep?.id === step.id}
+                        <tr>
+                          <td colspan="4" class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                            <StepConfig bind:step={selectedStep} agents={agents} />
+                          </td>
+                        </tr>
+                      {/if}
                       {/each}
                     </TableBody>
                   </Table>

@@ -4,8 +4,6 @@
     Card, 
     Button, 
     Heading, 
-    Breadcrumb, 
-    BreadcrumbItem,
     Tabs,
     TabItem,
     Label,
@@ -77,7 +75,7 @@
     'claude-3-opus',
     'claude-3-sonnet',
     'llama-3'
-  ];
+  ].map(x => ({value: x, name: x}))
   
   // Available capabilities
   const availableCapabilities = [
@@ -140,7 +138,7 @@
           Back
         </Button>
         <Heading tag="h1" class="text-2xl font-bold">{agent.name}</Heading>
-        <Badge color={agent.isActive ? 'green' : 'gray'}>
+        <Badge color={agent.isActive ? 'green' : 'none'}>
           {agent.status}
         </Badge>
       </div>
@@ -169,7 +167,7 @@
             
             <div>
               <Label for="type" class="mb-2">Agent Type</Label>
-              <Select id="type" items={['Assistant', 'Researcher', 'Analyst', 'Custom']} bind:value={agent.type} />
+              <Select id="type" items={['Assistant', 'Researcher', 'Analyst', 'Custom'].map(x => ({value: x, name: x}))} bind:value={agent.type} />
             </div>
           </div>
           

@@ -9,8 +9,8 @@ type AgentLLMConfig = {
 export type Agent = {
   id: number;
   name: string;
-  status: "Active" | "Idle" | "Inactive";
-  type: "Assistant" | "Researcher" | "Analyst" | string;
+  status: string;
+  type: string;
   lastActive: string;
   description: string;
   settings: AgentLLMConfig;
@@ -23,10 +23,19 @@ export type Agent = {
 
 export type Step = {
   id: number;
+  agentId: number;
   name: string;
+  content: string;
   type: "Python" | "Prompt" | string;
   lastEdited: string;
 };
+
+// Omit "id" field for creation:
+export type CreateAgentPayload = Omit<Agent, "id">;
+
+// Allow partial Step and Agent updates:
+export type UpdateStepPayload = Partial<Step> & { id: number };
+export type UpdateAgentPayload = Partial<Agent> & { id: number };
 
 let currentAgents: Agent[] = [
   {
@@ -93,24 +102,60 @@ let currentAgents: Agent[] = [
   },
 ];
 
+const defaultPythonContent = `import pandas as pd
+import matplotlib.pyplot as plt
+
+# Load the data
+def process_data(file_path):
+    df = pd.read_csv(file_path)
+
+    # Clean the data
+    df = df.dropna()
+
+    # Perform analysis
+    summary = df.describe()
+
+    # Create visualization
+    plt.figure(figsize=(10, 6))
+    df.plot(kind='bar')
+    plt.title('Data Analysis')
+    plt.savefig('analysis_result.png')
+
+    return summary
+
+# Main function
+if __name__ == "__main__":
+    result = process_data('data.csv')
+    print(result)`;
+
 let currentAgentSteps: Step[] = [
   {
     id: 1,
+    agentId: 1,
     name: "Data Collection",
     type: "Python",
     lastEdited: "2 hours ago",
+    content: defaultPythonContent,
   },
   {
     id: 2,
+    agentId: 1,
     name: "Text Analysis",
     type: "Prompt",
     lastEdited: "1 day ago",
+    content: `You are an AI assistant that helps with data analysis.
+Please analyze the following data and provide insights:
+{{data}}
+
+Focus on trends, anomalies, and potential actionable insights.`,
   },
   {
     id: 3,
+    agentId: 1,
     name: "Data Visualization",
     type: "Python",
     lastEdited: "3 days ago",
+    content: defaultPythonContent,
   },
 ];
 
@@ -118,11 +163,22 @@ export const getAgents = async (): Promise<Agent[]> => {
   return currentAgents;
 };
 
-export const saveAgent = async (agent: Agent): Promise<Agent[]> => {
+export const saveAgent = async (
+  agent: CreateAgentPayload
+): Promise<Agent[]> => {
   currentAgents = currentAgents.concat({
     ...agent,
     id: currentAgents.length + 1,
   });
+  return currentAgents;
+};
+
+export const updateAgent = async (
+  updatedAgent: UpdateAgentPayload
+): Promise<Agent[]> => {
+  currentAgents = currentAgents.map((agent) =>
+    agent.id === updatedAgent.id ? { ...agent, ...updatedAgent } : agent
+  );
   return currentAgents;
 };
 
@@ -133,17 +189,28 @@ export const deleteAgent = async (
   return currentAgents;
 };
 
-// TODO: Link steps to agent in data structure:
 export const getSteps = (agentId: number): Step[] => {
+  return currentAgentSteps.filter((step) => step.agentId === agentId);
+};
+
+export const saveStep = async (step: Step): Promise<Step[]> => {
+  currentAgentSteps = currentAgentSteps.concat({
+    ...step,
+    id: currentAgentSteps.length + 1,
+  });
   return currentAgentSteps;
 };
 
-export const saveSteps = async (step: Step): Promise<Step[]> => {
-  currentAgentSteps = currentAgentSteps.concat(step);
+export const updateStep = async (
+  updatedStep: UpdateStepPayload
+): Promise<Step[]> => {
+  currentAgentSteps = currentAgentSteps.map((step) =>
+    step.id === updatedStep.id ? { ...step, ...updatedStep } : step
+  );
   return currentAgentSteps;
 };
 
-export const deleteSteps = async (stepIdToDelete: number): Promise<Step[]> => {
+export const deleteStep = async (stepIdToDelete: number): Promise<Step[]> => {
   currentAgentSteps = currentAgentSteps.filter(
     (step) => step.id !== stepIdToDelete
   );

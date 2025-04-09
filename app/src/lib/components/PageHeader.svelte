@@ -5,7 +5,7 @@
   export let actionBar: any = [];
 </script>
 
-<div class="mb-6">
+<div class="my-6">
     <Breadcrumb class="mb-4 h-[8px]">
       {#each breadcrumbs as { label, url }, index}
         <BreadcrumbItem href={url} home={index === 0}>
