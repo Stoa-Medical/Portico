@@ -188,7 +188,6 @@ pub async fn call_llm(prompt: &str, context: Value) -> Result<String> {
 }
 
 /// Executes provided python code
-// TODO: Refactor this to enforce that the code is a pure function, and the function should just be called
 pub fn exec_python(source: Value, the_code: &str) -> Result<Value> {
     // Preps python interpreter (needs to run at least once, and repeat calls are negligible)
     pyo3::prepare_freethreaded_python();
@@ -196,19 +195,23 @@ pub fn exec_python(source: Value, the_code: &str) -> Result<Value> {
     Python::with_gil(|py| {
         // Have clean state at each start
         let locals = PyDict::new(py);
-        // Convert serde_json::Value to PyObject
+
+        // Convert serde_json::Value to PyObject directly
+        let py_json = pyo3::types::PyModule::import(py, "json")?;
         let incoming_data = serde_json::to_string(&source)?;
-        locals.set_item("source", incoming_data)?;
+        let py_source = py_json.getattr("loads")?.call1((incoming_data,))?;
+        locals.set_item("source", py_source)?;
 
         // Convert String to CString correctly
         let code_as_cstr = CString::new(the_code.as_bytes())?;
         py.run(code_as_cstr.as_c_str(), None, Some(&locals))?;
 
-        // Get result and convert back to serde_json::Value if it exists
+        // Get result and convert back to serde_json::Value
         match locals.get_item("result") {
             Ok(Some(res)) => {
-                let res_str = res.to_string();
-                let json_value: Value = serde_json::from_str(&res_str)?;
+                let py_json_str = py_json.getattr("dumps")?.call1((res,))?;
+                let json_str: String = py_json_str.extract()?;
+                let json_value: Value = serde_json::from_str(&json_str)?;
                 Ok(json_value)
             }
             Ok(None) => Err(anyhow!("Runtime error: unable to find return value (`result`)")),

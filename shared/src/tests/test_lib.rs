@@ -11,7 +11,7 @@ result = {"sum": source["a"] + source["b"]}
 "#;
 
     let result = exec_python(source, python_code);
-    assert!(result.is_ok(), "Python execution should succeed");
+    assert!(result.is_ok(), "{}", format!("Python execution should succeed, got: {:?}", result));
 
     if let Ok(value) = result {
         assert_eq!(value, json!({"sum": 12}));
