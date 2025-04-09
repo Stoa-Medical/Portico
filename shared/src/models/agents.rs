@@ -11,7 +11,7 @@ use crate::models::{
     runtime_sessions::RuntimeSession,
     steps::Step,
 };
-use crate::{IdFields, TimestampFields, DatabaseItem};
+use crate::{IdFields, TimestampFields, DatabaseItem, JsonLike};
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
@@ -20,6 +20,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use sqlx::{Postgres, Row, PgPool, postgres::PgArgumentBuffer};
 use async_trait::async_trait;
+use chrono::NaiveDateTime;
+use std::str::FromStr;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Agent {
@@ -96,11 +98,25 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
 ///      │   (stop)     │          │
 ///      └──────────────┘◄─────────┘
 /// ```
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Default)]
 pub enum AgentState {
+    #[default]
     Inactive,
     Stable,
     Unstable,
+}
+
+impl std::str::FromStr for AgentState {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "inactive" => Ok(AgentState::Inactive),
+            "stable" => Ok(AgentState::Stable),
+            "unstable" => Ok(AgentState::Unstable),
+            _ => Err(format!("Invalid agent state: {}", s)),
+        }
+    }
 }
 
 impl AgentState {
@@ -238,6 +254,56 @@ impl Agent {
         collected_completion_count as f32 / collected_run_count as f32
     }
 
+}
+
+impl JsonLike for Agent {
+    fn to_json(&self) -> Value {
+        serde_json::json!({
+            "id": self.identifiers.local_id,
+            "global_uuid": self.identifiers.global_uuid,
+            "created_timestamp": self.timestamps.created.format("%Y-%m-%d %H:%M:%S").to_string(),
+            "last_updated_timestamp": self.timestamps.updated.format("%Y-%m-%d %H:%M:%S").to_string(),
+            "description": self.description,
+            "agent_state": self.agent_state,
+            "accepted_completion_rate": self.accepted_completion_rate,
+            "steps": self.steps.iter().map(|step| step.to_json()).collect::<Vec<Value>>(),
+            "completion_count": self.completion_count.load(Ordering::Relaxed),
+            "run_count": self.run_count.load(Ordering::Relaxed)
+        })
+    }
+
+    fn from_json(obj: Value) -> Result<Self> {
+        if let Some(obj) = obj.as_object() {
+            Ok(Self {
+                identifiers: IdFields {
+                    local_id: obj.get("id").and_then(|v| v.as_i64()),
+                    global_uuid: obj.get("global_uuid").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+                },
+                timestamps: TimestampFields {
+                    created: NaiveDateTime::parse_from_str(
+                        &obj.get("created_timestamp").and_then(|v| v.as_str()).unwrap_or_default(),
+                        "%Y-%m-%d %H:%M:%S"
+                    ).unwrap_or_default(),
+                    updated: NaiveDateTime::parse_from_str(
+                        &obj.get("last_updated_timestamp").and_then(|v| v.as_str()).unwrap_or_default(),
+                        "%Y-%m-%d %H:%M:%S"
+                    ).unwrap_or_default(),
+                },
+                description: obj.get("description").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+                agent_state: obj.get("agent_state").and_then(|v| v.as_str())
+                    .and_then(|s| AgentState::from_str(s).ok())
+                    .unwrap_or_default(),
+                accepted_completion_rate: obj.get("accepted_completion_rate").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32,
+                steps: obj.get("steps").and_then(|v| v.as_array())
+                    .map(|arr| arr.iter().filter_map(|step| Step::from_json(step.clone()).ok()).collect())
+                    .unwrap_or_default(),
+                completion_count: Arc::new(AtomicU64::new(obj.get("completion_count").and_then(|v| v.as_i64()).unwrap_or(0) as u64)),
+                run_count: Arc::new(AtomicU64::new(obj.get("run_count").and_then(|v| v.as_i64()).unwrap_or(0) as u64)),
+            })
+        } else {
+            Err(anyhow!("Expected JSON object"))
+        }
+    }
 }
 
 #[async_trait]

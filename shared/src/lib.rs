@@ -25,8 +25,9 @@ use async_trait::async_trait;
 use uuid;
 
 // === Shared Enum definitions ===
-#[derive(Debug, PartialEq, Deserialize, Serialize, Clone)]
+#[derive(Debug, PartialEq, Deserialize, Serialize, Clone, Default)]
 pub enum RunningStatus {
+    #[default]
     Waiting,
     Running,
     Completed,
@@ -67,6 +68,20 @@ impl<'q> sqlx::Encode<'q, Postgres> for RunningStatus {
         let s = self.as_str();
         buf.extend_from_slice(s.as_bytes());
         Ok(sqlx::encode::IsNull::No)
+    }
+}
+
+impl std::str::FromStr for RunningStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "waiting" => Ok(RunningStatus::Waiting),
+            "running" => Ok(RunningStatus::Running),
+            "completed" => Ok(RunningStatus::Completed),
+            "cancelled" => Ok(RunningStatus::Cancelled),
+            _ => Err(format!("Invalid running status: {}", s)),
+        }
     }
 }
 

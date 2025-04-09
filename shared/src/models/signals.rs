@@ -1,12 +1,14 @@
 use crate::{Agent, RuntimeSession};
 use crate::RunningStatus;
-use crate::{IdFields, TimestampFields, DatabaseItem};
+use crate::{IdFields, TimestampFields, DatabaseItem, JsonLike};
 use serde_json::Value;
 use anyhow::{anyhow, Result};
 use sqlx::{Row, PgPool};
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
+use std::str::FromStr;
 use async_trait::async_trait;
+use chrono::NaiveDateTime;
 
 #[derive(Debug)]
 pub struct Signal {
@@ -104,6 +106,56 @@ impl Signal {
                 Ok(res)
             },
             None => Err(anyhow!("Cannot process signal with no associated data")),
+        }
+    }
+}
+
+impl JsonLike for Signal {
+    fn to_json(&self) -> Value {
+        serde_json::json!({
+            "id": self.identifiers.local_id,
+            "global_uuid": self.identifiers.global_uuid,
+            "created_timestamp": self.timestamps.created.format("%Y-%m-%d %H:%M:%S").to_string(),
+            "last_updated_timestamp": self.timestamps.updated.format("%Y-%m-%d %H:%M:%S").to_string(),
+            "user_requested_uuid": self.user_requested_uuid,
+            "agent": self.agent.as_ref().map(|a| a.to_json()),
+            "status": self.status,
+            "signal_type": self.signal_type,
+            "initial_data": self.initial_data,
+            "result_data": self.result_data,
+            "error_message": self.error_message
+        })
+    }
+
+    fn from_json(obj: Value) -> Result<Self> {
+        if let Some(obj) = obj.as_object() {
+            Ok(Self {
+                identifiers: IdFields {
+                    local_id: obj.get("id").and_then(|v| v.as_i64()),
+                    global_uuid: obj.get("global_uuid").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+                },
+                timestamps: TimestampFields {
+                    created: NaiveDateTime::parse_from_str(
+                        &obj.get("created_timestamp").and_then(|v| v.as_str()).unwrap_or_default(),
+                        "%Y-%m-%d %H:%M:%S"
+                    ).unwrap_or_default(),
+                    updated: NaiveDateTime::parse_from_str(
+                        &obj.get("last_updated_timestamp").and_then(|v| v.as_str()).unwrap_or_default(),
+                        "%Y-%m-%d %H:%M:%S"
+                    ).unwrap_or_default(),
+                },
+                user_requested_uuid: obj.get("user_requested_uuid").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+                agent: obj.get("agent").and_then(|v| Agent::from_json(v.clone()).ok()),
+                status: obj.get("status").and_then(|v| v.as_str())
+                    .and_then(|s| RunningStatus::from_str(s).ok())
+                    .unwrap_or_default(),
+                signal_type: obj.get("signal_type").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+                initial_data: obj.get("initial_data").cloned(),
+                result_data: obj.get("result_data").cloned(),
+                error_message: obj.get("error_message").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            })
+        } else {
+            Err(anyhow!("Expected JSON object"))
         }
     }
 }
