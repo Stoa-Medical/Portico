@@ -1,9 +1,8 @@
 use crate::{IdFields, TimestampFields, call_llm, exec_python, DatabaseItem};
+use serde_json::Value;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-
-use serde_json::Value;
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
@@ -110,8 +109,55 @@ impl Step {
         }
     }
 
+    /// Generates a Python function template for this step
+    pub fn generate_python_template(&self) -> String {
+        let func_name = format!("step_{}", self.identifiers.global_uuid.replace("-", "_"));
+        // Example of generated Python function:
+        // ```python
+        // def step_123e4567_e89b_12d3_a456_426614174000(source: dict) -> dict:
+        //     """
+        //     Process the input data
+        //
+        //     Args:
+        //         source: Input data dictionary from previous step
+        //
+        //     Returns:
+        //         dict: Output data to pass to next step
+        //     """
+        //     # Step implementation
+        //     result = source  # Default pass-through
+        //
+        //     # Custom code here
+        //
+        //     return result
+        //
+        // result = step_123e4567_e89b_12d3_a456_426614174000(source)
+        // ```
+        let docstring = format!(
+            "\"\"\"\n    {}\n    \n    Args:\n        source: Input data dictionary from previous step\n        \n    Returns:\n        dict: Output data to pass to next step\n    \"\"\"",
+            self.description.as_deref().unwrap_or("No description provided")
+        );
+
+        format!(
+            r#"def {}(source: dict) -> dict:
+    {}
+    # Step implementation
+    result = source  # Default pass-through
+
+    {}
+
+    return result
+
+# Execute the step function
+result = {}(source)"#,
+            func_name,
+            docstring,
+            self.step_content.replace("\n", "\n    "),
+            func_name
+        )
+    }
+
     /// Runs the step with fresh context
-    /// NOTE: The input from the last Step is stored in a python variable called `source`
     pub async fn run(&self, source_data: Value, step_idx: usize) -> Result<Value> {
         // Increment FIRST, before any potential errors
         self.run_count.fetch_add(1, Ordering::Relaxed);
@@ -124,7 +170,7 @@ impl Step {
                 }
                 Err(err) => Err(anyhow!("Step {} failed: {}", step_idx, err)),
             },
-            StepType::Python => match exec_python(source_data, &self.step_content) {
+            StepType::Python => match exec_python(source_data, &self.generate_python_template()) {
                 Ok(result) => {
                     self.success_count.fetch_add(1, Ordering::Relaxed);
                     Ok(result)
