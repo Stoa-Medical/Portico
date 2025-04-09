@@ -1,24 +1,12 @@
 <script>
   import { onMount } from 'svelte';
   import { Card, Label, Input, Textarea, Select, Toggle } from 'flowbite-svelte';
-
-  import {
-    EditorState,
-  } from '@codemirror/state';
-  import {
-    EditorView,
-    keymap,
-  } from '@codemirror/view';
+  import { EditorState } from '@codemirror/state';
+  import { EditorView, keymap } from '@codemirror/view';
   import { defaultKeymap } from '@codemirror/commands';
   import { python } from '@codemirror/lang-python';
-  import {
-    lintGutter,
-    linter,
-  } from '@codemirror/lint';
-  import {
-    syntaxHighlighting,
-    defaultHighlightStyle,
-  } from '@codemirror/language';
+  import { lintGutter, linter } from '@codemirror/lint';
+  import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
 
   export let step;
   export let stepTypes = ['Prompt', 'Python'];

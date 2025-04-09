@@ -36,7 +36,6 @@
     content: ''
   };
 
-
   // Step types
   const stepTypes = ['Prompt', 'Python'];
 

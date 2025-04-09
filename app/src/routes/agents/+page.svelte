@@ -25,7 +25,7 @@
   import { PlusOutline, ArrowLeftOutline, TrashBinOutline } from 'flowbite-svelte-icons';
   import PageHeader from '../../lib/components/PageHeader.svelte';
   import StepConfig from '../../lib/components/StepConfig.svelte';
-  import { getAgents, getSteps, deleteAgent, saveAgent } from './api';
+  import { getAgents, getSteps, deleteAgent, saveAgent, saveStep } from './api';
 
 
   let agents;
