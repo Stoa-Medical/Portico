@@ -8,7 +8,7 @@ use std::sync::atomic::Ordering;
 
 #[test]
 fn test_new_agent() {
-    let mut agent = create_test_agent();
+    let agent = create_test_agent();
 
     // Test initial state - agent should start inactive
     let start_result = agent.start();
@@ -18,7 +18,7 @@ fn test_new_agent() {
     assert!(start_result.is_ok(), "New agent should be able to start");
 
     // Create a new agent to test the start fails when already started
-    let mut another_agent = create_test_agent();
+    let another_agent = create_test_agent();
 
     // Start once
     let first_start = another_agent.start();
@@ -40,7 +40,7 @@ fn test_new_agent() {
 
 #[test]
 fn test_agent_state_transitions() {
-    let mut agent = create_test_agent();
+    let agent = create_test_agent();
 
     // Test state transitions via available methods
 
@@ -88,7 +88,7 @@ fn test_agent_state_transitions() {
 
 #[test]
 fn test_completion_rate() {
-    let mut agent = create_test_agent();
+    let agent = create_test_agent();
 
     // Create agent with completion history
     agent.completion_count.store(4, Ordering::Relaxed); // completed

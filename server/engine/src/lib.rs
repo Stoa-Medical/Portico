@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use portico_shared::models::Agent;
-use portico_shared::DatabaseItem;
+use portico_shared::{DatabaseItem, JsonLike};
 use serde_json::Value;
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -21,7 +21,6 @@ pub enum BridgeMessage {
 // Thread-safe Agent map type
 pub type AgentMap = Arc<RwLock<HashMap<String, Agent>>>;
 
-// TODO: Have this serialize to BridgeMessage
 pub fn read_json_message(stream: &mut TcpStream) -> Result<BridgeMessage> {
     // Read 4-byte length prefix (u32 in network byte order)
     let mut size_buffer = [0; 4];
@@ -106,22 +105,20 @@ pub async fn handle_create_signal(data: Value, agent_map: AgentMap, pool: PgPool
             // Make a copy of the data
             let data_clone = data.clone();
 
-            // TODO: Process the signal by creating a runtime session
-            // Note: agent.run() needs a mutable reference
-            // Since we only have an immutable reference to the agent inside the read lock,
-            // we'll need to modify the API or do something more complex in a real implementation
-
-            // For demonstration, we'll log what we would do
+            // Now we can use the immutable reference directly
             println!("Found agent with ID: {}", agent_id);
-            println!("Would execute agent with data: {:?}", data_clone);
-
-            // In a real implementation, you might:
-            // 1. Either modify agent.run() to take &self instead of &mut self
-            // 2. Or find a way to get a mutable reference (would require changes to the design)
-
-            // Simplified placeholder for what would happen:
-            // let session = agent_ref.run_immutable(data_clone).await?;
-            // session.try_db_create(&pool).await?;
+            match agent_ref.run(data_clone).await {
+                Ok(session) => {
+                    // Successfully ran the agent, try to save the session to the database
+                    println!("Agent execution successful, saving session");
+                    if let Err(e) = session.try_db_create(&pool).await {
+                        eprintln!("Failed to save session to database: {}", e);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Agent execution failed: {}", e);
+                }
+            }
         } else {
             eprintln!("Agent with ID {} not found", agent_id);
         }
@@ -129,86 +126,115 @@ pub async fn handle_create_signal(data: Value, agent_map: AgentMap, pool: PgPool
 }
 
 // Handler for CreateAgent messages
-pub async fn handle_create_agent(data: Value, agent_map: AgentMap, _pool: PgPool) {
+pub async fn handle_create_agent(data: Value, agent_map: AgentMap) {
     println!("Processing Agent creation: {:?}", data);
 
-    // TODO: Implement Agent deserialization from Value
-    // For now, we'll log what we would do
-    println!("Would deserialize Agent from data and add to map");
-    println!("Agent data: {:?}", data);
+    // Attempt to deserialize the Agent from JSON using the from_json method
+    match portico_shared::models::agents::Agent::from_json(data.clone()) {
+        Ok(agent) => {
+            // Extract the UUID to use as the map key
+            let agent_uuid = agent.identifiers.global_uuid.clone();
 
-    // The actual implementation would:
-    // 1. Deserialize the agent from JSON
-    // 2. Get the UUID
-    // 3. Insert into the agent_map
+            if agent_uuid.is_empty() {
+                eprintln!("Agent has empty global_uuid, cannot add to map");
+                return;
+            }
 
-    // This is just for demonstration - would be replaced with actual implementation
-    if let Some(uuid) = data.get("global_uuid").and_then(|v| v.as_str()) {
-        println!("Would add agent with UUID: {} to map", uuid);
-        // In real implementation:
-        // let mut agents = agent_map.write().await;
-        // agents.insert(uuid.to_string(), agent);
-    } else {
-        eprintln!("Agent data missing global_uuid field");
+            println!("Adding agent with UUID: {} to map", agent_uuid);
+
+            // Get write access to the agent map
+            let mut agents = agent_map.write().await;
+
+            // Insert the agent into the map
+            agents.insert(agent_uuid, agent);
+
+            // Note: We might want to handle persisting to DB here as well if needed
+            println!("Agent added to map successfully");
+        }
+        Err(e) => {
+            eprintln!("Failed to deserialize Agent from JSON: {}", e);
+            eprintln!("Agent data: {:?}", data);
+        }
     }
 }
 
 // Handler for UpdateAgent messages
-pub async fn handle_update_agent(data: Value, agent_map: AgentMap, _pool: PgPool) {
+pub async fn handle_update_agent(data: Value, agent_map: AgentMap) {
     println!("Processing Agent update: {:?}", data);
 
-    // TODO: Implement Agent deserialization and update
     // Extract the UUID to identify which agent to update
-    if let Some(uuid) = data.get("global_uuid").and_then(|v| v.as_str()) {
-        println!("Would update agent with UUID: {}", uuid);
+    let uuid = match data.get("global_uuid").and_then(|v| v.as_str()) {
+        Some(uuid) if !uuid.is_empty() => uuid.to_string(),
+        _ => {
+            eprintln!("Update Agent data missing valid global_uuid field");
+            return;
+        }
+    };
 
-        // In real implementation:
-        // 1. Deserialize the updated agent from data
-        // 2. Update in the map
-        // let mut agents = agent_map.write().await;
-        // if agents.contains_key(uuid) {
-        //     agents.insert(uuid.to_string(), updated_agent);
-        //     println!("Agent updated in map");
-        // } else {
-        //     println!("Agent with UUID {} not found in map", uuid);
-        // }
+    println!("Updating agent with UUID: {}", uuid);
+
+    // Get write access to the agent map
+    let mut agents = agent_map.write().await;
+
+    if let Some(existing_agent) = agents.get_mut(&uuid) {
+        // Update the existing agent with the new data
+        match existing_agent.update_from_json(data.clone()) {
+            Ok(updated_fields) => {
+                if !updated_fields.is_empty() {
+                    println!("Agent updated: fields changed: {:?}", updated_fields);
+
+                    // Optionally update the agent in the database if needed
+                    // This could be added if there's a need to persist changes made by the bridge
+                } else {
+                    println!("No fields were changed during agent update");
+                }
+            }
+            Err(e) => {
+                eprintln!("Failed to update agent: {}", e);
+            }
+        }
     } else {
-        eprintln!("Update Agent data missing global_uuid field");
+        // Agent not found in the map, fallback to creating a new one
+        println!(
+            "Agent with UUID {} not found in map, creating new instead",
+            uuid
+        );
+        match portico_shared::models::agents::Agent::from_json(data.clone()) {
+            Ok(new_agent) => {
+                agents.insert(uuid, new_agent);
+                println!("New agent inserted into map");
+            }
+            Err(e) => {
+                eprintln!("Failed to deserialize agent for insert: {}", e);
+            }
+        }
     }
 }
 
 // Handler for DeleteAgent messages
-pub async fn handle_delete_agent(data: Value, agent_map: AgentMap, _pool: PgPool) {
+pub async fn handle_delete_agent(data: Value, agent_map: AgentMap) {
     println!("Processing Agent deletion: {:?}", data);
 
     // Extract agent UUID
-    if let Some(uuid) = data.get("global_uuid").and_then(|v| v.as_str()) {
-        println!("Would remove agent with UUID: {}", uuid);
+    let uuid = match data.get("global_uuid").and_then(|v| v.as_str()) {
+        Some(uuid) if !uuid.is_empty() => uuid.to_string(),
+        _ => {
+            eprintln!("Delete Agent data missing valid global_uuid field");
+            return;
+        }
+    };
 
-        // TODO: The actual deletion would be:
-        // let mut agents = agent_map.write().await;
-        // if agents.remove(uuid).is_some() {
-        //     println!("Agent removed from map");
-        // } else {
-        //     println!("Agent with UUID {} not found in map", uuid);
-        // }
+    println!("Removing agent with UUID: {}", uuid);
+
+    // Get write access to the agent map and remove the agent
+    let mut agents = agent_map.write().await;
+
+    if agents.remove(&uuid).is_some() {
+        println!("Agent successfully removed from map");
+
+        // Optionally, we could also delete from the database if needed
+        // This would be useful if the bridge needs to manage database state
     } else {
-        eprintln!("Delete Agent data missing global_uuid field");
+        println!("Agent with UUID {} not found in map", uuid);
     }
-}
-
-// TODO: This function should find the diff, and make the updates accordingly (maybe implement as a trait in shared lib)
-// Helper function to parse Agent from JSON Value
-// Note: You might want to replace this with a proper implementation
-fn try_agent_from_value(value: &Value) -> Result<Agent> {
-    // This is a placeholder - you should implement proper Agent deserialization
-    // For now, we'll log what we would do and return an error
-    eprintln!("TODO: Implement Agent deserialization from Value");
-    eprintln!("Value to deserialize: {:?}", value);
-
-    // In a real implementation, you would do something like:
-    // serde_json::from_value(value.clone()).map_err(|e| anyhow!("Failed to deserialize Agent: {}", e))
-
-    // Or instead use Agent's own deserialization method if it has one
-    Err(anyhow!("Agent deserialization not implemented yet"))
 }

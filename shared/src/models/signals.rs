@@ -1,5 +1,6 @@
+use crate::models::agents::Agent;
+use crate::models::runtime_sessions::RuntimeSession;
 use crate::RunningStatus;
-use crate::{Agent, RuntimeSession};
 use crate::{DatabaseItem, IdFields, JsonLike, TimestampFields};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -9,6 +10,7 @@ use sqlx::{PgPool, Row};
 use std::str::FromStr;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
+use std::sync::Mutex;
 
 #[derive(Debug)]
 pub struct Signal {
@@ -37,7 +39,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Signal {
                     updated: row.try_get("agent_last_updated_timestamp")?,
                 },
                 description: row.try_get("agent_description")?,
-                agent_state: row.try_get("agent_state")?,
+                agent_state: Mutex::new(row.try_get("agent_state")?),
                 accepted_completion_rate: row.try_get("agent_accepted_completion_rate")?,
                 steps: Vec::new(), // Steps are loaded separately
                 completion_count: Arc::new(AtomicU64::new(

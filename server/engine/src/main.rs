@@ -12,7 +12,7 @@ use portico_engine::{
     handle_create_agent, handle_create_signal, handle_delete_agent, handle_update_agent,
     read_json_message, BridgeMessage,
 };
-use portico_shared::models::{Agent, RuntimeSession};
+use portico_shared::models::Agent;
 use portico_shared::DatabaseItem;
 
 #[tokio::main]
@@ -90,25 +90,22 @@ async fn main() -> Result<()> {
                     BridgeMessage::CreateAgent(data) => {
                         // Handle agent creation
                         let agent_map_clone = agent_map.clone();
-                        let pool_clone = db_conn_pool.clone();
                         tokio::spawn(async move {
-                            handle_create_agent(data, agent_map_clone, pool_clone).await;
+                            handle_create_agent(data, agent_map_clone).await;
                         });
                     }
                     BridgeMessage::UpdateAgent(data) => {
                         // Handle agent update
                         let agent_map_clone = agent_map.clone();
-                        let pool_clone = db_conn_pool.clone();
                         tokio::spawn(async move {
-                            handle_update_agent(data, agent_map_clone, pool_clone).await;
+                            handle_update_agent(data, agent_map_clone).await;
                         });
                     }
                     BridgeMessage::DeleteAgent(data) => {
                         // Handle agent deletion
                         let agent_map_clone = agent_map.clone();
-                        let pool_clone = db_conn_pool.clone();
                         tokio::spawn(async move {
-                            handle_delete_agent(data, agent_map_clone, pool_clone).await;
+                            handle_delete_agent(data, agent_map_clone).await;
                         });
                     }
                 }

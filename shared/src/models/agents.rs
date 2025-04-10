@@ -18,73 +18,18 @@ use serde_json::Value;
 use sqlx::{postgres::PgArgumentBuffer, PgPool, Postgres, Row};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Agent {
     pub identifiers: IdFields,
     pub timestamps: TimestampFields,
     pub description: String,
-    pub agent_state: AgentState,
+    pub agent_state: Mutex<AgentState>, // Make public for direct construction in other modules
     pub accepted_completion_rate: f32,
     pub steps: Vec<Step>,
     pub completion_count: Arc<AtomicU64>,
     pub run_count: Arc<AtomicU64>,
-}
-
-impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
-    // Expect a SQL query like:
-    // ```sql
-    // SELECT
-    // a.*,
-    // COALESCE(
-    //     (
-    //         SELECT json_agg(json_build_object(
-    //             'id', s.id,
-    //             'global_uuid', s.global_uuid,
-    //             'created_timestamp', s.created_timestamp,
-    //             'last_updated_timestamp', s.last_updated_timestamp,
-    //             'agent_id', s.agent_id,
-    //             'name', s.name,
-    //             'description', s.description,
-    //             'step_type', s.step_type,
-    //             'step_content', s.step_content,
-    //             'success_count', s.success_count,
-    //             'run_count', s.run_count
-    //         ))
-    //         FROM steps s
-    //         WHERE s.agent_id = a.id
-    //         ORDER BY s.sequence_number
-    //     ),
-    //     '[]'::json
-    // ) as steps
-    // FROM agents a
-    fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
-        // Get the steps JSON array from the row
-        let steps_json: Value = row.try_get("steps")?;
-
-        // Convert the JSON array into Vec<Step> using the shared function
-        let steps = Step::from_json_array(&steps_json);
-
-        Ok(Self {
-            identifiers: IdFields {
-                local_id: row.try_get("id")?,
-                global_uuid: row.try_get("global_uuid")?,
-            },
-            timestamps: TimestampFields {
-                created: row.try_get("created_timestamp")?,
-                updated: row.try_get("last_updated_timestamp")?,
-            },
-            description: row.try_get("description")?,
-            agent_state: row.try_get("agent_state")?,
-            accepted_completion_rate: row.try_get("accepted_completion_rate")?,
-            steps,
-            completion_count: Arc::new(AtomicU64::new(
-                row.try_get::<i32, _>("completion_count")? as u64
-            )),
-            run_count: Arc::new(AtomicU64::new(row.try_get::<i32, _>("run_count")? as u64)),
-        })
-    }
 }
 
 /// Different states for Agent to be in. State diagram:
@@ -159,6 +104,17 @@ impl<'q> sqlx::Encode<'q, Postgres> for AgentState {
 }
 
 impl Agent {
+    // Add getter and setter for agent_state
+    pub fn state(&self) -> AgentState {
+        let guard = self.agent_state.lock().unwrap();
+        guard.clone()
+    }
+
+    pub fn set_state(&self, new_state: AgentState) {
+        let mut guard = self.agent_state.lock().unwrap();
+        *guard = new_state;
+    }
+
     pub fn new(
         identifiers: IdFields,
         timestamps: TimestampFields,
@@ -173,7 +129,7 @@ impl Agent {
             identifiers,
             timestamps,
             description,
-            agent_state: AgentState::Inactive,
+            agent_state: Mutex::new(AgentState::Inactive),
             accepted_completion_rate,
             steps,
             completion_count: Arc::new(AtomicU64::new(completion_count)),
@@ -181,22 +137,28 @@ impl Agent {
         }
     }
 
-    pub fn start(&mut self) -> Result<()> {
-        match self.agent_state {
+    pub fn start(&self) -> Result<()> {
+        let current_state = self.state();
+        match current_state {
             AgentState::Inactive => {
-                self.agent_state = self.update_stability();
+                // Update stability and set new state
+                let new_state = self.check_stability();
+                self.set_state(new_state);
                 Ok(())
             }
             _ => Err(anyhow!("Can only start from Inactive state")),
         }
     }
 
-    /// Process data with this agent
-    pub async fn run(&mut self, source: Value) -> Result<RuntimeSession> {
+    /// Process data with this agent using an immutable reference
+    pub async fn run(&self, source: Value) -> Result<RuntimeSession> {
         // Check if state is Inactive. If so, return error
-        if self.agent_state == AgentState::Inactive {
+        if self.state() == AgentState::Inactive {
             return Err(anyhow!("Cannot run agent in Inactive state"));
         }
+
+        // Increment run count
+        self.run_count.fetch_add(1, Ordering::Relaxed);
 
         // Create a new RuntimeSession
         let mut session = RuntimeSession::new(source, self.steps.clone());
@@ -210,7 +172,8 @@ impl Agent {
         }
 
         // Check stability and update state if needed
-        self.update_stability();
+        let new_state = self.check_stability();
+        self.set_state(new_state);
 
         // If there was an error, propagate it
         if let Err(e) = result {
@@ -221,24 +184,23 @@ impl Agent {
         Ok(session)
     }
 
-    fn update_stability(&mut self) -> AgentState {
+    fn check_stability(&self) -> AgentState {
         let curr_completion_rate = self.collect_completion_rate();
 
-        // Update state based on error rate
+        // Determine new state based on error rate
         if curr_completion_rate < self.accepted_completion_rate {
-            self.agent_state = AgentState::Unstable;
             AgentState::Unstable
         } else {
-            self.agent_state = AgentState::Stable;
             AgentState::Stable
         }
     }
 
-    pub fn stop(&mut self) -> Result<()> {
+    pub fn stop(&self) -> Result<()> {
         // Set to inactive
-        match self.agent_state {
+        let current_state = self.state();
+        match current_state {
             AgentState::Stable | AgentState::Unstable => {
-                self.agent_state = AgentState::Inactive;
+                self.set_state(AgentState::Inactive);
                 Ok(())
             }
             _ => Err(anyhow!("Can only stop from a running state")),
@@ -258,6 +220,64 @@ impl Agent {
     }
 }
 
+impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
+    // Expect a SQL query like:
+    // ```sql
+    // SELECT
+    // a.*,
+    // COALESCE(
+    //     (
+    //         SELECT json_agg(json_build_object(
+    //             'id', s.id,
+    //             'global_uuid', s.global_uuid,
+    //             'created_timestamp', s.created_timestamp,
+    //             'last_updated_timestamp', s.last_updated_timestamp,
+    //             'agent_id', s.agent_id,
+    //             'name', s.name,
+    //             'description', s.description,
+    //             'step_type', s.step_type,
+    //             'step_content', s.step_content,
+    //             'success_count', s.success_count,
+    //             'run_count', s.run_count
+    //         ))
+    //         FROM steps s
+    //         WHERE s.agent_id = a.id
+    //         ORDER BY s.sequence_number
+    //     ),
+    //     '[]'::json
+    // ) as steps
+    // FROM agents a
+    fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
+        // Get the steps JSON array from the row
+        let steps_json: Value = row.try_get("steps")?;
+
+        // Convert the JSON array into Vec<Step> using the shared function
+        let steps = Step::from_json_array(&steps_json);
+
+        // Get the agent state from the row
+        let state: AgentState = row.try_get("agent_state")?;
+
+        Ok(Self {
+            identifiers: IdFields {
+                local_id: row.try_get("id")?,
+                global_uuid: row.try_get("global_uuid")?,
+            },
+            timestamps: TimestampFields {
+                created: row.try_get("created_timestamp")?,
+                updated: row.try_get("last_updated_timestamp")?,
+            },
+            description: row.try_get("description")?,
+            agent_state: Mutex::new(state),
+            accepted_completion_rate: row.try_get("accepted_completion_rate")?,
+            steps,
+            completion_count: Arc::new(AtomicU64::new(
+                row.try_get::<i32, _>("completion_count")? as u64
+            )),
+            run_count: Arc::new(AtomicU64::new(row.try_get::<i32, _>("run_count")? as u64)),
+        })
+    }
+}
+
 impl JsonLike for Agent {
     fn to_json(&self) -> Value {
         serde_json::json!({
@@ -266,7 +286,7 @@ impl JsonLike for Agent {
             "created_timestamp": self.timestamps.created.format("%Y-%m-%d %H:%M:%S").to_string(),
             "last_updated_timestamp": self.timestamps.updated.format("%Y-%m-%d %H:%M:%S").to_string(),
             "description": self.description,
-            "agent_state": self.agent_state,
+            "agent_state": self.state(),
             "accepted_completion_rate": self.accepted_completion_rate,
             "steps": self.steps.iter().map(|step| step.to_json()).collect::<Vec<Value>>(),
             "completion_count": self.completion_count.load(Ordering::Relaxed),
@@ -306,11 +326,12 @@ impl JsonLike for Agent {
                     .and_then(|v| v.as_str())
                     .unwrap_or_default()
                     .to_string(),
-                agent_state: obj
-                    .get("agent_state")
-                    .and_then(|v| v.as_str())
-                    .and_then(|s| AgentState::from_str(s).ok())
-                    .unwrap_or_default(),
+                agent_state: Mutex::new(
+                    obj.get("agent_state")
+                        .and_then(|v| v.as_str())
+                        .and_then(|s| AgentState::from_str(s).ok())
+                        .unwrap_or_default(),
+                ),
                 accepted_completion_rate: obj
                     .get("accepted_completion_rate")
                     .and_then(|v| v.as_f64())
@@ -356,8 +377,9 @@ impl JsonLike for Agent {
                         if let Some(state_str) = value.as_str() {
                             match AgentState::from_str(state_str) {
                                 Ok(new_state) => {
-                                    if self.agent_state.as_str() != new_state.as_str() {
-                                        self.agent_state = new_state;
+                                    let current_state = self.state();
+                                    if current_state != new_state {
+                                        self.set_state(new_state);
                                         updated_fields.push(key.to_string());
                                     }
                                 }
@@ -479,7 +501,7 @@ impl DatabaseItem for Agent {
         )
         .bind(&self.identifiers.global_uuid)
         .bind(&self.description)
-        .bind(&self.agent_state)
+        .bind(&self.state())
         .bind(self.accepted_completion_rate)
         .bind(self.completion_count.load(Ordering::Relaxed) as i32)
         .bind(self.run_count.load(Ordering::Relaxed) as i32)
@@ -535,7 +557,7 @@ impl DatabaseItem for Agent {
             "#,
         )
         .bind(&self.description)
-        .bind(&self.agent_state)
+        .bind(&self.state())
         .bind(self.accepted_completion_rate)
         .bind(self.completion_count.load(Ordering::Relaxed) as i32)
         .bind(self.run_count.load(Ordering::Relaxed) as i32)
