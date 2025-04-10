@@ -384,6 +384,11 @@ impl DatabaseItem for Step {
     }
 
     async fn try_db_create(&self, pool: &PgPool) -> Result<()> {
+        // Check if a step with the same UUID already exists
+        if crate::check_exists_by_uuid(pool, "steps", &self.identifiers.global_uuid).await? {
+            return Ok(());  // Step already exists, no need to create it again
+        }
+
         sqlx::query(
             r#"
             INSERT INTO steps (

@@ -338,6 +338,11 @@ impl DatabaseItem for Signal {
     }
 
     async fn try_db_create(&self, pool: &PgPool) -> Result<()> {
+        // Check if a signal with the same UUID already exists
+        if crate::check_exists_by_uuid(pool, "signals", &self.identifiers.global_uuid).await? {
+            return Ok(());  // Signal already exists, no need to create it again
+        }
+
         let agent_id = self.agent.as_ref().and_then(|a| a.identifiers.local_id);
         let agent_uuid = self
             .agent

@@ -25,7 +25,7 @@ pub struct Agent {
     pub identifiers: IdFields,
     pub timestamps: TimestampFields,
     pub description: String,
-    pub agent_state: Mutex<AgentState>, // Make public for direct construction in other modules
+    pub agent_state: Mutex<AgentState>,  // Make public for direct construction in other modules
     pub accepted_completion_rate: f32,
     pub steps: Vec<Step>,
     pub completion_count: Arc<AtomicU64>,
@@ -330,7 +330,7 @@ impl JsonLike for Agent {
                     obj.get("agent_state")
                         .and_then(|v| v.as_str())
                         .and_then(|s| AgentState::from_str(s).ok())
-                        .unwrap_or_default(),
+                        .unwrap_or_default()
                 ),
                 accepted_completion_rate: obj
                     .get("accepted_completion_rate")
@@ -488,6 +488,11 @@ impl DatabaseItem for Agent {
     }
 
     async fn try_db_create(&self, pool: &PgPool) -> Result<()> {
+        // Check if an agent with the same UUID already exists
+        if crate::check_exists_by_uuid(pool, "agents", &self.identifiers.global_uuid).await? {
+            return Ok(());  // Agent already exists, no need to create it again
+        }
+
         // First create the agent record
         let record = sqlx::query(
             r#"
@@ -514,6 +519,7 @@ impl DatabaseItem for Agent {
 
         // Then create step records if any exist
         for (idx, step) in self.steps.iter().enumerate() {
+            // Create a modified step with agent_id
             sqlx::query(
                 r#"
                 INSERT INTO steps (

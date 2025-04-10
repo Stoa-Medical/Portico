@@ -125,6 +125,11 @@ impl DatabaseItem for RuntimeSession {
     }
 
     async fn try_db_create(&self, pool: &PgPool) -> Result<()> {
+        // Check if a session with the same UUID already exists
+        if crate::check_exists_by_uuid(pool, "runtime_sessions", &self.identifiers.global_uuid).await? {
+            return Ok(());  // Session already exists, no need to create it again
+        }
+
         // First create the session record
         let record = sqlx::query(
             r#"

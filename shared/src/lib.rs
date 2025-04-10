@@ -175,6 +175,16 @@ pub trait JsonLike {
 
 // ============ Shared functions ============
 
+/// Checks if a record with the given UUID already exists in the specified table
+pub async fn check_exists_by_uuid(pool: &PgPool, table: &str, uuid: &str) -> Result<bool> {
+    let query = format!("SELECT EXISTS(SELECT 1 FROM {} WHERE global_uuid = $1)", table);
+    sqlx::query_scalar::<_, bool>(&query)
+        .bind(uuid)
+        .fetch_one(pool)
+        .await
+        .map_err(|e| anyhow!("Failed to check if record exists: {}", e))
+}
+
 // Prefer JSON-mode supported models. Docs: https://docs.together.ai/docs/json-mode
 pub enum JsonModeLLMs {
     MetaLlama33_70b,
