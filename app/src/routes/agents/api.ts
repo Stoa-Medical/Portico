@@ -30,6 +30,18 @@ export type Step = {
   lastEdited: string;
 };
 
+export type RuntimeSession = {
+  id: number;
+  globalUuid: string;
+  requestedByAgentId: number;
+  createdTimestamp: string;
+  lastUpdatedTimestamp: string;
+  runtimeSessionStatus: "queued" | "running" | "completed" | "failed"; // match your enum
+  initialData: any; // JSON blob
+  latestStepIdx: number;
+  latestResult: any | null; // nullable JSON
+};
+
 // Omit "id" field for creation:
 export type CreateAgentPayload = Omit<Agent, "id">;
 
@@ -159,12 +171,45 @@ Focus on trends, anomalies, and potential actionable insights.`,
   },
 ];
 
+function generateCompletedSessionsForAgent(
+  agentId: number,
+  count: number,
+): RuntimeSession[] {
+  return Array.from({ length: count }, (_, i) => {
+    const stepCount = currentAgentSteps.filter(
+      (step) => step.agentId === agentId,
+    ).length;
+    return {
+      id: agentId * 100 + i + 1,
+      globalUuid: crypto.randomUUID(),
+      requestedByAgentId: agentId,
+      createdTimestamp: new Date().toISOString(),
+      lastUpdatedTimestamp: new Date().toISOString(),
+      runtimeSessionStatus: "completed",
+      initialData: {
+        input: `Sample input for Agent ${agentId}, Session ${i + 1}`,
+      },
+      latestStepIdx: stepCount,
+      latestResult: {
+        summary: `Completed ${stepCount} steps successfully.`,
+        output: `Result data for Agent ${agentId}, Session ${i + 1}`,
+      },
+    };
+  });
+}
+
+let currentRuntimeSessions: RuntimeSession[] = [
+  ...generateCompletedSessionsForAgent(1, 5),
+  ...generateCompletedSessionsForAgent(2, 5),
+  ...generateCompletedSessionsForAgent(3, 5),
+];
+
 export const getAgents = async (): Promise<Agent[]> => {
   return currentAgents;
 };
 
 export const saveAgent = async (
-  agent: CreateAgentPayload
+  agent: CreateAgentPayload,
 ): Promise<Agent[]> => {
   currentAgents = currentAgents.concat({
     ...agent,
@@ -174,16 +219,16 @@ export const saveAgent = async (
 };
 
 export const updateAgent = async (
-  updatedAgent: UpdateAgentPayload
+  updatedAgent: UpdateAgentPayload,
 ): Promise<Agent[]> => {
   currentAgents = currentAgents.map((agent) =>
-    agent.id === updatedAgent.id ? { ...agent, ...updatedAgent } : agent
+    agent.id === updatedAgent.id ? { ...agent, ...updatedAgent } : agent,
   );
   return currentAgents;
 };
 
 export const deleteAgent = async (
-  agentIdToDelete: number
+  agentIdToDelete: number,
 ): Promise<Agent[]> => {
   currentAgents = currentAgents.filter((agent) => agent.id !== agentIdToDelete);
   return currentAgents;
@@ -202,17 +247,25 @@ export const saveStep = async (step: Step): Promise<Step[]> => {
 };
 
 export const updateStep = async (
-  updatedStep: UpdateStepPayload
+  updatedStep: UpdateStepPayload,
 ): Promise<Step[]> => {
   currentAgentSteps = currentAgentSteps.map((step) =>
-    step.id === updatedStep.id ? { ...step, ...updatedStep } : step
+    step.id === updatedStep.id ? { ...step, ...updatedStep } : step,
   );
   return currentAgentSteps;
 };
 
 export const deleteStep = async (stepIdToDelete: number): Promise<Step[]> => {
   currentAgentSteps = currentAgentSteps.filter(
-    (step) => step.id !== stepIdToDelete
+    (step) => step.id !== stepIdToDelete,
   );
   return currentAgentSteps;
+};
+
+export const getRuntimeSessions = async (
+  agentId: number,
+): Promise<RuntimeSession[]> => {
+  return currentRuntimeSessions.filter(
+    (session) => session.requestedByAgentId === agentId,
+  );
 };

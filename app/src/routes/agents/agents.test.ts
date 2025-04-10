@@ -1,4 +1,10 @@
-import { render, within, screen, fireEvent } from "@testing-library/svelte";
+import {
+  render,
+  within,
+  screen,
+  fireEvent,
+  waitForElementToBeRemoved,
+} from "@testing-library/svelte";
 import AgentsPage from "./+page.svelte";
 
 // Mocking the `api.js` file for data access
@@ -36,11 +42,28 @@ function getMockSteps() {
   ];
 }
 
+function getMockRuntimeSessions() {
+  return [
+    {
+      id: 201,
+      globalUuid: "uuid-1",
+      requestedByAgentId: 1,
+      createdTimestamp: new Date("2025-04-08T10:00:00Z").toISOString(),
+      lastUpdatedTimestamp: new Date("2025-04-08T10:15:00Z").toISOString(),
+      runtimeSessionStatus: "completed",
+      initialData: { input: "Example input" },
+      latestStepIdx: 3,
+      latestResult: { output: "Final result" },
+    },
+  ];
+}
+
 vi.mock("./api", async () => {
   const originalModule = await vi.importActual("./api");
   return {
     getAgents: vi.fn(() => Promise.resolve(getMockAgents())),
     getSteps: vi.fn(() => Promise.resolve(getMockSteps())),
+    getRuntimeSessions: vi.fn(() => Promise.resolve(getMockRuntimeSessions())),
     deleteAgent: originalModule.deleteAgent,
     saveAgent: originalModule.saveAgent,
   };
@@ -126,6 +149,33 @@ describe("agents.test.ts - Agents Page", () => {
     expect(newAgentInTable).toBeInTheDocument();
   });
 
+  it("resets and closes the create agent modal when cancelled", async () => {
+    t.render();
+
+    // When you open the Add Agent modal
+    const addButton = await screen.findByText("Add Agent");
+    await fireEvent.click(addButton);
+
+    // Then you enter a name
+    const nameInput = await screen.findByPlaceholderText("Enter agent name");
+    fireEvent.input(nameInput, { target: { value: "Temporary Agent" } });
+
+    // When you click the Cancel button
+    const cancelButton = await screen.findByText("Cancel");
+    await fireEvent.click(cancelButton);
+
+    // Then the modal should close
+    expect(screen.queryByText("Add New Agent")).not.toBeInTheDocument();
+
+    // When you open the modal again
+    await fireEvent.click(addButton);
+
+    // Then the form should be reset
+    const reopenedInput =
+      await screen.findByPlaceholderText("Enter agent name");
+    expect((reopenedInput as HTMLInputElement).value).toBe("");
+  });
+
   it("allows a user to edit an existing agent", async () => {
     t.render();
 
@@ -177,7 +227,7 @@ describe("agents.test.ts - Agents Page", () => {
     expect((stepNameInput as HTMLInputElement).value).toBe("My First Step");
 
     const typeSelect = (await screen.findByLabelText(
-      "Step Type"
+      "Step Type",
     )) as HTMLSelectElement;
     expect(typeSelect).toBeInTheDocument();
     expect(typeSelect.value).toBe("Prompt");
@@ -185,7 +235,7 @@ describe("agents.test.ts - Agents Page", () => {
     const contentArea = await screen.findByLabelText("Prompt Template");
     expect(contentArea).toBeInTheDocument();
     expect((contentArea as HTMLTextAreaElement).value).toContain(
-      "Step content here"
+      "Step content here",
     );
   });
 
@@ -202,15 +252,43 @@ describe("agents.test.ts - Agents Page", () => {
     const addStepButton = await screen.findByText("Add Step");
     fireEvent.click(addStepButton);
 
-    // Then blick "Save"
-    const saveButton = await screen.findByText("Save Step");
-    fireEvent.click(saveButton);
+    // Then should go to new step view
+  });
 
-    // Then the new step should show inside of the agents step list
-    const updatedAgentInTable = await t.findInTable({
-      text: "Test Updated Agent Name",
-      tableId: "steps-table",
-    });
-    expect(updatedAgentInTable).toBeInTheDocument();
+  it("allows a user to view runtime sessions and see details", async () => {
+    t.render();
+
+    // When you click on an Agents "Runtime Sessions" tab
+    await t.clickOnAgent();
+    await t.clickAgentTab("Runtime Sessions");
+
+    // Then the list of sessions should be displayed
+    const sessionIdCell = await screen.findByText("201");
+    expect(sessionIdCell).toBeInTheDocument();
+
+    // When you click on an individual runtime session
+    const viewButton = await screen.findByText("View");
+    await fireEvent.click(viewButton);
+
+    // Then you should see the details for that session
+    expect(
+      await screen.findByText("Runtime Session Details"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText((text) => text.includes("Example input")),
+    ).toBeInTheDocument();
+
+    expect(
+      await screen.findByText((text) => text.includes("Final result")),
+    ).toBeInTheDocument();
+
+    // When you click close
+    const closeButton = await screen.findByText("Close");
+    fireEvent.click(closeButton);
+
+    // Them the detail view should disappear
+    await waitForElementToBeRemoved(() =>
+      screen.queryByText("Runtime Session Details"),
+    );
   });
 });

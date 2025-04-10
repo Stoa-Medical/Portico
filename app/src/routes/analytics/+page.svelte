@@ -1,8 +1,8 @@
 <script>
-  import { 
-    Card, 
-    Heading, 
-    Breadcrumb, 
+  import {
+    Card,
+    Heading,
+    Breadcrumb,
     BreadcrumbItem,
     Table,
     TableBody,
@@ -14,90 +14,95 @@
     Tabs,
     TabItem,
     Select,
-  } from 'flowbite-svelte';
-  import { ChartPieOutline, ChartBars3FromLeftOutline, ChartLineUpOutline, CalendarMonthOutline } from 'flowbite-svelte-icons';
-  import { onMount } from 'svelte';
-  
+  } from "flowbite-svelte";
+  import {
+    ChartPieOutline,
+    ChartBars3FromLeftOutline,
+    ChartLineUpOutline,
+    CalendarMonthOutline,
+  } from "flowbite-svelte-icons";
+  import { onMount } from "svelte";
+
   // Time period options
   const timePeriods = [
-    { value: '7d', name: 'Last 7 days' },
-    { value: '30d', name: 'Last 30 days' },
-    { value: '90d', name: 'Last 90 days' },
-    { value: 'all', name: 'All time' }
+    { value: "7d", name: "Last 7 days" },
+    { value: "30d", name: "Last 30 days" },
+    { value: "90d", name: "Last 90 days" },
+    { value: "all", name: "All time" },
   ];
-  
-  let selectedTimePeriod = '30d';
-  
+
+  let selectedTimePeriod = "30d";
+
   // Mock data for agent performance
   const agentPerformance = [
-    { 
-      id: 1, 
-      name: 'Agent Smith', 
-      successRate: 92, 
-      totalRuns: 245, 
-      avgResponseTime: '1.2s',
-      trend: 'up'
+    {
+      id: 1,
+      name: "Agent Smith",
+      successRate: 92,
+      totalRuns: 245,
+      avgResponseTime: "1.2s",
+      trend: "up",
     },
-    { 
-      id: 2, 
-      name: 'Agent Johnson', 
-      successRate: 78, 
-      totalRuns: 156, 
-      avgResponseTime: '2.5s',
-      trend: 'down'
+    {
+      id: 2,
+      name: "Agent Johnson",
+      successRate: 78,
+      totalRuns: 156,
+      avgResponseTime: "2.5s",
+      trend: "down",
     },
-    { 
-      id: 3, 
-      name: 'Agent Brown', 
-      successRate: 95, 
-      totalRuns: 312, 
-      avgResponseTime: '0.8s',
-      trend: 'up'
-    }
+    {
+      id: 3,
+      name: "Agent Brown",
+      successRate: 95,
+      totalRuns: 312,
+      avgResponseTime: "0.8s",
+      trend: "up",
+    },
   ];
-  
+
   // Mock data for step performance
   const stepPerformance = [
-    { 
-      id: 1, 
-      name: 'Data Collection', 
-      type: 'Python', 
-      successRate: 98, 
-      totalRuns: 412, 
-      avgExecutionTime: '0.5s',
-      agentName: 'Agent Smith'
+    {
+      id: 1,
+      name: "Data Collection",
+      type: "Python",
+      successRate: 98,
+      totalRuns: 412,
+      avgExecutionTime: "0.5s",
+      agentName: "Agent Smith",
     },
-    { 
-      id: 2, 
-      name: 'Text Analysis', 
-      type: 'Prompt', 
-      successRate: 85, 
-      totalRuns: 245, 
-      avgExecutionTime: '2.1s',
-      agentName: 'Agent Smith'
+    {
+      id: 2,
+      name: "Text Analysis",
+      type: "Prompt",
+      successRate: 85,
+      totalRuns: 245,
+      avgExecutionTime: "2.1s",
+      agentName: "Agent Smith",
     },
-    { 
-      id: 3, 
-      name: 'Data Visualization', 
-      type: 'Python', 
-      successRate: 92, 
-      totalRuns: 178, 
-      avgExecutionTime: '1.3s',
-      agentName: 'Agent Brown'
-    }
+    {
+      id: 3,
+      name: "Data Visualization",
+      type: "Python",
+      successRate: 92,
+      totalRuns: 178,
+      avgExecutionTime: "1.3s",
+      agentName: "Agent Brown",
+    },
   ];
-  
+
   // Mock data for charts
   let successRateChartData;
   let executionTimeChartData;
   let usageChartData;
   let errorDistributionData;
-  
+
   // Chart rendering functions
   function renderSuccessRateChart() {
     // In a real app, this would use a charting library like Chart.js
     // For now, we'll just create a mock chart element
-    const chartElement = document.getElementById('success-rate-chart');
+    const chartElement = document.getElementById("success-rate-chart");
     if (chartElement) {
       chartElement.innerHTML = `
         <div class="flex items-end h-40 gap-2">
@@ -119,9 +124,9 @@
       `;
     }
   }
-  
+
   function renderExecutionTimeChart() {
-    const chartElement = document.getElementById('execution-time-chart');
+    const chartElement = document.getElementById("execution-time-chart");
     if (chartElement) {
       chartElement.innerHTML = `
         <div class="flex items-end h-40 gap-2">
@@ -143,9 +148,9 @@
       `;
     }
   }
-  
+
   function renderUsageChart() {
-    const chartElement = document.getElementById('usage-chart');
+    const chartElement = document.getElementById("usage-chart");
     if (chartElement) {
       chartElement.innerHTML = `
         <div class="h-40 w-full relative">
@@ -164,9 +169,9 @@
       `;
     }
   }
-  
+
   function renderErrorDistributionChart() {
-    const chartElement = document.getElementById('error-distribution-chart');
+    const chartElement = document.getElementById("error-distribution-chart");
     if (chartElement) {
       chartElement.innerHTML = `
         <div class="h-40 w-full">
@@ -188,7 +193,7 @@
       `;
     }
   }
-  
+
   // Initialize charts on mount
   onMount(() => {
     renderSuccessRateChart();
@@ -196,7 +201,7 @@
     renderUsageChart();
     renderErrorDistributionChart();
   });
-  
+
   // Update charts when time period changes
   $: if (selectedTimePeriod) {
     // In a real app, this would fetch new data based on the time period
@@ -216,10 +221,12 @@
       <BreadcrumbItem href="/" home>Home</BreadcrumbItem>
       <BreadcrumbItem>Analytics</BreadcrumbItem>
     </Breadcrumb>
-    
-    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+
+    <div
+      class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4"
+    >
       <Heading tag="h1" class="text-2xl font-bold">Analytics Dashboard</Heading>
-      
+
       <div class="flex items-center gap-2">
         <CalendarMonthOutline class="h-5 w-5 text-gray-500" />
         <Select class="w-40" bind:value={selectedTimePeriod}>
@@ -230,7 +237,7 @@
       </div>
     </div>
   </div>
-  
+
   <!-- Summary Cards -->
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
     <Card padding="sm">
@@ -240,7 +247,7 @@
         <div class="text-green-500 text-sm mt-2">+1 this month</div>
       </div>
     </Card>
-    
+
     <Card padding="sm">
       <div class="flex flex-col p-4">
         <div class="text-gray-500 text-sm mb-1">Total Steps</div>
@@ -248,7 +255,7 @@
         <div class="text-green-500 text-sm mt-2">+3 this month</div>
       </div>
     </Card>
-    
+
     <Card padding="sm">
       <div class="flex flex-col p-4">
         <div class="text-gray-500 text-sm mb-1">Avg. Success Rate</div>
@@ -256,7 +263,7 @@
         <div class="text-green-500 text-sm mt-2">+5% from last month</div>
       </div>
     </Card>
-    
+
     <Card padding="sm">
       <div class="flex flex-col p-4">
         <div class="text-gray-500 text-sm mb-1">Total Executions</div>
@@ -265,50 +272,58 @@
       </div>
     </Card>
   </div>
-  
+
   <!-- Charts Section -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
     <Card>
       <div class="p-4">
         <div class="flex justify-between items-center mb-4">
-          <Heading tag="h3" class="text-lg font-semibold">Success Rate by Agent</Heading>
+          <Heading tag="h3" class="text-lg font-semibold"
+            >Success Rate by Agent</Heading
+          >
           <ChartBars3FromLeftOutline class="h-5 w-5 text-gray-500" />
         </div>
         <div id="success-rate-chart" class="w-full"></div>
       </div>
     </Card>
-    
+
     <Card>
       <div class="p-4">
         <div class="flex justify-between items-center mb-4">
-          <Heading tag="h3" class="text-lg font-semibold">Avg. Response Time</Heading>
+          <Heading tag="h3" class="text-lg font-semibold"
+            >Avg. Response Time</Heading
+          >
           <ChartLineUpOutline class="h-5 w-5 text-gray-500" />
         </div>
         <div id="execution-time-chart" class="w-full"></div>
       </div>
     </Card>
-    
+
     <Card>
       <div class="p-4">
         <div class="flex justify-between items-center mb-4">
-          <Heading tag="h3" class="text-lg font-semibold">Usage Statistics</Heading>
+          <Heading tag="h3" class="text-lg font-semibold"
+            >Usage Statistics</Heading
+          >
           <ChartPieOutline class="h-5 w-5 text-gray-500" />
         </div>
         <div id="usage-chart" class="w-full"></div>
       </div>
     </Card>
-    
+
     <Card>
       <div class="p-4">
         <div class="flex justify-between items-center mb-4">
-          <Heading tag="h3" class="text-lg font-semibold">Error Distribution</Heading>
+          <Heading tag="h3" class="text-lg font-semibold"
+            >Error Distribution</Heading
+          >
           <ChartBars3FromLeftOutline class="h-5 w-5 text-gray-500" />
         </div>
         <div id="error-distribution-chart" class="w-full"></div>
       </div>
     </Card>
   </div>
-  
+
   <!-- Performance Tables -->
   <Tabs style="underline">
     <TabItem open title="Agent Performance">
@@ -328,7 +343,14 @@
                 <TableBodyCell>
                   <div class="flex items-center">
                     <div class="w-16 bg-gray-200 rounded-full h-2.5 mr-2">
-                      <div class="bg-{agent.successRate >= 90 ? 'green' : agent.successRate >= 70 ? 'yellow' : 'red'}-500 h-2.5 rounded-full" style="width: {agent.successRate}%"></div>
+                      <div
+                        class="bg-{agent.successRate >= 90
+                          ? 'green'
+                          : agent.successRate >= 70
+                            ? 'yellow'
+                            : 'red'}-500 h-2.5 rounded-full"
+                        style="width: {agent.successRate}%"
+                      ></div>
                     </div>
                     <span>{agent.successRate}%</span>
                   </div>
@@ -336,8 +358,8 @@
                 <TableBodyCell>{agent.totalRuns}</TableBodyCell>
                 <TableBodyCell>{agent.avgResponseTime}</TableBodyCell>
                 <TableBodyCell>
-                  <Badge color={agent.trend === 'up' ? 'green' : 'red'}>
-                    {agent.trend === 'up' ? '↑' : '↓'}
+                  <Badge color={agent.trend === "up" ? "green" : "red"}>
+                    {agent.trend === "up" ? "↑" : "↓"}
                   </Badge>
                 </TableBodyCell>
               </TableBodyRow>
@@ -346,7 +368,7 @@
         </Table>
       </Card>
     </TabItem>
-    
+
     <TabItem title="Step Performance">
       <Card>
         <Table hoverable={true}>
@@ -363,7 +385,7 @@
               <TableBodyRow>
                 <TableBodyCell>{step.name}</TableBodyCell>
                 <TableBodyCell>
-                  <Badge color={step.type === 'Python' ? 'blue' : 'purple'}>
+                  <Badge color={step.type === "Python" ? "blue" : "purple"}>
                     {step.type}
                   </Badge>
                 </TableBodyCell>
@@ -371,7 +393,14 @@
                 <TableBodyCell>
                   <div class="flex items-center">
                     <div class="w-16 bg-gray-200 rounded-full h-2.5 mr-2">
-                      <div class="bg-{step.successRate >= 90 ? 'green' : step.successRate >= 70 ? 'yellow' : 'red'}-500 h-2.5 rounded-full" style="width: {step.successRate}%"></div>
+                      <div
+                        class="bg-{step.successRate >= 90
+                          ? 'green'
+                          : step.successRate >= 70
+                            ? 'yellow'
+                            : 'red'}-500 h-2.5 rounded-full"
+                        style="width: {step.successRate}%"
+                      ></div>
                     </div>
                     <span>{step.successRate}%</span>
                   </div>
@@ -385,4 +414,4 @@
       </Card>
     </TabItem>
   </Tabs>
-</main> 
+</main>
