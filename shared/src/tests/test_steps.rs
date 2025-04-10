@@ -1,14 +1,10 @@
-use crate::{
-    models::Step,
-    models::steps::StepType,
-    IdFields,
-};
+use crate::{models::steps::StepType, models::Step, IdFields};
 
 fn create_test_step(step_type: StepType) -> Step {
     let id_fields = IdFields::new();
     let content = match step_type {
         StepType::Python => "source['value'] += 10\nresult = source".to_string(),
-        StepType::Prompt => "Add 10 to the value in the data".to_string()
+        StepType::Prompt => "Add 10 to the value in the data".to_string(),
     };
 
     Step::new(
@@ -18,7 +14,7 @@ fn create_test_step(step_type: StepType) -> Step {
         "Test Step".to_string(),
         Some("A test step that adds 10 to the input value".to_string()),
         0,
-        0
+        0,
     )
 }
 

@@ -1,13 +1,13 @@
 use anyhow::{anyhow, Result};
-use serde_json::Value;
-use std::net::TcpStream;
-use std::io::Read;
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use sqlx::PgPool;
 use portico_shared::models::Agent;
 use portico_shared::DatabaseItem;
+use serde_json::Value;
+use sqlx::PgPool;
+use std::collections::HashMap;
+use std::io::Read;
+use std::net::TcpStream;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 #[derive(Debug)]
 pub enum BridgeMessage {
@@ -49,16 +49,18 @@ pub fn read_json_message(stream: &mut TcpStream) -> Result<BridgeMessage> {
                     Err(anyhow!("server-init value must be a boolean"))
                 }
             } else if let Some(data) = json.get("data") {
-                let table = data.get("table")
+                let table = data
+                    .get("table")
                     .and_then(|t| t.as_str())
                     .ok_or_else(|| anyhow!("Missing or invalid table field"))?;
 
                 match table {
-                    "signals" => {
-                        Ok(BridgeMessage::CreateSignal(data.get("record").cloned().unwrap_or(Value::Null)))
-                    },
+                    "signals" => Ok(BridgeMessage::CreateSignal(
+                        data.get("record").cloned().unwrap_or(Value::Null),
+                    )),
                     "agents" => {
-                        let event_type = data.get("type")
+                        let event_type = data
+                            .get("type")
                             .and_then(|t| t.as_str())
                             .ok_or_else(|| anyhow!("Missing or invalid type field"))?;
 
@@ -68,16 +70,16 @@ pub fn read_json_message(stream: &mut TcpStream) -> Result<BridgeMessage> {
                             "INSERT" => Ok(BridgeMessage::CreateAgent(record)),
                             "UPDATE" => Ok(BridgeMessage::UpdateAgent(record)),
                             "DELETE" => Ok(BridgeMessage::DeleteAgent(record)),
-                            _ => Err(anyhow!("Unsupported event type: {}", event_type))
+                            _ => Err(anyhow!("Unsupported event type: {}", event_type)),
                         }
-                    },
-                    _ => Err(anyhow!("Unsupported table: {}", table))
+                    }
+                    _ => Err(anyhow!("Unsupported table: {}", table)),
                 }
             } else {
                 Err(anyhow!("Unrecognized message format"))
             }
-        },
-        Err(e) => Err(anyhow!("Failed to parse JSON: {}", e))
+        }
+        Err(e) => Err(anyhow!("Failed to parse JSON: {}", e)),
     }
 }
 

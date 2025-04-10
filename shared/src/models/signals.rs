@@ -1,14 +1,14 @@
-use crate::{Agent, RuntimeSession};
 use crate::RunningStatus;
-use crate::{IdFields, TimestampFields, DatabaseItem, JsonLike};
-use serde_json::Value;
+use crate::{Agent, RuntimeSession};
+use crate::{DatabaseItem, IdFields, JsonLike, TimestampFields};
 use anyhow::{anyhow, Result};
-use sqlx::{Row, PgPool};
-use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
-use std::str::FromStr;
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
+use serde_json::Value;
+use sqlx::{PgPool, Row};
+use std::str::FromStr;
+use std::sync::atomic::AtomicU64;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct Signal {
@@ -40,8 +40,12 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Signal {
                 agent_state: row.try_get("agent_state")?,
                 accepted_completion_rate: row.try_get("agent_accepted_completion_rate")?,
                 steps: Vec::new(), // Steps are loaded separately
-                completion_count: Arc::new(AtomicU64::new(row.try_get::<i32, _>("agent_completion_count")? as u64)),
-                run_count: Arc::new(AtomicU64::new(row.try_get::<i32, _>("agent_run_count")? as u64)),
+                completion_count: Arc::new(AtomicU64::new(
+                    row.try_get::<i32, _>("agent_completion_count")? as u64,
+                )),
+                run_count: Arc::new(AtomicU64::new(
+                    row.try_get::<i32, _>("agent_run_count")? as u64
+                )),
             })
         } else {
             None
@@ -104,7 +108,7 @@ impl Signal {
 
                 // TODO Save the results to the database
                 Ok(res)
-            },
+            }
             None => Err(anyhow!("Cannot process signal with no associated data")),
         }
     }
@@ -140,7 +144,7 @@ impl JsonLike for Signal {
                                 updated_fields.push(key.to_string());
                             }
                         }
-                    },
+                    }
                     "agent" => {
                         match &mut self.agent {
                             Some(agent) => {
@@ -148,7 +152,8 @@ impl JsonLike for Signal {
                                 if !value.is_null() {
                                     if let Ok(fields) = agent.update_from_json(value.clone()) {
                                         if !fields.is_empty() {
-                                            updated_fields.push(format!("agent.{}", fields.join(", agent.")));
+                                            updated_fields
+                                                .push(format!("agent.{}", fields.join(", agent.")));
                                         }
                                     }
                                 } else {
@@ -156,7 +161,7 @@ impl JsonLike for Signal {
                                     self.agent = None;
                                     updated_fields.push(key.to_string());
                                 }
-                            },
+                            }
                             None => {
                                 // If we don't have an agent, try to create one
                                 if !value.is_null() {
@@ -167,7 +172,7 @@ impl JsonLike for Signal {
                                 }
                             }
                         }
-                    },
+                    }
                     "status" => {
                         if let Some(status_str) = value.as_str() {
                             match RunningStatus::from_str(status_str) {
@@ -176,11 +181,13 @@ impl JsonLike for Signal {
                                         self.status = new_status;
                                         updated_fields.push(key.to_string());
                                     }
-                                },
-                                Err(e) => return Err(anyhow!("Invalid status '{}': {}", status_str, e)),
+                                }
+                                Err(e) => {
+                                    return Err(anyhow!("Invalid status '{}': {}", status_str, e))
+                                }
                             }
                         }
-                    },
+                    }
                     "signal_type" => {
                         if let Some(new_type) = value.as_str() {
                             if self.signal_type != new_type {
@@ -188,10 +195,14 @@ impl JsonLike for Signal {
                                 updated_fields.push(key.to_string());
                             }
                         }
-                    },
+                    }
                     "initial_data" => {
                         // For JSON data fields, just compare stringified versions to detect changes
-                        let current_json = self.initial_data.as_ref().map(|v| serde_json::to_string(v).unwrap_or_default()).unwrap_or_default();
+                        let current_json = self
+                            .initial_data
+                            .as_ref()
+                            .map(|v| serde_json::to_string(v).unwrap_or_default())
+                            .unwrap_or_default();
                         let new_json = serde_json::to_string(value).unwrap_or_default();
 
                         if value.is_null() {
@@ -203,10 +214,14 @@ impl JsonLike for Signal {
                             self.initial_data = Some(value.clone());
                             updated_fields.push(key.to_string());
                         }
-                    },
+                    }
                     "result_data" => {
                         // Similar approach for result_data
-                        let current_json = self.result_data.as_ref().map(|v| serde_json::to_string(v).unwrap_or_default()).unwrap_or_default();
+                        let current_json = self
+                            .result_data
+                            .as_ref()
+                            .map(|v| serde_json::to_string(v).unwrap_or_default())
+                            .unwrap_or_default();
                         let new_json = serde_json::to_string(value).unwrap_or_default();
 
                         if value.is_null() {
@@ -218,7 +233,7 @@ impl JsonLike for Signal {
                             self.result_data = Some(value.clone());
                             updated_fields.push(key.to_string());
                         }
-                    },
+                    }
                     "error_message" => {
                         if value.is_null() {
                             if self.error_message.is_some() {
@@ -232,11 +247,11 @@ impl JsonLike for Signal {
                                 updated_fields.push(key.to_string());
                             }
                         }
-                    },
+                    }
                     // Skip fields that shouldn't be updated directly
                     "id" | "global_uuid" | "created_timestamp" | "last_updated_timestamp" => {
                         // These fields are skipped intentionally
-                    },
+                    }
                     // Unknown fields
                     _ => {
                         // Optionally: log or warn about unknown fields
@@ -261,27 +276,52 @@ impl JsonLike for Signal {
             Ok(Self {
                 identifiers: IdFields {
                     local_id: obj.get("id").and_then(|v| v.as_i64()),
-                    global_uuid: obj.get("global_uuid").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+                    global_uuid: obj
+                        .get("global_uuid")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string(),
                 },
                 timestamps: TimestampFields {
                     created: NaiveDateTime::parse_from_str(
-                        &obj.get("created_timestamp").and_then(|v| v.as_str()).unwrap_or_default(),
-                        "%Y-%m-%d %H:%M:%S"
-                    ).unwrap_or_default(),
+                        &obj.get("created_timestamp")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or_default(),
+                        "%Y-%m-%d %H:%M:%S",
+                    )
+                    .unwrap_or_default(),
                     updated: NaiveDateTime::parse_from_str(
-                        &obj.get("last_updated_timestamp").and_then(|v| v.as_str()).unwrap_or_default(),
-                        "%Y-%m-%d %H:%M:%S"
-                    ).unwrap_or_default(),
+                        &obj.get("last_updated_timestamp")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or_default(),
+                        "%Y-%m-%d %H:%M:%S",
+                    )
+                    .unwrap_or_default(),
                 },
-                user_requested_uuid: obj.get("user_requested_uuid").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
-                agent: obj.get("agent").and_then(|v| Agent::from_json(v.clone()).ok()),
-                status: obj.get("status").and_then(|v| v.as_str())
+                user_requested_uuid: obj
+                    .get("user_requested_uuid")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                agent: obj
+                    .get("agent")
+                    .and_then(|v| Agent::from_json(v.clone()).ok()),
+                status: obj
+                    .get("status")
+                    .and_then(|v| v.as_str())
                     .and_then(|s| RunningStatus::from_str(s).ok())
                     .unwrap_or_default(),
-                signal_type: obj.get("signal_type").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+                signal_type: obj
+                    .get("signal_type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
                 initial_data: obj.get("initial_data").cloned(),
                 result_data: obj.get("result_data").cloned(),
-                error_message: obj.get("error_message").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                error_message: obj
+                    .get("error_message")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
             })
         } else {
             Err(anyhow!("Expected JSON object"))
@@ -297,7 +337,10 @@ impl DatabaseItem for Signal {
 
     async fn try_db_create(&self, pool: &PgPool) -> Result<()> {
         let agent_id = self.agent.as_ref().and_then(|a| a.identifiers.local_id);
-        let agent_uuid = self.agent.as_ref().map(|a| a.identifiers.global_uuid.clone());
+        let agent_uuid = self
+            .agent
+            .as_ref()
+            .map(|a| a.identifiers.global_uuid.clone());
 
         sqlx::query(
             r#"
@@ -307,7 +350,7 @@ impl DatabaseItem for Signal {
                 error_message, created_timestamp, last_updated_timestamp
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-            "#
+            "#,
         )
         .bind(&self.identifiers.global_uuid)
         .bind(&self.user_requested_uuid)
@@ -328,7 +371,10 @@ impl DatabaseItem for Signal {
 
     async fn try_db_update(&self, pool: &PgPool) -> Result<()> {
         let agent_id = self.agent.as_ref().and_then(|a| a.identifiers.local_id);
-        let agent_uuid = self.agent.as_ref().map(|a| a.identifiers.global_uuid.clone());
+        let agent_uuid = self
+            .agent
+            .as_ref()
+            .map(|a| a.identifiers.global_uuid.clone());
 
         sqlx::query(
             r#"
@@ -343,7 +389,7 @@ impl DatabaseItem for Signal {
                 error_message = $8,
                 last_updated_timestamp = $9
             WHERE global_uuid = $10
-            "#
+            "#,
         )
         .bind(&self.user_requested_uuid)
         .bind(agent_id)
@@ -387,7 +433,7 @@ impl DatabaseItem for Signal {
                 a.last_updated_timestamp as agent_last_updated_timestamp
             FROM signals s
             LEFT JOIN agents a ON s.agent_id = a.id
-            "#
+            "#,
         )
         .fetch_all(pool)
         .await?;
@@ -416,7 +462,7 @@ impl DatabaseItem for Signal {
                         FROM steps s
                         WHERE s.agent_id = $1
                         ORDER BY s.sequence_number
-                        "#
+                        "#,
                     )
                     .bind(agent_id)
                     .fetch_one(pool)
@@ -453,7 +499,7 @@ impl DatabaseItem for Signal {
                 FROM signals s
                 LEFT JOIN agents a ON s.agent_id = a.id
                 WHERE s.id = $1
-                "#
+                "#,
             )
             .bind(local_id)
         } else {
@@ -473,7 +519,7 @@ impl DatabaseItem for Signal {
                 FROM signals s
                 LEFT JOIN agents a ON s.agent_id = a.id
                 WHERE s.global_uuid = $1
-                "#
+                "#,
             )
             .bind(&id.global_uuid)
         };
@@ -501,7 +547,7 @@ impl DatabaseItem for Signal {
                         FROM steps s
                         WHERE s.agent_id = $1
                         ORDER BY s.sequence_number
-                        "#
+                        "#,
                     )
                     .bind(agent_id)
                     .fetch_one(pool)

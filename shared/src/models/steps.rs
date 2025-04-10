@@ -1,14 +1,14 @@
-use crate::{IdFields, TimestampFields, call_llm, exec_python, DatabaseItem, JsonLike};
+use crate::{call_llm, exec_python, DatabaseItem, IdFields, JsonLike, TimestampFields};
 use serde_json::Value;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
-use sqlx::{Postgres, Row, PgPool, postgres::PgArgumentBuffer};
-use chrono::NaiveDateTime;
 use async_trait::async_trait;
+use chrono::NaiveDateTime;
+use serde::{Deserialize, Serialize};
+use sqlx::{postgres::PgArgumentBuffer, PgPool, Postgres, Row};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum StepType {
@@ -40,13 +40,18 @@ impl sqlx::Type<Postgres> for StepType {
 }
 
 impl<'r> sqlx::Decode<'r, Postgres> for StepType {
-    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    fn decode(
+        value: sqlx::postgres::PgValueRef<'r>,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         Self::from_str(value.as_str()?)
     }
 }
 
 impl<'q> sqlx::Encode<'q, Postgres> for StepType {
-    fn encode_by_ref(&self, buf: &mut PgArgumentBuffer) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Send + Sync>> {
+    fn encode_by_ref(
+        &self,
+        buf: &mut PgArgumentBuffer,
+    ) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Send + Sync>> {
         let s = self.as_str();
         buf.extend_from_slice(s.as_bytes());
         Ok(sqlx::encode::IsNull::No)
@@ -81,7 +86,9 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Step {
             description: row.try_get("description")?,
             step_type: row.try_get("step_type")?,
             step_content: row.try_get("step_content")?,
-            success_count: Arc::new(AtomicU64::new(row.try_get::<i32, _>("success_count")? as u64)),
+            success_count: Arc::new(AtomicU64::new(
+                row.try_get::<i32, _>("success_count")? as u64
+            )),
             run_count: Arc::new(AtomicU64::new(row.try_get::<i32, _>("run_count")? as u64)),
         })
     }
@@ -190,9 +197,10 @@ result = {}(source)"#,
 
     pub fn from_json_array(steps_json: &Value) -> Vec<Self> {
         if let Some(steps_array) = steps_json.as_array() {
-            steps_array.iter().filter_map(|step_json| {
-                Step::from_json(step_json.clone()).ok()
-            }).collect()
+            steps_array
+                .iter()
+                .filter_map(|step_json| Step::from_json(step_json.clone()).ok())
+                .collect()
         } else {
             Vec::new()
         }
@@ -220,26 +228,56 @@ impl JsonLike for Step {
             Ok(Self {
                 identifiers: IdFields {
                     local_id: obj.get("id").and_then(|v| v.as_i64()),
-                    global_uuid: obj.get("global_uuid").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+                    global_uuid: obj
+                        .get("global_uuid")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string(),
                 },
                 timestamps: TimestampFields {
                     created: NaiveDateTime::parse_from_str(
-                        &obj.get("created_timestamp").and_then(|v| v.as_str()).unwrap_or_default(),
-                        "%Y-%m-%d %H:%M:%S"
-                    ).unwrap_or_default(),
+                        &obj.get("created_timestamp")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or_default(),
+                        "%Y-%m-%d %H:%M:%S",
+                    )
+                    .unwrap_or_default(),
                     updated: NaiveDateTime::parse_from_str(
-                        &obj.get("last_updated_timestamp").and_then(|v| v.as_str()).unwrap_or_default(),
-                        "%Y-%m-%d %H:%M:%S"
-                    ).unwrap_or_default(),
+                        &obj.get("last_updated_timestamp")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or_default(),
+                        "%Y-%m-%d %H:%M:%S",
+                    )
+                    .unwrap_or_default(),
                 },
-                name: obj.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
-                description: obj.get("description").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                name: obj
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                description: obj
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
                 step_type: StepType::from_str(
-                    obj.get("step_type").and_then(|v| v.as_str()).unwrap_or_default()
-                ).unwrap_or(StepType::Python),
-                step_content: obj.get("step_content").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
-                success_count: Arc::new(AtomicU64::new(obj.get("success_count").and_then(|v| v.as_i64()).unwrap_or(0) as u64)),
-                run_count: Arc::new(AtomicU64::new(obj.get("run_count").and_then(|v| v.as_i64()).unwrap_or(0) as u64)),
+                    obj.get("step_type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default(),
+                )
+                .unwrap_or(StepType::Python),
+                step_content: obj
+                    .get("step_content")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                success_count: Arc::new(AtomicU64::new(
+                    obj.get("success_count")
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(0) as u64,
+                )),
+                run_count: Arc::new(AtomicU64::new(
+                    obj.get("run_count").and_then(|v| v.as_i64()).unwrap_or(0) as u64,
+                )),
             })
         } else {
             Err(anyhow!("Expected JSON object"))
@@ -259,7 +297,7 @@ impl JsonLike for Step {
                                 updated_fields.push(key.to_string());
                             }
                         }
-                    },
+                    }
                     "description" => {
                         if value.is_null() {
                             if self.description.is_some() {
@@ -273,7 +311,7 @@ impl JsonLike for Step {
                                 updated_fields.push(key.to_string());
                             }
                         }
-                    },
+                    }
                     "step_type" => {
                         if let Some(type_str) = value.as_str() {
                             match StepType::from_str(type_str) {
@@ -282,11 +320,13 @@ impl JsonLike for Step {
                                         self.step_type = new_type;
                                         updated_fields.push(key.to_string());
                                     }
-                                },
-                                Err(e) => return Err(anyhow!("Invalid step type '{}': {}", type_str, e)),
+                                }
+                                Err(e) => {
+                                    return Err(anyhow!("Invalid step type '{}': {}", type_str, e))
+                                }
                             }
                         }
-                    },
+                    }
                     "step_content" => {
                         if let Some(new_content) = value.as_str() {
                             if self.step_content != new_content {
@@ -294,7 +334,7 @@ impl JsonLike for Step {
                                 updated_fields.push(key.to_string());
                             }
                         }
-                    },
+                    }
                     "success_count" => {
                         if let Some(count) = value.as_u64() {
                             let current = self.success_count.load(Ordering::Relaxed);
@@ -303,7 +343,7 @@ impl JsonLike for Step {
                                 updated_fields.push(key.to_string());
                             }
                         }
-                    },
+                    }
                     "run_count" => {
                         if let Some(count) = value.as_u64() {
                             let current = self.run_count.load(Ordering::Relaxed);
@@ -312,11 +352,11 @@ impl JsonLike for Step {
                                 updated_fields.push(key.to_string());
                             }
                         }
-                    },
+                    }
                     // Skip fields that shouldn't be updated directly
                     "id" | "global_uuid" | "created_timestamp" | "last_updated_timestamp" => {
                         // These fields are skipped intentionally
-                    },
+                    }
                     // Unknown fields
                     _ => {
                         // Optionally: log or warn about unknown fields
@@ -351,7 +391,7 @@ impl DatabaseItem for Step {
                 success_count, run_count, created_timestamp, last_updated_timestamp
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            "#
+            "#,
         )
         .bind(&self.identifiers.global_uuid)
         .bind(&self.name)
@@ -380,7 +420,7 @@ impl DatabaseItem for Step {
                 run_count = $6,
                 last_updated_timestamp = $7
             WHERE global_uuid = $8
-            "#
+            "#,
         )
         .bind(&self.name)
         .bind(&self.description)
@@ -409,7 +449,7 @@ impl DatabaseItem for Step {
         let rows = sqlx::query_as::<_, Step>(
             r#"
             SELECT * FROM steps
-            "#
+            "#,
         )
         .fetch_all(pool)
         .await?;

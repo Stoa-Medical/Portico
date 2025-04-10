@@ -12,16 +12,16 @@ pub use models::{Agent, RuntimeSession, Signal, Step};
 // ============ Custom Enums / Traits ============
 // === Imports ===
 use anyhow::{anyhow, Result};
+use async_trait::async_trait;
+use pyo3::prelude::*;
+use pyo3::types::PyDict;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::env;
-use sqlx::postgres::{PgPool, PgArgumentBuffer};
+use sqlx::postgres::{PgArgumentBuffer, PgPool};
 use sqlx::Postgres;
+use std::env;
 use std::ffi::CString;
-use pyo3::prelude::*;
-use pyo3::types::PyDict;
-use async_trait::async_trait;
 use uuid;
 
 // === Shared Enum definitions ===
@@ -52,7 +52,9 @@ impl sqlx::Type<Postgres> for RunningStatus {
 }
 
 impl<'r> sqlx::Decode<'r, Postgres> for RunningStatus {
-    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    fn decode(
+        value: sqlx::postgres::PgValueRef<'r>,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         match value.as_str()? {
             "waiting" => Ok(RunningStatus::Waiting),
             "running" => Ok(RunningStatus::Running),
@@ -64,7 +66,10 @@ impl<'r> sqlx::Decode<'r, Postgres> for RunningStatus {
 }
 
 impl<'q> sqlx::Encode<'q, Postgres> for RunningStatus {
-    fn encode_by_ref(&self, buf: &mut PgArgumentBuffer) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Send + Sync>> {
+    fn encode_by_ref(
+        &self,
+        buf: &mut PgArgumentBuffer,
+    ) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Send + Sync>> {
         let s = self.as_str();
         buf.extend_from_slice(s.as_bytes());
         Ok(sqlx::encode::IsNull::No)
@@ -111,7 +116,10 @@ impl IdFields {
     }
 
     pub fn with_values(local_id: Option<i64>, global_uuid: String) -> Self {
-        Self { local_id, global_uuid }
+        Self {
+            local_id,
+            global_uuid,
+        }
     }
 }
 
@@ -158,7 +166,9 @@ pub trait DatabaseItem: Sized {
 pub trait JsonLike {
     fn to_json(&self) -> Value;
     /// Creates new object
-    fn from_json(obj: Value) -> Result<Self> where Self:Sized;
+    fn from_json(obj: Value) -> Result<Self>
+    where
+        Self: Sized;
     /// Updates existing object
     fn update_from_json(&mut self, obj: Value) -> Result<Vec<String>>;
 }
@@ -237,7 +247,9 @@ pub fn exec_python(source: Value, the_code: &str) -> Result<Value> {
                 let json_value: Value = serde_json::from_str(&json_str)?;
                 Ok(json_value)
             }
-            Ok(None) => Err(anyhow!("Runtime error: unable to find return value (`result`)")),
+            Ok(None) => Err(anyhow!(
+                "Runtime error: unable to find return value (`result`)"
+            )),
             Err(err) => Err(anyhow!("Python error: {}", err)),
         }
     })

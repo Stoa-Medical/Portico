@@ -1,9 +1,9 @@
-use crate::{IdFields, RunningStatus, TimestampFields, DatabaseItem};
 use crate::Step;
+use crate::{DatabaseItem, IdFields, RunningStatus, TimestampFields};
 use anyhow::{anyhow, Result};
-use serde_json::Value;
-use sqlx::{Row, PgPool};
 use async_trait::async_trait;
+use serde_json::Value;
+use sqlx::{PgPool, Row};
 
 #[derive(Debug)]
 pub struct RuntimeSession {
@@ -17,7 +17,6 @@ pub struct RuntimeSession {
 }
 
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
-
     // Expect a SQL query like:
     // ```sql
     // SELECT
@@ -70,10 +69,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
 }
 
 impl RuntimeSession {
-    pub fn new(
-        source_data: Value,
-        steps: Vec<Step>,
-    ) -> Self {
+    pub fn new(source_data: Value, steps: Vec<Step>) -> Self {
         Self {
             identifiers: IdFields::new(),
             timestamps: TimestampFields::new(),
@@ -104,7 +100,7 @@ impl RuntimeSession {
 
                     // Store the intermediate result
                     self.last_successful_result = Some(value);
-                },
+                }
                 Err(e) => {
                     // Update status to cancelled
                     self.status = RunningStatus::Cancelled;
@@ -138,7 +134,7 @@ impl DatabaseItem for RuntimeSession {
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING id
-            "#
+            "#,
         )
         .bind(&self.identifiers.global_uuid)
         .bind(&self.status)
@@ -162,7 +158,7 @@ impl DatabaseItem for RuntimeSession {
                     created_timestamp, last_updated_timestamp
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                "#
+                "#,
             )
             .bind(&step.identifiers.global_uuid)
             .bind(session_id)
@@ -193,7 +189,7 @@ impl DatabaseItem for RuntimeSession {
                 latest_result = $4,
                 last_updated_timestamp = $5
             WHERE global_uuid = $6
-            "#
+            "#,
         )
         .bind(&self.status)
         .bind(&self.source_data)
@@ -254,7 +250,7 @@ impl DatabaseItem for RuntimeSession {
                     '[]'::json
                 ) as steps
             FROM runtime_sessions rs
-            "#
+            "#,
         )
         .fetch_all(pool)
         .await?;
@@ -290,7 +286,7 @@ impl DatabaseItem for RuntimeSession {
                     ) as steps
                 FROM runtime_sessions rs
                 WHERE rs.id = $1
-                "#
+                "#,
             )
             .bind(local_id)
         } else {
@@ -320,7 +316,7 @@ impl DatabaseItem for RuntimeSession {
                     ) as steps
                 FROM runtime_sessions rs
                 WHERE rs.global_uuid = $1
-                "#
+                "#,
             )
             .bind(&id.global_uuid)
         };

@@ -7,21 +7,18 @@
 /// - Completing Missions by using configured Steps
 ///
 /// NOTE: Agents are created in the UI, and Supabase is the source-of-truth for their state.
-use crate::models::{
-    runtime_sessions::RuntimeSession,
-    steps::Step,
-};
-use crate::{IdFields, TimestampFields, DatabaseItem, JsonLike};
+use crate::models::{runtime_sessions::RuntimeSession, steps::Step};
+use crate::{DatabaseItem, IdFields, JsonLike, TimestampFields};
 
 use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
-use sqlx::{Postgres, Row, PgPool, postgres::PgArgumentBuffer};
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use sqlx::{postgres::PgArgumentBuffer, PgPool, Postgres, Row};
 use std::str::FromStr;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Agent {
@@ -82,7 +79,9 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
             agent_state: row.try_get("agent_state")?,
             accepted_completion_rate: row.try_get("accepted_completion_rate")?,
             steps,
-            completion_count: Arc::new(AtomicU64::new(row.try_get::<i32, _>("completion_count")? as u64)),
+            completion_count: Arc::new(AtomicU64::new(
+                row.try_get::<i32, _>("completion_count")? as u64
+            )),
             run_count: Arc::new(AtomicU64::new(row.try_get::<i32, _>("run_count")? as u64)),
         })
     }
@@ -136,7 +135,9 @@ impl sqlx::Type<Postgres> for AgentState {
 }
 
 impl<'r> sqlx::Decode<'r, Postgres> for AgentState {
-    fn decode(value: sqlx::postgres::PgValueRef<'r>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    fn decode(
+        value: sqlx::postgres::PgValueRef<'r>,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         match value.as_str()? {
             "inactive" => Ok(AgentState::Inactive),
             "stable" => Ok(AgentState::Stable),
@@ -147,7 +148,10 @@ impl<'r> sqlx::Decode<'r, Postgres> for AgentState {
 }
 
 impl<'q> sqlx::Encode<'q, Postgres> for AgentState {
-    fn encode_by_ref(&self, buf: &mut PgArgumentBuffer) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Send + Sync>> {
+    fn encode_by_ref(
+        &self,
+        buf: &mut PgArgumentBuffer,
+    ) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Send + Sync>> {
         let s = self.as_str();
         buf.extend_from_slice(s.as_bytes());
         Ok(sqlx::encode::IsNull::No)
@@ -162,7 +166,7 @@ impl Agent {
         accepted_completion_rate: f32,
         steps: Vec<Step>,
         completion_count: u64,
-        run_count: u64
+        run_count: u64,
     ) -> Self {
         // Start all agents in an inactive state
         Self {
@@ -173,7 +177,7 @@ impl Agent {
             accepted_completion_rate,
             steps,
             completion_count: Arc::new(AtomicU64::new(completion_count)),
-            run_count: Arc::new(AtomicU64::new(run_count))
+            run_count: Arc::new(AtomicU64::new(run_count)),
         }
     }
 
@@ -186,7 +190,6 @@ impl Agent {
             _ => Err(anyhow!("Can only start from Inactive state")),
         }
     }
-
 
     /// Process data with this agent
     pub async fn run(&mut self, source: Value) -> Result<RuntimeSession> {
@@ -237,7 +240,7 @@ impl Agent {
             AgentState::Stable | AgentState::Unstable => {
                 self.agent_state = AgentState::Inactive;
                 Ok(())
-            },
+            }
             _ => Err(anyhow!("Can only stop from a running state")),
         }
     }
@@ -253,7 +256,6 @@ impl Agent {
 
         collected_completion_count as f32 / collected_run_count as f32
     }
-
 }
 
 impl JsonLike for Agent {
@@ -277,28 +279,59 @@ impl JsonLike for Agent {
             Ok(Self {
                 identifiers: IdFields {
                     local_id: obj.get("id").and_then(|v| v.as_i64()),
-                    global_uuid: obj.get("global_uuid").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+                    global_uuid: obj
+                        .get("global_uuid")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default()
+                        .to_string(),
                 },
                 timestamps: TimestampFields {
                     created: NaiveDateTime::parse_from_str(
-                        &obj.get("created_timestamp").and_then(|v| v.as_str()).unwrap_or_default(),
-                        "%Y-%m-%d %H:%M:%S"
-                    ).unwrap_or_default(),
+                        &obj.get("created_timestamp")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or_default(),
+                        "%Y-%m-%d %H:%M:%S",
+                    )
+                    .unwrap_or_default(),
                     updated: NaiveDateTime::parse_from_str(
-                        &obj.get("last_updated_timestamp").and_then(|v| v.as_str()).unwrap_or_default(),
-                        "%Y-%m-%d %H:%M:%S"
-                    ).unwrap_or_default(),
+                        &obj.get("last_updated_timestamp")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or_default(),
+                        "%Y-%m-%d %H:%M:%S",
+                    )
+                    .unwrap_or_default(),
                 },
-                description: obj.get("description").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
-                agent_state: obj.get("agent_state").and_then(|v| v.as_str())
+                description: obj
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                agent_state: obj
+                    .get("agent_state")
+                    .and_then(|v| v.as_str())
                     .and_then(|s| AgentState::from_str(s).ok())
                     .unwrap_or_default(),
-                accepted_completion_rate: obj.get("accepted_completion_rate").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32,
-                steps: obj.get("steps").and_then(|v| v.as_array())
-                    .map(|arr| arr.iter().filter_map(|step| Step::from_json(step.clone()).ok()).collect())
+                accepted_completion_rate: obj
+                    .get("accepted_completion_rate")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0) as f32,
+                steps: obj
+                    .get("steps")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|step| Step::from_json(step.clone()).ok())
+                            .collect()
+                    })
                     .unwrap_or_default(),
-                completion_count: Arc::new(AtomicU64::new(obj.get("completion_count").and_then(|v| v.as_i64()).unwrap_or(0) as u64)),
-                run_count: Arc::new(AtomicU64::new(obj.get("run_count").and_then(|v| v.as_i64()).unwrap_or(0) as u64)),
+                completion_count: Arc::new(AtomicU64::new(
+                    obj.get("completion_count")
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(0) as u64,
+                )),
+                run_count: Arc::new(AtomicU64::new(
+                    obj.get("run_count").and_then(|v| v.as_i64()).unwrap_or(0) as u64,
+                )),
             })
         } else {
             Err(anyhow!("Expected JSON object"))
@@ -318,7 +351,7 @@ impl JsonLike for Agent {
                                 updated_fields.push(key.to_string());
                             }
                         }
-                    },
+                    }
                     "agent_state" => {
                         if let Some(state_str) = value.as_str() {
                             match AgentState::from_str(state_str) {
@@ -327,11 +360,17 @@ impl JsonLike for Agent {
                                         self.agent_state = new_state;
                                         updated_fields.push(key.to_string());
                                     }
-                                },
-                                Err(e) => return Err(anyhow!("Invalid agent state '{}': {}", state_str, e)),
+                                }
+                                Err(e) => {
+                                    return Err(anyhow!(
+                                        "Invalid agent state '{}': {}",
+                                        state_str,
+                                        e
+                                    ))
+                                }
                             }
                         }
-                    },
+                    }
                     "accepted_completion_rate" => {
                         if let Some(rate) = value.as_f64() {
                             let rate = rate as f32;
@@ -340,14 +379,15 @@ impl JsonLike for Agent {
                                 updated_fields.push(key.to_string());
                             }
                         }
-                    },
+                    }
                     "steps" => {
                         if let Some(steps_array) = value.as_array() {
                             // This is more complex since we need to match existing steps
                             // For simplicity, we'll only update if the array is different in length
                             // A more complete solution would match steps by UUID and perform updates
 
-                            let new_steps = steps_array.iter()
+                            let new_steps = steps_array
+                                .iter()
                                 .filter_map(|step_json| Step::from_json(step_json.clone()).ok())
                                 .collect::<Vec<Step>>();
 
@@ -359,12 +399,15 @@ impl JsonLike for Agent {
                                 // For now, we'll just use a simple heuristic
 
                                 // Count how many steps have matching UUIDs
-                                let matching = self.steps.iter()
-                                    .filter(|old_step|
-                                        new_steps.iter().any(|new_step|
-                                            old_step.identifiers.global_uuid == new_step.identifiers.global_uuid
-                                        )
-                                    )
+                                let matching = self
+                                    .steps
+                                    .iter()
+                                    .filter(|old_step| {
+                                        new_steps.iter().any(|new_step| {
+                                            old_step.identifiers.global_uuid
+                                                == new_step.identifiers.global_uuid
+                                        })
+                                    })
                                     .count();
 
                                 if matching != self.steps.len() {
@@ -373,7 +416,7 @@ impl JsonLike for Agent {
                                 }
                             }
                         }
-                    },
+                    }
                     "completion_count" => {
                         if let Some(count) = value.as_u64() {
                             let current = self.completion_count.load(Ordering::Relaxed);
@@ -382,7 +425,7 @@ impl JsonLike for Agent {
                                 updated_fields.push(key.to_string());
                             }
                         }
-                    },
+                    }
                     "run_count" => {
                         if let Some(count) = value.as_u64() {
                             let current = self.run_count.load(Ordering::Relaxed);
@@ -391,11 +434,11 @@ impl JsonLike for Agent {
                                 updated_fields.push(key.to_string());
                             }
                         }
-                    },
+                    }
                     // Skip fields that shouldn't be updated directly
                     "id" | "global_uuid" | "created_timestamp" | "last_updated_timestamp" => {
                         // These fields are skipped intentionally
-                    },
+                    }
                     // Unknown fields
                     _ => {
                         // Optionally: log or warn about unknown fields
@@ -432,7 +475,7 @@ impl DatabaseItem for Agent {
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING id
-            "#
+            "#,
         )
         .bind(&self.identifiers.global_uuid)
         .bind(&self.description)
@@ -457,7 +500,7 @@ impl DatabaseItem for Agent {
                     created_timestamp, last_updated_timestamp
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                "#
+                "#,
             )
             .bind(&step.identifiers.global_uuid)
             .bind(agent_id)
@@ -489,7 +532,7 @@ impl DatabaseItem for Agent {
                 run_count = $5,
                 last_updated_timestamp = $6
             WHERE global_uuid = $7
-            "#
+            "#,
         )
         .bind(&self.description)
         .bind(&self.agent_state)
@@ -551,7 +594,7 @@ impl DatabaseItem for Agent {
                     '[]'::json
                 ) as steps
             FROM agents a
-            "#
+            "#,
         )
         .fetch_all(pool)
         .await?;
@@ -587,7 +630,7 @@ impl DatabaseItem for Agent {
                     ) as steps
                 FROM agents a
                 WHERE a.id = $1
-                "#
+                "#,
             )
             .bind(local_id)
         } else {
@@ -617,7 +660,7 @@ impl DatabaseItem for Agent {
                     ) as steps
                 FROM agents a
                 WHERE a.global_uuid = $1
-                "#
+                "#,
             )
             .bind(&id.global_uuid)
         };

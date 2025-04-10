@@ -1,6 +1,6 @@
 use crate::{
-    models::{Agent, Step},
     models::steps::StepType,
+    models::{Agent, Step},
     IdFields, TimestampFields,
 };
 use serde_json::json;
@@ -62,7 +62,10 @@ fn test_agent_state_transitions() {
     // Verify the step was executed
     if let Ok(session) = run_result {
         println!("Got session result: {:?}", session.last_successful_result);
-        assert_eq!(session.last_successful_result.unwrap(), json!({"value": 15}));
+        assert_eq!(
+            session.last_successful_result.unwrap(),
+            json!({"value": 15})
+        );
     }
 
     // Stop the agent - should transition back to Inactive
@@ -88,15 +91,18 @@ fn test_completion_rate() {
     let mut agent = create_test_agent();
 
     // Create agent with completion history
-    agent.completion_count.store(4, Ordering::Relaxed);  // completed
-    agent.run_count.store(5, Ordering::Relaxed);         // total runs
+    agent.completion_count.store(4, Ordering::Relaxed); // completed
+    agent.run_count.store(5, Ordering::Relaxed); // total runs
 
     // Start the agent - should transition to a running state
     let start_result = agent.start();
     if start_result.is_err() {
         println!("Failed to start agent: {:?}", start_result);
     }
-    assert!(start_result.is_ok(), "Agent should start with good completion rate");
+    assert!(
+        start_result.is_ok(),
+        "Agent should start with good completion rate"
+    );
 
     // Run the agent to verify it works
     let source = json!({"value": 5});
@@ -109,10 +115,12 @@ fn test_completion_rate() {
     // Verify the step was executed
     if let Ok(session) = run_result {
         println!("Got session result: {:?}", session.last_successful_result);
-        assert_eq!(session.last_successful_result.unwrap(), json!({"value": 15}));
+        assert_eq!(
+            session.last_successful_result.unwrap(),
+            json!({"value": 15})
+        );
     }
 }
-
 
 fn create_test_agent() -> Agent {
     let id_fields = IdFields::new();
@@ -128,7 +136,7 @@ fn create_test_agent() -> Agent {
         "Add 10".to_string(),
         Some("Adds 10 to the input value".to_string()),
         0,
-        0
+        0,
     );
 
     let steps = vec![step];
@@ -140,6 +148,6 @@ fn create_test_agent() -> Agent {
         accepted_rate,
         steps,
         0,
-        0
+        0,
     )
 }

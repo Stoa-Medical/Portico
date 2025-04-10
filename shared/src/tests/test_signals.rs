@@ -19,7 +19,7 @@ fn create_test_signal() -> Signal {
         0.8,
         vec![],
         0,
-        0
+        0,
     );
 
     let initial_data = Some(json!({"value": 5}));
@@ -29,7 +29,7 @@ fn create_test_signal() -> Signal {
         user_uuid,
         Some(agent),
         "Test Signal".to_string(),
-        initial_data
+        initial_data,
     )
 }
 
@@ -55,7 +55,7 @@ fn test_signal_without_data() {
         0.8,
         vec![],
         0,
-        0
+        0,
     );
 
     // Create signal with no initial data
@@ -64,7 +64,7 @@ fn test_signal_without_data() {
         user_uuid,
         Some(agent),
         "Test Signal".to_string(),
-        None  // No data
+        None, // No data
     );
 
     // Processing should fail without data

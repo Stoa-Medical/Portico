@@ -1,6 +1,6 @@
 use crate::{
-    models::{RuntimeSession, Step},
     models::steps::StepType,
+    models::{RuntimeSession, Step},
     IdFields,
 };
 use serde_json::json;
@@ -44,7 +44,7 @@ fn test_session_with_steps() {
         "Test Step".to_string(),
         Some("A test step".to_string()),
         0,
-        0
+        0,
     );
 
     // Create session with our test step
