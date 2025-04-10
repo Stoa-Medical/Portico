@@ -19,7 +19,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::postgres::{PgArgumentBuffer, PgPool};
-use sqlx::Postgres;
+use sqlx::{Postgres, Row};
 use std::env;
 use std::ffi::CString;
 use uuid;
@@ -185,6 +185,55 @@ pub async fn check_exists_by_uuid(pool: &PgPool, table: &str, uuid: &str) -> Res
         .map_err(|e| anyhow!("Failed to check if record exists: {}", e))
 }
 
+/// Returns a SQL fragment for Step JSON aggregation that's used in several queries
+pub fn steps_json_agg_sql(parent_table: &str, parent_id_column: &str) -> String {
+    format!(
+        r#"COALESCE(
+            (
+                SELECT json_agg(json_build_object(
+                    'id', s.id,
+                    'global_uuid', s.global_uuid,
+                    'created_timestamp', s.created_timestamp,
+                    'last_updated_timestamp', s.last_updated_timestamp,
+                    'name', s.name,
+                    'description', s.description,
+                    'step_type', s.step_type,
+                    'step_content', s.step_content,
+                    'success_count', s.success_count,
+                    'run_count', s.run_count
+                ) ORDER BY s.sequence_number)
+                FROM steps s
+                WHERE s.{} = {}.id
+            ),
+            '[]'::json
+        ) as steps"#,
+        parent_id_column, parent_table
+    )
+}
+
+/// Returns a SQL fragment for the common Signal-Agent JOIN query
+pub fn signal_with_agent_sql(where_clause: &str) -> String {
+    format!(
+        r#"
+        SELECT
+            s.*,
+            a.id as agent_id,
+            a.global_uuid as agent_global_uuid,
+            a.description as agent_description,
+            a.agent_state as agent_state,
+            a.accepted_completion_rate as agent_accepted_completion_rate,
+            a.completion_count as agent_completion_count,
+            a.run_count as agent_run_count,
+            a.created_timestamp as agent_created_timestamp,
+            a.last_updated_timestamp as agent_last_updated_timestamp
+        FROM signals s
+        LEFT JOIN agents a ON s.agent_id = a.id
+        {}
+        "#,
+        where_clause
+    )
+}
+
 // Prefer JSON-mode supported models. Docs: https://docs.together.ai/docs/json-mode
 pub enum JsonModeLLMs {
     MetaLlama33_70b,
@@ -263,4 +312,20 @@ pub fn exec_python(source: Value, the_code: &str) -> Result<Value> {
             Err(err) => Err(anyhow!("Python error: {}", err)),
         }
     })
+}
+
+/// Loads steps for an agent by ID
+pub async fn load_agent_steps(pool: &PgPool, agent_id: i64) -> Result<Option<Value>> {
+    let steps_query = format!(
+        "SELECT {} FROM (SELECT {}) subq",
+        steps_json_agg_sql("subq", "agent_id"),
+        agent_id
+    );
+
+    let steps_row = sqlx::query(&steps_query)
+        .fetch_one(pool)
+        .await?;
+
+    let steps_json: Option<Value> = steps_row.get("steps");
+    Ok(steps_json)
 }

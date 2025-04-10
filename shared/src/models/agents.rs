@@ -597,103 +597,58 @@ impl DatabaseItem for Agent {
     }
 
     async fn try_db_select_all(pool: &PgPool) -> Result<Vec<Self>> {
-        let rows = sqlx::query_as::<_, Self>(
+        let query = format!(
             r#"
             SELECT
                 a.*,
-                COALESCE(
-                    (
-                        SELECT json_agg(json_build_object(
-                            'id', s.id,
-                            'global_uuid', s.global_uuid,
-                            'created_timestamp', s.created_timestamp,
-                            'last_updated_timestamp', s.last_updated_timestamp,
-                            'name', s.name,
-                            'description', s.description,
-                            'step_type', s.step_type,
-                            'step_content', s.step_content,
-                            'success_count', s.success_count,
-                            'run_count', s.run_count
-                        ))
-                        FROM steps s
-                        WHERE s.agent_id = a.id
-                        ORDER BY s.sequence_number
-                    ),
-                    '[]'::json
-                ) as steps
+                {}
             FROM agents a
             "#,
-        )
-        .fetch_all(pool)
-        .await?;
+            crate::steps_json_agg_sql("a", "agent_id")
+        );
+
+        let rows = sqlx::query_as::<_, Self>(&query)
+            .fetch_all(pool)
+            .await?;
 
         Ok(rows)
     }
 
     async fn try_db_select_by_id(pool: &PgPool, id: &IdFields) -> Result<Option<Self>> {
-        let query = if let Some(local_id) = id.local_id {
-            sqlx::query_as::<_, Self>(
+        let result = if let Some(local_id) = id.local_id {
+            let query = format!(
                 r#"
                 SELECT
                     a.*,
-                    COALESCE(
-                        (
-                            SELECT json_agg(json_build_object(
-                                'id', s.id,
-                                'global_uuid', s.global_uuid,
-                                'created_timestamp', s.created_timestamp,
-                                'last_updated_timestamp', s.last_updated_timestamp,
-                                'name', s.name,
-                                'description', s.description,
-                                'step_type', s.step_type,
-                                'step_content', s.step_content,
-                                'success_count', s.success_count,
-                                'run_count', s.run_count
-                            ))
-                            FROM steps s
-                            WHERE s.agent_id = a.id
-                            ORDER BY s.sequence_number
-                        ),
-                        '[]'::json
-                    ) as steps
+                    {}
                 FROM agents a
                 WHERE a.id = $1
                 "#,
-            )
-            .bind(local_id)
+                crate::steps_json_agg_sql("a", "agent_id")
+            );
+
+            sqlx::query_as::<_, Self>(&query)
+                .bind(local_id)
+                .fetch_optional(pool)
+                .await?
         } else {
-            sqlx::query_as::<_, Self>(
+            let query = format!(
                 r#"
                 SELECT
                     a.*,
-                    COALESCE(
-                        (
-                            SELECT json_agg(json_build_object(
-                                'id', s.id,
-                                'global_uuid', s.global_uuid,
-                                'created_timestamp', s.created_timestamp,
-                                'last_updated_timestamp', s.last_updated_timestamp,
-                                'name', s.name,
-                                'description', s.description,
-                                'step_type', s.step_type,
-                                'step_content', s.step_content,
-                                'success_count', s.success_count,
-                                'run_count', s.run_count
-                            ))
-                            FROM steps s
-                            WHERE s.agent_id = a.id
-                            ORDER BY s.sequence_number
-                        ),
-                        '[]'::json
-                    ) as steps
+                    {}
                 FROM agents a
                 WHERE a.global_uuid = $1
                 "#,
-            )
-            .bind(&id.global_uuid)
+                crate::steps_json_agg_sql("a", "agent_id")
+            );
+
+            sqlx::query_as::<_, Self>(&query)
+                .bind(&id.global_uuid)
+                .fetch_optional(pool)
+                .await?
         };
 
-        let result = query.fetch_optional(pool).await?;
         Ok(result)
     }
 }
