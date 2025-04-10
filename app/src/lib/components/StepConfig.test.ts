@@ -39,7 +39,7 @@ describe("StepConfig.test.ts - StepConfig Component", () => {
     t.render();
 
     const select = screen.getByLabelText(
-      "Associated Agent"
+      "Associated Agent",
     ) as HTMLSelectElement;
     expect(select.value).toBe("1");
 
@@ -60,7 +60,7 @@ describe("StepConfig.test.ts - StepConfig Component", () => {
   it("renders textarea for prompt type", () => {
     t.render();
     const textarea = screen.getByLabelText(
-      "Prompt Template"
+      "Prompt Template",
     ) as HTMLTextAreaElement;
     expect(textarea.value).toContain("Hello, world!");
   });

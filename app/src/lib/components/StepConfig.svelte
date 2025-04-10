@@ -1,15 +1,25 @@
 <script>
-  import { onMount } from 'svelte';
-  import { Card, Label, Input, Textarea, Select, Toggle } from 'flowbite-svelte';
-  import { EditorState } from '@codemirror/state';
-  import { EditorView, keymap } from '@codemirror/view';
-  import { defaultKeymap } from '@codemirror/commands';
-  import { python } from '@codemirror/lang-python';
-  import { lintGutter, linter } from '@codemirror/lint';
-  import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
+  import { onMount } from "svelte";
+  import {
+    Card,
+    Label,
+    Input,
+    Textarea,
+    Select,
+    Toggle,
+  } from "flowbite-svelte";
+  import { EditorState } from "@codemirror/state";
+  import { EditorView, keymap } from "@codemirror/view";
+  import { defaultKeymap } from "@codemirror/commands";
+  import { python } from "@codemirror/lang-python";
+  import { lintGutter, linter } from "@codemirror/lint";
+  import {
+    syntaxHighlighting,
+    defaultHighlightStyle,
+  } from "@codemirror/language";
 
   export let step;
-  export let stepTypes = ['Prompt', 'Python'];
+  export let stepTypes = ["Prompt", "Python"];
   export let agents = [];
 
   let editorElement;
@@ -19,7 +29,7 @@
   function pythonLint(view) {
     const diagnostics = [];
     const text = view.state.doc.toString();
-    const lines = text.split('\n');
+    const lines = text.split("\n");
 
     lines.forEach((line, i) => {
       const lineNum = i + 1;
@@ -27,37 +37,47 @@
 
       if (/^\s*print\s+[^(]/.test(line)) {
         diagnostics.push({
-          from: from + line.indexOf('print'),
-          to: from + line.indexOf('print') + 5,
-          severity: 'warning',
-          message: 'Use print() function instead of print statement (Python 3)'
+          from: from + line.indexOf("print"),
+          to: from + line.indexOf("print") + 5,
+          severity: "warning",
+          message: "Use print() function instead of print statement (Python 3)",
         });
       }
 
-      if (line.match(/^ +/) && !line.match(/^    +|^        +|^            +/)) {
+      if (
+        line.match(/^ +/) &&
+        !line.match(/^    +|^        +|^            +/)
+      ) {
         diagnostics.push({
           from,
           to: from + line.length,
-          severity: 'error',
-          message: 'Indentation should be multiples of 4 spaces'
+          severity: "error",
+          message: "Indentation should be multiples of 4 spaces",
         });
       }
 
-      if (line.match(/^import\s+\w+/) && !text.includes(line.match(/import\s+(\w+)/)[1])) {
+      if (
+        line.match(/^import\s+\w+/) &&
+        !text.includes(line.match(/import\s+(\w+)/)[1])
+      ) {
         diagnostics.push({
           from,
           to: from + line.length,
-          severity: 'info',
-          message: 'Potentially unused import'
+          severity: "info",
+          message: "Potentially unused import",
         });
       }
 
-      if ((line.match(/^\s*def\s+\w+\([^)]*\)(?!\s*:)/) || line.match(/^\s*class\s+\w+(?!\s*:)/)) && !line.includes(':')) {
+      if (
+        (line.match(/^\s*def\s+\w+\([^)]*\)(?!\s*:)/) ||
+          line.match(/^\s*class\s+\w+(?!\s*:)/)) &&
+        !line.includes(":")
+      ) {
         diagnostics.push({
           from,
           to: from + line.length,
-          severity: 'error',
-          message: 'Missing colon at the end of statement'
+          severity: "error",
+          message: "Missing colon at the end of statement",
         });
       }
 
@@ -78,8 +98,8 @@
           diagnostics.push({
             from: from + line.indexOf(variable),
             to: from + line.indexOf(variable) + variable.length,
-            severity: 'warning',
-            message: `Variable '${variable}' might be used before assignment`
+            severity: "warning",
+            message: `Variable '${variable}' might be used before assignment`,
           });
         }
       }
@@ -100,7 +120,7 @@
         linter(pythonLint),
         keymap.of(defaultKeymap),
         EditorView.lineWrapping,
-        EditorView.updateListener.of(update => {
+        EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             step.content = update.state.doc.toString();
           }
@@ -110,47 +130,47 @@
           "&": {
             fontSize: "14px",
             height: "100%",
-            minHeight: "200px"
+            minHeight: "200px",
           },
           ".cm-scroller": {
             overflow: "auto",
-            fontFamily: "monospace"
+            fontFamily: "monospace",
           },
           ".cm-content": {
-            caretColor: "#0e9"
+            caretColor: "#0e9",
           },
           ".cm-activeLine": {
-            backgroundColor: "rgba(0, 0, 0, 0.05)"
+            backgroundColor: "rgba(0, 0, 0, 0.05)",
           },
           ".cm-activeLineGutter": {
-            backgroundColor: "rgba(0, 0, 0, 0.05)"
+            backgroundColor: "rgba(0, 0, 0, 0.05)",
           },
           ".cm-gutters": {
             backgroundColor: "#f8f9fa",
             color: "#999",
             border: "none",
-            borderRight: "1px solid #ddd"
-          }
-        })
-      ]
+            borderRight: "1px solid #ddd",
+          },
+        }),
+      ],
     });
 
     editorView = new EditorView({
       state: startState,
-      parent: editorElement
+      parent: editorElement,
     });
   }
 
   onMount(() => {
-    if (step.type === 'Python') initCodeEditor();
+    if (step.type === "Python") initCodeEditor();
     return () => {
       if (editorView) editorView.destroy();
     };
   });
 
-  $: if (step.type === 'Python' && editorElement && !editorView) {
+  $: if (step.type === "Python" && editorElement && !editorView) {
     initCodeEditor();
-  } else if (step.type !== 'Python' && editorView) {
+  } else if (step.type !== "Python" && editorView) {
     editorView.destroy();
     editorView = null;
   }
@@ -186,7 +206,7 @@
     <div>
       <div class="flex justify-between items-center mb-2">
         <Label for="content">
-          {step.type === 'Python' ? 'Python Code' : 'Prompt Template'}
+          {step.type === "Python" ? "Python Code" : "Prompt Template"}
         </Label>
         <div class="flex items-center gap-2">
           <Toggle bind:checked={step.isActive} />
@@ -194,7 +214,7 @@
         </div>
       </div>
 
-      {#if step.type === 'Python'}
+      {#if step.type === "Python"}
         <div
           bind:this={editorElement}
           class="border border-gray-300 rounded-lg min-h-[300px] font-mono"
@@ -240,14 +260,34 @@
     padding: 0 4px;
   }
 
-  :global(.cm-keyword) { color: #07a; }
-  :global(.cm-def) { color: #00f; }
-  :global(.cm-variable) { color: #000; }
-  :global(.cm-variable-2) { color: #05a; }
-  :global(.cm-string) { color: #a11; }
-  :global(.cm-comment) { color: #090; }
-  :global(.cm-number) { color: #905; }
-  :global(.cm-operator) { color: #a67f59; }
-  :global(.cm-meta) { color: #555; }
-  :global(.cm-builtin) { color: #30a; }
+  :global(.cm-keyword) {
+    color: #07a;
+  }
+  :global(.cm-def) {
+    color: #00f;
+  }
+  :global(.cm-variable) {
+    color: #000;
+  }
+  :global(.cm-variable-2) {
+    color: #05a;
+  }
+  :global(.cm-string) {
+    color: #a11;
+  }
+  :global(.cm-comment) {
+    color: #090;
+  }
+  :global(.cm-number) {
+    color: #905;
+  }
+  :global(.cm-operator) {
+    color: #a67f59;
+  }
+  :global(.cm-meta) {
+    color: #555;
+  }
+  :global(.cm-builtin) {
+    color: #30a;
+  }
 </style>

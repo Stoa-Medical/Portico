@@ -1,17 +1,21 @@
 <script>
-	import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
+  import { goto } from "$app/navigation";
+  import { page } from "$app/stores";
 
-  import { 
-    Button, 
-    Heading, 
-    Breadcrumb, 
+  import {
+    Button,
+    Heading,
+    Breadcrumb,
     BreadcrumbItem,
     Badge,
-  } from 'flowbite-svelte';
-  import { ArrowLeftOutline, TrashBinOutline, PlayOutline } from 'flowbite-svelte-icons';
-  import StepConfig from '$lib/components/StepConfig.svelte';
-  import { saveStep, deleteStep } from '../../agents/api';
+  } from "flowbite-svelte";
+  import {
+    ArrowLeftOutline,
+    TrashBinOutline,
+    PlayOutline,
+  } from "flowbite-svelte-icons";
+  import StepConfig from "$lib/components/StepConfig.svelte";
+  import { saveStep, deleteStep } from "../../agents/api";
 
   // Stores
   $: stepId = $page.params.slug;
@@ -33,7 +37,7 @@
         content: "",
         isActive: true,
         lastEdited: "Just now",
-        createdAt: new Date().toISOString().split("T")[0]
+        createdAt: new Date().toISOString().split("T")[0],
       };
     } else {
       step = getStepData(stepId);
@@ -41,12 +45,12 @@
   }
 
   const agents = [
-    { id: 1, name: 'Agent Smith' },
-    { id: 2, name: 'Agent Johnson' },
-    { id: 3, name: 'Agent Brown' }
+    { id: 1, name: "Agent Smith" },
+    { id: 2, name: "Agent Johnson" },
+    { id: 3, name: "Agent Brown" },
   ];
 
-  const stepTypes = ['Prompt', 'Python'];
+  const stepTypes = ["Prompt", "Python"];
 
   async function clickSaveStep() {
     await saveStep(step);
@@ -54,7 +58,7 @@
   }
 
   async function clickDeleteStep() {
-    if (confirm('Are you sure you want to delete this step?')) {
+    if (confirm("Are you sure you want to delete this step?")) {
       await deleteStep(step.id);
       goBack();
     }
@@ -64,7 +68,7 @@
     if (isNewStep) {
       goto("/agents/");
     } else {
-      goto('/steps');
+      goto("/steps");
     }
   }
 
@@ -77,15 +81,16 @@
     return {
       id: parseInt(id),
       name: `Step ${id}`,
-      type: id % 2 === 0 ? 'Prompt' : 'Python',
+      type: id % 2 === 0 ? "Prompt" : "Python",
       agentId: 1,
-      agentName: 'Agent Smith',
-      content: id % 2 === 0
-        ? `You are an AI assistant that helps with data analysis.\n{{data}}`
-        : `import pandas as pd\n...`,
+      agentName: "Agent Smith",
+      content:
+        id % 2 === 0
+          ? `You are an AI assistant that helps with data analysis.\n{{data}}`
+          : `import pandas as pd\n...`,
       isActive: true,
-      lastEdited: '2 hours ago',
-      createdAt: '2023-10-15'
+      lastEdited: "2 hours ago",
+      createdAt: "2023-10-15",
     };
   }
 </script>
@@ -98,7 +103,7 @@
       <BreadcrumbItem href="/steps">Steps</BreadcrumbItem>
       <BreadcrumbItem>Step {stepId}</BreadcrumbItem>
     </Breadcrumb>
-    
+
     <div class="flex flex-col sm:flex-row gap-4 mb-4">
       <div class="flex items-center gap-3">
         <Button color="light" size="sm" on:click={goBack}>
@@ -106,7 +111,7 @@
           Back
         </Button>
         <Heading tag="h1" class="text-2xl font-bold">{step.name}</Heading>
-        <Badge color={step.type === 'Python' ? 'blue' : 'purple'}>
+        <Badge color={step.type === "Python" ? "blue" : "purple"}>
           {step.type}
         </Badge>
       </div>
@@ -120,12 +125,10 @@
         <TrashBinOutline class="mr-2 h-5 w-5" />
         Delete
       </Button>
-      <Button color="blue" on:click={clickSaveStep}>
-        Save
-      </Button>
+      <Button color="blue" on:click={clickSaveStep}>Save</Button>
     </div>
   </div>
-  
+
   <!-- Step Configuration -->
-  <StepConfig bind:step={step} {stepTypes} {agents} />
+  <StepConfig bind:step {stepTypes} {agents} />
 </main>

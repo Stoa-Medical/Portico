@@ -80,4 +80,29 @@ describe("PageHeader.test.ts - PageHeader Component", () => {
     expect(addButton).toHaveClass("bg-blue-500");
     expect(deleteButton).toHaveClass("bg-red-500");
   });
+
+  it("renders a disabled button correctly", () => {
+    const disabledActions = [
+      {
+        label: "Disabled Action",
+        onClick: vi.fn(),
+        icon: PlusOutline,
+        color: "blue",
+        disabled: true,
+      },
+    ];
+
+    render(PageHeader, {
+      title: defaultTitle,
+      breadcrumbs,
+      actionBar: disabledActions,
+    });
+
+    const disabledButton = screen.getByText("Disabled Action");
+
+    // Button is visually styled and disabled
+    expect(disabledButton).toHaveClass("bg-gray-400");
+    expect(disabledButton).toHaveClass("cursor-not-allowed");
+    expect(disabledButton).toBeDisabled();
+  });
 });

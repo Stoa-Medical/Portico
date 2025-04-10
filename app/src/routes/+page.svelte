@@ -1,39 +1,30 @@
 <!-- TODO: Below is AI boilerplate code, think through actual design -->
 
 <script>
-	import PageHeader from '../lib/components/PageHeader.svelte';
-  import { 
-    Card, 
-    Button, 
-    Heading, 
-  } from 'flowbite-svelte';
+  import PageHeader from "../lib/components/PageHeader.svelte";
+  import { Card, Button, Heading } from "flowbite-svelte";
 </script>
 
 <main class="container mx-auto p-4">
   <!-- Page Header with Breadcrumb -->
-  <PageHeader title="Welcome" breadcrumbs={[{label: "Home", url: "/"}]}/>
-  
+  <PageHeader title="Welcome" breadcrumbs={[{ label: "Home", url: "/" }]} />
+
   <!-- Main Content -->
   <div class="grid grid-cols-1 gap-6">
     <Card class="overflow-x-auto max-w-full">
       <Heading tag="h2" class="mb-4">Navigation</Heading>
-      <p class="mb-4">Welcome to the application. Use the links below to navigate:</p>
-      
+      <p class="mb-4">
+        Welcome to the application. Use the links below to navigate:
+      </p>
+
       <div class="flex flex-col sm:flex-row sm:space-y-0 sm:space-x-4 w-full">
-        <Button href="/agents" color="blue">
-          View Agents
-        </Button>
-        <Button href="/steps" color="green">
-          View Steps
-        </Button>
-        <Button href="/analytics" color="purple">
-          Analytics
-        </Button>
+        <Button href="/agents" color="blue">View Agents</Button>
+        <Button href="/steps" color="green">View Steps</Button>
+        <Button href="/analytics" color="purple">Analytics</Button>
       </div>
     </Card>
   </div>
 </main>
 
 <style>
-
 </style>
