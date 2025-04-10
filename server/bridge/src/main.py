@@ -9,7 +9,7 @@ This is a Python microservice that:
 So the flow is:
                         Triggers:
                         • Signals with "pending" status
-                        • Changes to Agents/Steps
+                        • Changes to Agents
 ┌────────┐         ┌──────────┐         ┌────────┐         ┌────────┐
 │  User  │────────▶│`supabase`│────────▶│`bridge`│────────▶│`engine`│
 └────────┘         └──────────┘         └────────┘         └────────┘
