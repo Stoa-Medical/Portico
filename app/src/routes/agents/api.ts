@@ -1,3 +1,10 @@
+import { createClient } from "@supabase/supabase-js";
+
+// Set up Supabase client:
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
+
 type AgentLLMConfig = {
   temperature: number;
   maxTokens: number;
@@ -9,16 +16,15 @@ type AgentLLMConfig = {
 export type Agent = {
   id: number;
   name: string;
-  status: string;
+  agent_state: string;
   type: string;
-  lastActive: string;
+  // lastActive: string;
   description: string;
-  settings: AgentLLMConfig;
-  capabilities: string[];
-  isActive: boolean;
-  model: string;
-  apiKey: string;
-  createdAt: string;
+  // settings: AgentLLMConfig;
+  // capabilities: string[];
+  // isActive: boolean;
+  // model: string;
+  // createdAt: string;
 };
 
 export type Step = {
@@ -53,7 +59,7 @@ let currentAgents: Agent[] = [
   {
     id: 1,
     name: "Agent Smith",
-    status: "Active",
+    agent_state: "Active",
     type: "Assistant",
     lastActive: "2 hours ago",
     description:
@@ -68,7 +74,6 @@ let currentAgents: Agent[] = [
     capabilities: ["Text Generation", "Question Answering", "Summarization"],
     isActive: true,
     model: "gpt-4",
-    apiKey: "sk-••••••••••••••••••••••••",
     createdAt: "2023-10-15",
   },
   {
@@ -89,7 +94,6 @@ let currentAgents: Agent[] = [
     capabilities: ["Research", "Data Analysis", "Summarization"],
     isActive: false,
     model: "claude-3-opus",
-    apiKey: "sk-••••••••••••••••••••••••",
     createdAt: "2023-11-20",
   },
   {
@@ -109,7 +113,6 @@ let currentAgents: Agent[] = [
     capabilities: ["Data Analysis", "Visualization", "Reporting"],
     isActive: true,
     model: "gpt-3.5-turbo",
-    apiKey: "sk-••••••••••••••••••••••••",
     createdAt: "2024-01-05",
   },
 ];
@@ -173,11 +176,11 @@ Focus on trends, anomalies, and potential actionable insights.`,
 
 function generateCompletedSessionsForAgent(
   agentId: number,
-  count: number,
+  count: number
 ): RuntimeSession[] {
   return Array.from({ length: count }, (_, i) => {
     const stepCount = currentAgentSteps.filter(
-      (step) => step.agentId === agentId,
+      (step) => step.agentId === agentId
     ).length;
     return {
       id: agentId * 100 + i + 1,
@@ -205,33 +208,39 @@ let currentRuntimeSessions: RuntimeSession[] = [
 ];
 
 export const getAgents = async (): Promise<Agent[]> => {
-  return currentAgents;
+  const { data, error } = await supabase.from("agents").select("*");
+  if (error) throw error;
+  return data;
 };
 
 export const saveAgent = async (
-  agent: CreateAgentPayload,
+  agent: CreateAgentPayload
 ): Promise<Agent[]> => {
-  currentAgents = currentAgents.concat({
-    ...agent,
-    id: currentAgents.length + 1,
-  });
-  return currentAgents;
+  const { error } = await supabase.from("agents").insert([{ ...agent }]);
+  if (error) throw error;
+  return getAgents();
 };
 
 export const updateAgent = async (
-  updatedAgent: UpdateAgentPayload,
+  updatedAgent: UpdateAgentPayload
 ): Promise<Agent[]> => {
-  currentAgents = currentAgents.map((agent) =>
-    agent.id === updatedAgent.id ? { ...agent, ...updatedAgent } : agent,
-  );
-  return currentAgents;
+  const { error } = await supabase
+    .from("agents")
+    .update(updatedAgent)
+    .eq("id", updatedAgent.id);
+  if (error) throw error;
+  return getAgents();
 };
 
 export const deleteAgent = async (
-  agentIdToDelete: number,
+  agentIdToDelete: number
 ): Promise<Agent[]> => {
-  currentAgents = currentAgents.filter((agent) => agent.id !== agentIdToDelete);
-  return currentAgents;
+  const { error } = await supabase
+    .from("agents")
+    .delete()
+    .eq("id", agentIdToDelete);
+  if (error) throw error;
+  return getAgents();
 };
 
 export const getSteps = (agentId: number): Step[] => {
@@ -247,25 +256,25 @@ export const saveStep = async (step: Step): Promise<Step[]> => {
 };
 
 export const updateStep = async (
-  updatedStep: UpdateStepPayload,
+  updatedStep: UpdateStepPayload
 ): Promise<Step[]> => {
   currentAgentSteps = currentAgentSteps.map((step) =>
-    step.id === updatedStep.id ? { ...step, ...updatedStep } : step,
+    step.id === updatedStep.id ? { ...step, ...updatedStep } : step
   );
   return currentAgentSteps;
 };
 
 export const deleteStep = async (stepIdToDelete: number): Promise<Step[]> => {
   currentAgentSteps = currentAgentSteps.filter(
-    (step) => step.id !== stepIdToDelete,
+    (step) => step.id !== stepIdToDelete
   );
   return currentAgentSteps;
 };
 
 export const getRuntimeSessions = async (
-  agentId: number,
+  agentId: number
 ): Promise<RuntimeSession[]> => {
   return currentRuntimeSessions.filter(
-    (session) => session.requestedByAgentId === agentId,
+    (session) => session.requestedByAgentId === agentId
   );
 };

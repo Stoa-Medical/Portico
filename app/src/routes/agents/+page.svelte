@@ -118,24 +118,30 @@
 
   // Handle form submission
   async function handleSubmit() {
+    // const newAgent = {
+    //   name: agentFormData.name,
+    //   status: agentFormData.isActive ? "Active" : "Inactive",
+    //   type: agentFormData.type,
+    //   lastActive: "Just now",
+    //   description: agentFormData.description,
+    //   settings: {
+    //     temperature: 0.7,
+    //     maxTokens: 2048,
+    //     topP: 0.9,
+    //     frequencyPenalty: 0.5,
+    //     presencePenalty: 0.5,
+    //   },
+    //   capabilities: ["Text Generation"],
+    //   isActive: agentFormData.isActive,
+    //   model: "gpt-4",
+    //   // apiKey: "sk-••••••••••••••••••••••••",
+    //   createdAt: new Date().toISOString().split("T")[0],
+    // };
     const newAgent = {
-      name: agentFormData.name,
-      status: agentFormData.isActive ? "Active" : "Inactive",
-      type: agentFormData.type,
-      lastActive: "Just now",
       description: agentFormData.description,
-      settings: {
-        temperature: 0.7,
-        maxTokens: 2048,
-        topP: 0.9,
-        frequencyPenalty: 0.5,
-        presencePenalty: 0.5,
-      },
-      capabilities: ["Text Generation"],
-      isActive: agentFormData.isActive,
-      model: "gpt-4",
-      apiKey: "sk-••••••••••••••••••••••••",
-      createdAt: new Date().toISOString().split("T")[0],
+      agent_state: agentFormData.isActive ? "stable" : "inactive",
+      name: agentFormData.name,
+      type: agentFormData.type,
     };
 
     agents = await saveAgent(newAgent);
@@ -258,14 +264,14 @@
                 <TableBodyCell>{agent.type}</TableBodyCell>
                 <TableBodyCell>
                   <span
-                    class={agent.status === "Active"
+                    class={agent.agent_state === "Active"
                       ? "text-green-500"
                       : "text-gray-500"}
                   >
-                    {agent.status}
+                    {agent.agent_state}
                   </span>
                 </TableBodyCell>
-                <TableBodyCell>{agent.lastActive}</TableBodyCell>
+                <TableBodyCell>{agent.lastActive || "Just now"}</TableBodyCell>
               </TableBodyRow>
             {/each}
 
@@ -302,7 +308,7 @@
               >{selectedAgent.name}</Heading
             >
             <Badge color={selectedAgent.isActive ? "green" : "none"}>
-              {selectedAgent.status}
+              {selectedAgent.agent_state}
             </Badge>
           </div>
 
@@ -359,14 +365,16 @@
                   />
                 </div>
 
-                <div>
+                <!-- <div>
                   <Label for="apiKey" class="mb-2">API Key</Label>
                   <Input
                     id="apiKey"
                     type="password"
-                    bind:value={selectedAgent.apiKey}
+                    bind:value={
+                      selectedAgent.apiKey || "sk-••••••••••••••••••••••••"
+                    }
                   />
-                </div>
+                </div> -->
 
                 <Accordion>
                   <AccordionItem>

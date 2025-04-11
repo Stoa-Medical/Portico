@@ -171,8 +171,9 @@ describe("agents.test.ts - Agents Page", () => {
     await fireEvent.click(addButton);
 
     // Then the form should be reset
-    const reopenedInput =
-      await screen.findByPlaceholderText("Enter agent name");
+    const reopenedInput = await screen.findByPlaceholderText(
+      "Enter agent name"
+    );
     expect((reopenedInput as HTMLInputElement).value).toBe("");
   });
 
@@ -227,7 +228,7 @@ describe("agents.test.ts - Agents Page", () => {
     expect((stepNameInput as HTMLInputElement).value).toBe("My First Step");
 
     const typeSelect = (await screen.findByLabelText(
-      "Step Type",
+      "Step Type"
     )) as HTMLSelectElement;
     expect(typeSelect).toBeInTheDocument();
     expect(typeSelect.value).toBe("Prompt");
@@ -235,7 +236,7 @@ describe("agents.test.ts - Agents Page", () => {
     const contentArea = await screen.findByLabelText("Prompt Template");
     expect(contentArea).toBeInTheDocument();
     expect((contentArea as HTMLTextAreaElement).value).toContain(
-      "Step content here",
+      "Step content here"
     );
   });
 
@@ -272,14 +273,14 @@ describe("agents.test.ts - Agents Page", () => {
 
     // Then you should see the details for that session
     expect(
-      await screen.findByText("Runtime Session Details"),
+      await screen.findByText("Runtime Session Details")
     ).toBeInTheDocument();
     expect(
-      await screen.findByText((text) => text.includes("Example input")),
+      await screen.findByText((text) => text.includes("Example input"))
     ).toBeInTheDocument();
 
     expect(
-      await screen.findByText((text) => text.includes("Final result")),
+      await screen.findByText((text) => text.includes("Final result"))
     ).toBeInTheDocument();
 
     // When you click close
@@ -288,7 +289,7 @@ describe("agents.test.ts - Agents Page", () => {
 
     // Them the detail view should disappear
     await waitForElementToBeRemoved(() =>
-      screen.queryByText("Runtime Session Details"),
+      screen.queryByText("Runtime Session Details")
     );
   });
 });

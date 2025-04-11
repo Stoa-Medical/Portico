@@ -21,14 +21,13 @@
     "@codemirror/lint": "^6.4.2",
     "@codemirror/state": "^6.3.1",
     "@codemirror/view": "^6.22.0",
+    "@supabase/supabase-js": "^2.49.4",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "codemirror": "^6.0.1",
     "flowbite": "^1.8.1",
     "flowbite-svelte": "^0.44.18",
-    "flowbite-svelte-icons": "^0.4.4",
-    "prettier": "^3.5.3",
-    "prettier-plugin-svelte": "^3.3.3"
+    "flowbite-svelte-icons": "^0.4.4"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.6",
@@ -48,6 +47,8 @@
     "tailwindcss": "^3.4.3",
     "typescript": "~5.6.2",
     "vite": "^6.0.3",
-    "vitest": "^3.1.1"
+    "vitest": "^3.1.1",
+    "prettier": "^3.5.3",
+    "prettier-plugin-svelte": "^3.3.3"
   }
 }
