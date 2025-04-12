@@ -6,9 +6,9 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgArgumentBuffer, PgPool, Postgres, Row};
+use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum StepType {
@@ -227,7 +227,7 @@ impl JsonLike for Step {
         if let Some(obj) = obj.as_object() {
             Ok(Self {
                 identifiers: IdFields {
-                    local_id: obj.get("id").and_then(|v| v.as_i64()),
+                    local_id: obj.get("id").and_then(|v| v.as_i64()).map(|v| v as i32),
                     global_uuid: obj
                         .get("global_uuid")
                         .and_then(|v| v.as_str())
@@ -235,20 +235,22 @@ impl JsonLike for Step {
                         .to_string(),
                 },
                 timestamps: TimestampFields {
-                    created: NaiveDateTime::parse_from_str(
+                    created: chrono::DateTime::parse_from_str(
                         &obj.get("created_timestamp")
                             .and_then(|v| v.as_str())
                             .unwrap_or_default(),
-                        "%Y-%m-%d %H:%M:%S",
+                        "%Y-%m-%d %H:%M:%S %z",
                     )
-                    .unwrap_or_default(),
-                    updated: NaiveDateTime::parse_from_str(
+                    .unwrap_or_default()
+                    .with_timezone(&chrono::Utc),
+                    updated: chrono::DateTime::parse_from_str(
                         &obj.get("last_updated_timestamp")
                             .and_then(|v| v.as_str())
                             .unwrap_or_default(),
-                        "%Y-%m-%d %H:%M:%S",
+                        "%Y-%m-%d %H:%M:%S %z",
                     )
-                    .unwrap_or_default(),
+                    .unwrap_or_default()
+                    .with_timezone(&chrono::Utc),
                 },
                 name: obj
                     .get("name")
@@ -398,7 +400,7 @@ impl DatabaseItem for Step {
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             "#,
         )
-        .bind(&self.identifiers.global_uuid)
+        .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
         .bind(&self.name)
         .bind(&self.description)
         .bind(&self.step_type)
@@ -434,7 +436,7 @@ impl DatabaseItem for Step {
         .bind(self.success_count.load(Ordering::Relaxed) as i32)
         .bind(self.run_count.load(Ordering::Relaxed) as i32)
         .bind(&self.timestamps.updated)
-        .bind(&self.identifiers.global_uuid)
+        .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
         .execute(pool)
         .await?;
 
@@ -443,7 +445,7 @@ impl DatabaseItem for Step {
 
     async fn try_db_delete(&self, pool: &PgPool) -> Result<()> {
         sqlx::query("DELETE FROM steps WHERE global_uuid = $1")
-            .bind(&self.identifiers.global_uuid)
+            .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
             .execute(pool)
             .await?;
 

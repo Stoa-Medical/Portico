@@ -4,6 +4,7 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde_json::Value;
 use sqlx::{PgPool, Row};
+use uuid::Uuid;
 
 #[derive(Debug)]
 pub struct RuntimeSession {
@@ -53,7 +54,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
         Ok(Self {
             identifiers: IdFields {
                 local_id: row.try_get("id")?,
-                global_uuid: row.try_get("global_uuid")?,
+                global_uuid: row.try_get::<Uuid, _>("global_uuid")?.to_string(),
             },
             timestamps: TimestampFields {
                 created: row.try_get("created_timestamp")?,
@@ -141,7 +142,7 @@ impl DatabaseItem for RuntimeSession {
             RETURNING id
             "#,
         )
-        .bind(&self.identifiers.global_uuid)
+        .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
         .bind(&self.status)
         .bind(&self.source_data)
         .bind(&self.last_step_idx)
@@ -201,7 +202,7 @@ impl DatabaseItem for RuntimeSession {
         .bind(&self.last_step_idx)
         .bind(&self.last_successful_result)
         .bind(&self.timestamps.updated)
-        .bind(&self.identifiers.global_uuid)
+        .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
         .execute(pool)
         .await?;
 
@@ -222,7 +223,7 @@ impl DatabaseItem for RuntimeSession {
 
         // Then delete the session
         sqlx::query("DELETE FROM runtime_sessions WHERE global_uuid = $1")
-            .bind(&self.identifiers.global_uuid)
+            .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
             .execute(pool)
             .await?;
 
@@ -277,7 +278,7 @@ impl DatabaseItem for RuntimeSession {
             );
 
             sqlx::query_as::<_, Self>(&query)
-                .bind(&id.global_uuid)
+                .bind(Uuid::parse_str(&id.global_uuid)?)
                 .fetch_optional(pool)
                 .await?
         };

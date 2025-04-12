@@ -32,7 +32,7 @@ fn test_id_fields_creation() {
 
 #[test]
 fn test_id_fields_with_values() {
-    let local_id = Some(42i64);
+    let local_id = Some(42i32);
     let global_uuid = "test-uuid".to_string();
 
     let id = IdFields::with_values(local_id, global_uuid.clone());
@@ -43,13 +43,13 @@ fn test_id_fields_with_values() {
 
 #[test]
 fn test_timestamp_fields_creation() {
-    let before = chrono::Local::now().naive_utc();
+    let before = chrono::Utc::now();
     std::thread::sleep(Duration::from_millis(5));
 
     let ts = TimestampFields::new();
 
     std::thread::sleep(Duration::from_millis(5));
-    let after = chrono::Local::now().naive_utc();
+    let after = chrono::Utc::now();
 
     // Timestamps should be between before and after
     assert!(ts.created >= before);

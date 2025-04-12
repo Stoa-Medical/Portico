@@ -4,13 +4,13 @@ use crate::RunningStatus;
 use crate::{DatabaseItem, IdFields, JsonLike, TimestampFields};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use chrono::NaiveDateTime;
 use serde_json::Value;
 use sqlx::{PgPool, Row};
 use std::str::FromStr;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::sync::Mutex;
+use uuid::Uuid;
 
 #[derive(Debug)]
 pub struct Signal {
@@ -32,7 +32,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Signal {
             Some(Agent {
                 identifiers: IdFields {
                     local_id: row.try_get("agent_id")?,
-                    global_uuid: row.try_get("agent_global_uuid")?,
+                    global_uuid: row.try_get::<Uuid, _>("agent_global_uuid")?.to_string(),
                 },
                 timestamps: TimestampFields {
                     created: row.try_get("agent_created_timestamp")?,
@@ -56,7 +56,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Signal {
         Ok(Self {
             identifiers: IdFields {
                 local_id: row.try_get("id")?,
-                global_uuid: row.try_get("global_uuid")?,
+                global_uuid: row.try_get::<Uuid, _>("global_uuid")?.to_string(),
             },
             timestamps: TimestampFields {
                 created: row.try_get("created_timestamp")?,
@@ -277,7 +277,7 @@ impl JsonLike for Signal {
         if let Some(obj) = obj.as_object() {
             Ok(Self {
                 identifiers: IdFields {
-                    local_id: obj.get("id").and_then(|v| v.as_i64()),
+                    local_id: obj.get("id").and_then(|v| v.as_i64()).map(|v| v as i32),
                     global_uuid: obj
                         .get("global_uuid")
                         .and_then(|v| v.as_str())
@@ -285,20 +285,22 @@ impl JsonLike for Signal {
                         .to_string(),
                 },
                 timestamps: TimestampFields {
-                    created: NaiveDateTime::parse_from_str(
+                    created: chrono::DateTime::parse_from_str(
                         &obj.get("created_timestamp")
                             .and_then(|v| v.as_str())
                             .unwrap_or_default(),
-                        "%Y-%m-%d %H:%M:%S",
+                        "%Y-%m-%d %H:%M:%S %z",
                     )
-                    .unwrap_or_default(),
-                    updated: NaiveDateTime::parse_from_str(
+                    .unwrap_or_default()
+                    .with_timezone(&chrono::Utc),
+                    updated: chrono::DateTime::parse_from_str(
                         &obj.get("last_updated_timestamp")
                             .and_then(|v| v.as_str())
                             .unwrap_or_default(),
-                        "%Y-%m-%d %H:%M:%S",
+                        "%Y-%m-%d %H:%M:%S %z",
                     )
-                    .unwrap_or_default(),
+                    .unwrap_or_default()
+                    .with_timezone(&chrono::Utc),
                 },
                 user_requested_uuid: obj
                     .get("user_requested_uuid")
@@ -359,10 +361,10 @@ impl DatabaseItem for Signal {
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             "#,
         )
-        .bind(&self.identifiers.global_uuid)
+        .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
         .bind(&self.user_requested_uuid)
         .bind(agent_id)
-        .bind(agent_uuid)
+        .bind(agent_uuid.as_deref().map(Uuid::parse_str).transpose()?)
         .bind(&self.signal_type)
         .bind(&self.status)
         .bind(&self.initial_data)
@@ -400,14 +402,14 @@ impl DatabaseItem for Signal {
         )
         .bind(&self.user_requested_uuid)
         .bind(agent_id)
-        .bind(agent_uuid)
+        .bind(agent_uuid.as_deref().map(Uuid::parse_str).transpose()?)
         .bind(&self.signal_type)
         .bind(&self.status)
         .bind(&self.initial_data)
         .bind(&self.result_data)
         .bind(&self.error_message)
         .bind(&self.timestamps.updated)
-        .bind(&self.identifiers.global_uuid)
+        .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
         .execute(pool)
         .await?;
 
@@ -416,7 +418,7 @@ impl DatabaseItem for Signal {
 
     async fn try_db_delete(&self, pool: &PgPool) -> Result<()> {
         sqlx::query("DELETE FROM signals WHERE global_uuid = $1")
-            .bind(&self.identifiers.global_uuid)
+            .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
             .execute(pool)
             .await?;
 
@@ -459,7 +461,7 @@ impl DatabaseItem for Signal {
                 .await?
         } else {
             sqlx::query_as::<_, Signal>(&query)
-                .bind(&id.global_uuid)
+                .bind(Uuid::parse_str(&id.global_uuid)?)
                 .fetch_optional(pool)
                 .await?
         };

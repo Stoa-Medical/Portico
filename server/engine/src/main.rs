@@ -58,6 +58,8 @@ async fn main() -> Result<()> {
         .await
         .expect("Failed to fetch agents from database");
 
+    println!("Fetched agents successfully, {:?}", agents);
+
     // Create a thread-safe agent map
     let agent_map: Arc<RwLock<HashMap<String, Agent>>> = Arc::new(RwLock::new(
         agents
@@ -65,6 +67,8 @@ async fn main() -> Result<()> {
             .map(|agent| (agent.identifiers.global_uuid.clone(), agent))
             .collect(),
     ));
+
+    println!("Starting event loop...");
 
     // Start event loop -- wait and listen to `listener`
     loop {

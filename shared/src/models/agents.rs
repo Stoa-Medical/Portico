@@ -12,13 +12,13 @@ use crate::{DatabaseItem, IdFields, JsonLike, TimestampFields};
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::{postgres::PgArgumentBuffer, PgPool, Postgres, Row};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Agent {
@@ -26,7 +26,7 @@ pub struct Agent {
     pub timestamps: TimestampFields,
     pub description: String,
     pub agent_state: Mutex<AgentState>,  // Make public for direct construction in other modules
-    pub accepted_completion_rate: f32,
+    pub accepted_completion_rate: f64,
     pub steps: Vec<Step>,
     pub completion_count: Arc<AtomicU64>,
     pub run_count: Arc<AtomicU64>,
@@ -119,7 +119,7 @@ impl Agent {
         identifiers: IdFields,
         timestamps: TimestampFields,
         description: String,
-        accepted_completion_rate: f32,
+        accepted_completion_rate: f64,
         steps: Vec<Step>,
         completion_count: u64,
         run_count: u64,
@@ -207,7 +207,7 @@ impl Agent {
         }
     }
 
-    fn collect_completion_rate(&self) -> f32 {
+    fn collect_completion_rate(&self) -> f64 {
         // Calculate error rate based on this Agent's `run`s
         let collected_run_count = self.run_count.load(Ordering::Relaxed);
         let collected_completion_count = self.completion_count.load(Ordering::Relaxed);
@@ -216,7 +216,7 @@ impl Agent {
             return 0.0; // No runs yet, so no errors
         }
 
-        collected_completion_count as f32 / collected_run_count as f32
+        collected_completion_count as f64 / collected_run_count as f64
     }
 }
 
@@ -260,7 +260,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
         Ok(Self {
             identifiers: IdFields {
                 local_id: row.try_get("id")?,
-                global_uuid: row.try_get("global_uuid")?,
+                global_uuid: row.try_get::<Uuid, _>("global_uuid")?.to_string(),
             },
             timestamps: TimestampFields {
                 created: row.try_get("created_timestamp")?,
@@ -273,7 +273,9 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
             completion_count: Arc::new(AtomicU64::new(
                 row.try_get::<i32, _>("completion_count")? as u64
             )),
-            run_count: Arc::new(AtomicU64::new(row.try_get::<i32, _>("run_count")? as u64)),
+            run_count: Arc::new(AtomicU64::new(
+                row.try_get::<i32, _>("run_count")? as u64,
+            )),
         })
     }
 }
@@ -298,7 +300,7 @@ impl JsonLike for Agent {
         if let Some(obj) = obj.as_object() {
             Ok(Self {
                 identifiers: IdFields {
-                    local_id: obj.get("id").and_then(|v| v.as_i64()),
+                    local_id: obj.get("id").and_then(|v| v.as_i64()).map(|v| v as i32),
                     global_uuid: obj
                         .get("global_uuid")
                         .and_then(|v| v.as_str())
@@ -306,20 +308,22 @@ impl JsonLike for Agent {
                         .to_string(),
                 },
                 timestamps: TimestampFields {
-                    created: NaiveDateTime::parse_from_str(
+                    created: chrono::DateTime::parse_from_str(
                         &obj.get("created_timestamp")
                             .and_then(|v| v.as_str())
                             .unwrap_or_default(),
-                        "%Y-%m-%d %H:%M:%S",
+                        "%Y-%m-%d %H:%M:%S %z",
                     )
-                    .unwrap_or_default(),
-                    updated: NaiveDateTime::parse_from_str(
+                    .unwrap_or_default()
+                    .with_timezone(&chrono::Utc),
+                    updated: chrono::DateTime::parse_from_str(
                         &obj.get("last_updated_timestamp")
                             .and_then(|v| v.as_str())
                             .unwrap_or_default(),
-                        "%Y-%m-%d %H:%M:%S",
+                        "%Y-%m-%d %H:%M:%S %z",
                     )
-                    .unwrap_or_default(),
+                    .unwrap_or_default()
+                    .with_timezone(&chrono::Utc),
                 },
                 description: obj
                     .get("description")
@@ -335,7 +339,7 @@ impl JsonLike for Agent {
                 accepted_completion_rate: obj
                     .get("accepted_completion_rate")
                     .and_then(|v| v.as_f64())
-                    .unwrap_or(0.0) as f32,
+                    .unwrap_or(0.0) as f64,
                 steps: obj
                     .get("steps")
                     .and_then(|v| v.as_array())
@@ -395,8 +399,8 @@ impl JsonLike for Agent {
                     }
                     "accepted_completion_rate" => {
                         if let Some(rate) = value.as_f64() {
-                            let rate = rate as f32;
-                            if (self.accepted_completion_rate - rate).abs() > f32::EPSILON {
+                            let rate = rate as f64;
+                            if (self.accepted_completion_rate - rate).abs() > f64::EPSILON {
                                 self.accepted_completion_rate = rate;
                                 updated_fields.push(key.to_string());
                             }
@@ -504,7 +508,7 @@ impl DatabaseItem for Agent {
             RETURNING id
             "#,
         )
-        .bind(&self.identifiers.global_uuid)
+        .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
         .bind(&self.description)
         .bind(&self.state())
         .bind(self.accepted_completion_rate)
@@ -568,7 +572,7 @@ impl DatabaseItem for Agent {
         .bind(self.completion_count.load(Ordering::Relaxed) as i32)
         .bind(self.run_count.load(Ordering::Relaxed) as i32)
         .bind(&self.timestamps.updated)
-        .bind(&self.identifiers.global_uuid)
+        .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
         .execute(pool)
         .await?;
 
@@ -589,7 +593,7 @@ impl DatabaseItem for Agent {
 
         // Then delete the agent
         sqlx::query("DELETE FROM agents WHERE global_uuid = $1")
-            .bind(&self.identifiers.global_uuid)
+            .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
             .execute(pool)
             .await?;
 
@@ -644,7 +648,7 @@ impl DatabaseItem for Agent {
             );
 
             sqlx::query_as::<_, Self>(&query)
-                .bind(&id.global_uuid)
+                .bind(Uuid::parse_str(&id.global_uuid)?)
                 .fetch_optional(pool)
                 .await?
         };

@@ -94,7 +94,7 @@ impl std::str::FromStr for RunningStatus {
 
 #[derive(Clone, Debug, sqlx::FromRow, Serialize, Deserialize)]
 pub struct IdFields {
-    pub local_id: Option<i64>,
+    pub local_id: Option<i32>,
     pub global_uuid: String,
 }
 
@@ -115,7 +115,7 @@ impl IdFields {
         }
     }
 
-    pub fn with_values(local_id: Option<i64>, global_uuid: String) -> Self {
+    pub fn with_values(local_id: Option<i32>, global_uuid: String) -> Self {
         Self {
             local_id,
             global_uuid,
@@ -125,8 +125,8 @@ impl IdFields {
 
 #[derive(Clone, Debug, sqlx::FromRow, Serialize, Deserialize)]
 pub struct TimestampFields {
-    pub created: chrono::NaiveDateTime,
-    pub updated: chrono::NaiveDateTime,
+    pub created: chrono::DateTime<chrono::Utc>,
+    pub updated: chrono::DateTime<chrono::Utc>,
 }
 
 impl Default for TimestampFields {
@@ -137,7 +137,7 @@ impl Default for TimestampFields {
 
 impl TimestampFields {
     pub fn new() -> Self {
-        let now = chrono::Local::now().naive_utc();
+        let now = chrono::Utc::now();
         Self {
             created: now,
             updated: now,
@@ -145,7 +145,7 @@ impl TimestampFields {
     }
 
     pub fn update(&mut self) {
-        self.updated = chrono::Local::now().naive_utc();
+        self.updated = chrono::Utc::now();
     }
 }
 
@@ -315,7 +315,7 @@ pub fn exec_python(source: Value, the_code: &str) -> Result<Value> {
 }
 
 /// Loads steps for an agent by ID
-pub async fn load_agent_steps(pool: &PgPool, agent_id: i64) -> Result<Option<Value>> {
+pub async fn load_agent_steps(pool: &PgPool, agent_id: i32) -> Result<Option<Value>> {
     let steps_query = format!(
         "SELECT {} FROM (SELECT {}) subq",
         steps_json_agg_sql("subq", "agent_id"),
