@@ -67,14 +67,19 @@
       {
         id: 1,
         name: "Data Collection",
-        type: "Python",
+        step_type: "python",
         lastEdited: "2 hours ago",
       },
-      { id: 2, name: "Text Analysis", type: "Prompt", lastEdited: "1 day ago" },
+      {
+        id: 2,
+        name: "Text Analysis",
+        step_type: "prompt",
+        lastEdited: "1 day ago",
+      },
       {
         id: 3,
         name: "Data Visualization",
-        type: "Python",
+        step_type: "python",
         lastEdited: "3 days ago",
       },
     ];
@@ -328,7 +333,7 @@
           <div class="flex justify-between items-center mb-4">
             <p class="text-gray-700 dark:text-gray-300">
               Steps define the workflow for this agent. Each step can be a
-              Python script or a prompt template.
+              python script or a prompt template.
             </p>
             <Button color="blue" on:click={createNewStep}>
               <PlusOutline class="mr-2 h-5 w-5" />
@@ -349,8 +354,10 @@
                   <TableBodyRow>
                     <TableBodyCell>{step.name}</TableBodyCell>
                     <TableBodyCell>
-                      <Badge color={step.type === "Python" ? "blue" : "purple"}>
-                        {step.type}
+                      <Badge
+                        color={step.step_type === "python" ? "blue" : "purple"}
+                      >
+                        {step.step_type}
                       </Badge>
                     </TableBodyCell>
                     <TableBodyCell>{step.lastEdited}</TableBodyCell>

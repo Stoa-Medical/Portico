@@ -14,43 +14,51 @@
     TrashBinOutline,
     PlayOutline,
   } from "flowbite-svelte-icons";
+
   import StepConfig from "$lib/components/StepConfig.svelte";
-  import { saveStep, deleteStep } from "../../agents/api";
+  import { saveStep, deleteStep, getStep, getAgents } from "../../agents/api";
 
   // Stores
   $: stepId = $page.params.slug;
   $: searchParams = $page.url.searchParams;
-
-  // Reactive flags
   $: isNewStep = stepId === "new";
 
-  // Reactively assign step
-  let step;
-  $: {
-    if (isNewStep) {
-      step = {
-        id: "new",
-        name: "",
-        type: "Prompt",
-        agentId: parseInt(searchParams.get("agentId") || "1"),
-        agentName: searchParams.get("agentName") ?? "",
-        content: "",
-        isActive: true,
-        lastEdited: "Just now",
-        createdAt: new Date().toISOString().split("T")[0],
-      };
-    } else {
-      step = getStepData(stepId);
+  let step = null;
+  let agents = [];
+  let isLoading = true;
+  const stepTypes = ["prompt", "python"];
+
+  // Load agents + step data
+  async function loadData() {
+    isLoading = true;
+    try {
+      agents = await getAgents();
+
+      if (isNewStep) {
+        // TODO: Must change init here when schema changes, make this more maintainable.
+        step = {
+          id: "new",
+          step_type: "prompt",
+          agent_id: parseInt(searchParams.get("agentId") || "1"),
+          name: searchParams.get("agentName") ?? "",
+          step_content: "",
+          // isActive: true,
+          // lastEdited: "Just now",
+          created_timestamp: new Date().toISOString().split("T")[0],
+        };
+        console.log("set step", step);
+      } else {
+        step = await getStep(stepId);
+        console.log("fetched step", step);
+      }
+    } catch (err) {
+      console.error("Failed to load data:", err);
+    } finally {
+      isLoading = false;
     }
   }
 
-  const agents = [
-    { id: 1, name: "Agent Smith" },
-    { id: 2, name: "Agent Johnson" },
-    { id: 3, name: "Agent Brown" },
-  ];
-
-  const stepTypes = ["Prompt", "Python"];
+  loadData();
 
   async function clickSaveStep() {
     await saveStep(step);
@@ -65,70 +73,50 @@
   }
 
   function goBack() {
-    if (isNewStep) {
-      goto("/agents/");
-    } else {
-      goto("/steps");
-    }
-  }
-
-  // TODO: Add back execution features
-  // function clickExecuteStep() {
-  //   alert(`Executing ${step.type} step: ${step.name}`);
-  // }
-
-  function getStepData(id) {
-    return {
-      id: parseInt(id),
-      name: `Step ${id}`,
-      type: id % 2 === 0 ? "Prompt" : "Python",
-      agentId: 1,
-      agentName: "Agent Smith",
-      content:
-        id % 2 === 0
-          ? `You are an AI assistant that helps with data analysis.\n{{data}}`
-          : `import pandas as pd\n...`,
-      isActive: true,
-      lastEdited: "2 hours ago",
-      createdAt: "2023-10-15",
-    };
+    goto(isNewStep ? "/agents/" : "/steps");
   }
 </script>
 
 <main class="container mx-auto p-4">
-  <!-- Page Header with Breadcrumb -->
-  <div class="mb-6">
-    <Breadcrumb class="mb-4">
-      <BreadcrumbItem href="/" home>Home</BreadcrumbItem>
-      <BreadcrumbItem href="/steps">Steps</BreadcrumbItem>
-      <BreadcrumbItem>Step {stepId}</BreadcrumbItem>
-    </Breadcrumb>
+  {#if isLoading}
+    <div class="flex items-center justify-center py-32"></div>
+  {:else}
+    <!-- Page Header with Breadcrumb -->
+    <div class="mb-6">
+      <Breadcrumb class="mb-4">
+        <BreadcrumbItem href="/" home>Home</BreadcrumbItem>
+        <BreadcrumbItem href="/steps">Steps</BreadcrumbItem>
+        <BreadcrumbItem>Step {stepId}</BreadcrumbItem>
+      </Breadcrumb>
 
-    <div class="flex flex-col sm:flex-row gap-4 mb-4">
-      <div class="flex items-center gap-3">
-        <Button color="light" size="sm" on:click={goBack}>
-          <ArrowLeftOutline class="mr-2 h-4 w-4" />
-          Back
+      <div class="flex flex-col sm:flex-row gap-4 mb-4">
+        <div class="flex items-center gap-3">
+          <Button color="light" size="sm" on:click={goBack}>
+            <ArrowLeftOutline class="mr-2 h-4 w-4" />
+            Back
+          </Button>
+          <Heading tag="h1" class="text-2xl font-bold"
+            >{step?.name || "New Step"}</Heading
+          >
+          <Badge color={step.step_type === "Python" ? "blue" : "purple"}>
+            {step.step_type}
+          </Badge>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-2 mb-6">
+        <!-- <Button color="green" on:click={clickExecuteStep}>
+          <PlayOutline class="mr-2 h-5 w-5" />
+          Execute
+        </Button> -->
+        <Button color="red" on:click={clickDeleteStep}>
+          <TrashBinOutline class="mr-2 h-5 w-5" />
+          Delete
         </Button>
-        <Heading tag="h1" class="text-2xl font-bold">{step.name}</Heading>
-        <Badge color={step.type === "Python" ? "blue" : "purple"}>
-          {step.type}
-        </Badge>
+        <Button color="blue" on:click={clickSaveStep}>Save</Button>
       </div>
     </div>
-    <div class="flex flex-wrap gap-2 mb-6">
-      <!-- <Button color="green" on:click={clickExecuteStep}>
-        <PlayOutline class="mr-2 h-5 w-5" />
-        Execute
-      </Button> -->
-      <Button color="red" on:click={clickDeleteStep}>
-        <TrashBinOutline class="mr-2 h-5 w-5" />
-        Delete
-      </Button>
-      <Button color="blue" on:click={clickSaveStep}>Save</Button>
-    </div>
-  </div>
 
-  <!-- Step Configuration -->
-  <StepConfig bind:step {stepTypes} {agents} />
+    <!-- Step Configuration -->
+    <StepConfig bind:step {stepTypes} {agents} />
+  {/if}
 </main>

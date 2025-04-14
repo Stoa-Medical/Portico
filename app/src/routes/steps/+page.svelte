@@ -17,92 +17,61 @@
     Badge,
   } from "flowbite-svelte";
   import { PlusOutline } from "flowbite-svelte-icons";
+  import { getSteps, saveStep, getAgents } from "../../routes/agents/api";
 
-  // Sample data for steps
-  let steps = [
-    {
-      id: 1,
-      name: "Data Collection",
-      type: "Python",
-      agentId: 1,
-      agentName: "Agent Smith",
-      lastEdited: "2 hours ago",
-    },
-    {
-      id: 2,
-      name: "Text Analysis",
-      type: "Prompt",
-      agentId: 1,
-      agentName: "Agent Smith",
-      lastEdited: "1 day ago",
-    },
-    {
-      id: 3,
-      name: "Data Visualization",
-      type: "Python",
-      agentId: 2,
-      agentName: "Agent Johnson",
-      lastEdited: "3 days ago",
-    },
-  ];
+  let steps = [];
+  let agents = [];
 
-  // Modal state
   let showModal = false;
 
-  // Form data for new step
   let newStep = {
     name: "",
-    type: "Prompt",
-    agentId: "",
-    content: "",
+    step_type: "Prompt",
+    agent_id: "",
+    step_content: "",
   };
 
-  // Step types
   const stepTypes = ["Prompt", "Python"];
 
-  // Sample agents for dropdown
-  const agents = [
-    { id: 1, name: "Agent Smith" },
-    { id: 2, name: "Agent Johnson" },
-    { id: 3, name: "Agent Brown" },
-  ];
+  // Fetch actual data on load
+  const loadData = async () => {
+    try {
+      agents = await getAgents();
+      steps = (await getSteps()) || [];
+    } catch (err) {
+      console.error("Failed to load steps or agents:", err);
+    }
+  };
 
-  // Handle form submission
-  function handleSubmit() {
-    // Add new step to the list
-    const id = steps.length > 0 ? Math.max(...steps.map((s) => s.id)) + 1 : 1;
-    const agentName =
-      agents.find((a) => a.id === parseInt(newStep.agentId))?.name ||
-      "Unknown Agent";
+  loadData();
 
-    steps = [
-      ...steps,
-      {
-        id,
-        name: newStep.name,
-        type: newStep.type,
-        agentId: parseInt(newStep.agentId),
-        agentName,
-        lastEdited: "Just now",
-      },
-    ];
+  async function handleSubmit() {
+    const newStepData = {
+      name: newStep.name,
+      step_type: newStep.step_type,
+      agent_id: parseInt(newStep.agent_id),
+      step_content: newStep.step_content,
+    };
 
-    // Reset form and close modal
-    resetForm();
-    showModal = false;
+    try {
+      await saveStep(newStepData);
+      steps = await getSteps(); // refresh the list
+      resetForm();
+      showModal = false;
+    } catch (err) {
+      console.error("Error saving step:", err);
+    }
   }
 
-  // Reset form fields
   function resetForm() {
     newStep = {
       name: "",
       type: "Prompt",
-      agentId: "",
+      agent_id: "",
       content: "",
     };
   }
 
-  // Navigate to step details
   function navigateToStep(id) {
     window.location.href = `/steps/${id}`;
   }
@@ -142,8 +111,8 @@
           >
             <TableBodyCell>{step.name}</TableBodyCell>
             <TableBodyCell>
-              <Badge color={step.type === "Python" ? "blue" : "purple"}>
-                {step.type}
+              <Badge color={step.step_type === "Python" ? "blue" : "purple"}>
+                {step.step_type}
               </Badge>
             </TableBodyCell>
             <TableBodyCell>{step.agentName}</TableBodyCell>
@@ -177,7 +146,7 @@
 
       <div>
         <Label for="type" class="mb-2">Step Type</Label>
-        <Select id="type" items={stepTypes} bind:value={newStep.type} />
+        <Select id="type" items={stepTypes} bind:value={newStep.step_type} />
       </div>
 
       <div>
@@ -194,7 +163,7 @@
         <Label for="content" class="mb-2">Initial Content</Label>
         <Textarea
           id="content"
-          placeholder={newStep.type === "Python"
+          placeholder={newStep.step_type === "Python"
             ? "# Enter Python code here"
             : "Enter prompt text here"}
           rows="5"

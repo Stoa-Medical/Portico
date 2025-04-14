@@ -28,12 +28,12 @@ export type Agent = {
 };
 
 export type Step = {
-  id: number;
-  agentId: number;
+  id: number | string;
+  agent_id: number;
   name: string;
+  description?: string;
   content: string;
-  type: "Python" | "Prompt" | string;
-  lastEdited: string;
+  step_type: "Python" | "Prompt" | string;
 };
 
 export type RuntimeSession = {
@@ -42,7 +42,7 @@ export type RuntimeSession = {
   requestedByAgentId: number;
   createdTimestamp: string;
   lastUpdatedTimestamp: string;
-  runtimeSessionStatus: "queued" | "running" | "completed" | "failed"; // match your enum
+  runtimeSessionStatus: "queued" | "running" | "completed" | "failed";
   initialData: any; // JSON blob
   latestStepIdx: number;
   latestResult: any | null; // nullable JSON
@@ -52,70 +52,11 @@ export type RuntimeSession = {
 export type CreateAgentPayload = Omit<Agent, "id">;
 
 // Allow partial Step and Agent updates:
-export type UpdateStepPayload = Partial<Step> & { id: number };
+export type UpdateStepPayload = Partial<Step> & {
+  id: number;
+  agent_id: number;
+};
 export type UpdateAgentPayload = Partial<Agent> & { id: number };
-
-let currentAgents: Agent[] = [
-  {
-    id: 1,
-    name: "Agent Smith",
-    agent_state: "Active",
-    type: "Assistant",
-    lastActive: "2 hours ago",
-    description:
-      "This is a sample agent description that explains what this agent does and how it works.",
-    settings: {
-      temperature: 0.7,
-      maxTokens: 2048,
-      topP: 0.9,
-      frequencyPenalty: 0.5,
-      presencePenalty: 0.5,
-    },
-    capabilities: ["Text Generation", "Question Answering", "Summarization"],
-    isActive: true,
-    model: "gpt-4",
-    createdAt: "2023-10-15",
-  },
-  {
-    id: 2,
-    name: "Agent Johnson",
-    status: "Idle",
-    type: "Researcher",
-    lastActive: "1 day ago",
-    description:
-      "Research agent that collects and analyzes information from various sources.",
-    settings: {
-      temperature: 0.5,
-      maxTokens: 4096,
-      topP: 0.8,
-      frequencyPenalty: 0.3,
-      presencePenalty: 0.3,
-    },
-    capabilities: ["Research", "Data Analysis", "Summarization"],
-    isActive: false,
-    model: "claude-3-opus",
-    createdAt: "2023-11-20",
-  },
-  {
-    id: 3,
-    name: "Agent Brown",
-    status: "Active",
-    type: "Analyst",
-    lastActive: "5 minutes ago",
-    description: "Specialized in data analysis and visualization.",
-    settings: {
-      temperature: 0.3,
-      maxTokens: 2048,
-      topP: 0.7,
-      frequencyPenalty: 0.2,
-      presencePenalty: 0.2,
-    },
-    capabilities: ["Data Analysis", "Visualization", "Reporting"],
-    isActive: true,
-    model: "gpt-3.5-turbo",
-    createdAt: "2024-01-05",
-  },
-];
 
 const defaultPythonContent = `import pandas as pd
 import matplotlib.pyplot as plt
@@ -146,18 +87,18 @@ if __name__ == "__main__":
 let currentAgentSteps: Step[] = [
   {
     id: 1,
-    agentId: 1,
+    agent_id: 1,
     name: "Data Collection",
-    type: "Python",
-    lastEdited: "2 hours ago",
+    step_type: "Python",
+    // lastEdited: "2 hours ago",
     content: defaultPythonContent,
   },
   {
     id: 2,
-    agentId: 1,
+    agent_id: 1,
     name: "Text Analysis",
-    type: "Prompt",
-    lastEdited: "1 day ago",
+    step_type: "Prompt",
+    // lastEdited: "1 day ago",
     content: `You are an AI assistant that helps with data analysis.
 Please analyze the following data and provide insights:
 {{data}}
@@ -166,21 +107,21 @@ Focus on trends, anomalies, and potential actionable insights.`,
   },
   {
     id: 3,
-    agentId: 1,
+    agent_id: 1,
     name: "Data Visualization",
-    type: "Python",
-    lastEdited: "3 days ago",
+    step_type: "Python",
+    // lastEdited: "3 days ago",
     content: defaultPythonContent,
   },
 ];
 
 function generateCompletedSessionsForAgent(
   agentId: number,
-  count: number
+  count: number,
 ): RuntimeSession[] {
   return Array.from({ length: count }, (_, i) => {
     const stepCount = currentAgentSteps.filter(
-      (step) => step.agentId === agentId
+      (step) => step.agent_id === agentId,
     ).length;
     return {
       id: agentId * 100 + i + 1,
@@ -214,7 +155,7 @@ export const getAgents = async (): Promise<Agent[]> => {
 };
 
 export const saveAgent = async (
-  agent: CreateAgentPayload
+  agent: CreateAgentPayload,
 ): Promise<Agent[]> => {
   const { error } = await supabase.from("agents").insert([{ ...agent }]);
   if (error) throw error;
@@ -222,7 +163,7 @@ export const saveAgent = async (
 };
 
 export const updateAgent = async (
-  updatedAgent: UpdateAgentPayload
+  updatedAgent: UpdateAgentPayload,
 ): Promise<Agent[]> => {
   const { error } = await supabase
     .from("agents")
@@ -233,7 +174,7 @@ export const updateAgent = async (
 };
 
 export const deleteAgent = async (
-  agentIdToDelete: number
+  agentIdToDelete: number,
 ): Promise<Agent[]> => {
   const { error } = await supabase
     .from("agents")
@@ -243,38 +184,80 @@ export const deleteAgent = async (
   return getAgents();
 };
 
-export const getSteps = (agentId: number): Step[] => {
-  return currentAgentSteps.filter((step) => step.agentId === agentId);
+export const getStep = async (stepId): Promise<Step[]> => {
+  const { data, error } = await supabase
+    .from("steps")
+    .select("*")
+    .eq("id", stepId);
+  if (error) throw error;
+  return data;
+};
+
+export const getSteps = async (agentId: number): Promise<Step[]> => {
+  const { data, error } = await supabase
+    .from("steps")
+    .select("*")
+    .eq("agent_id", agentId);
+  if (error) throw error;
+  return data;
 };
 
 export const saveStep = async (step: Step): Promise<Step[]> => {
-  currentAgentSteps = currentAgentSteps.concat({
-    ...step,
-    id: currentAgentSteps.length + 1,
-  });
-  return currentAgentSteps;
+  const { id, ...rest } = step;
+
+  // Get next sequence_number for this agent:
+  const { data: existingSteps, error: fetchError } = await supabase
+    .from("steps")
+    .select("sequence_number")
+    .eq("agent_id", step.agent_id)
+    .order("sequence_number", { ascending: false })
+    .limit(1);
+
+  if (fetchError) throw fetchError;
+
+  const nextSequenceNumber = (existingSteps?.[0]?.sequence_number ?? 0) + 1;
+
+  // Insert step with metadata:
+  const stepToInsert =
+    id === "new"
+      ? {
+          ...rest,
+          sequence_number: nextSequenceNumber,
+        }
+      : step;
+
+  const { error: insertError } = await supabase
+    .from("steps")
+    .insert([stepToInsert]);
+
+  if (insertError) throw insertError;
+
+  return getStep(step.agent_id);
 };
 
 export const updateStep = async (
-  updatedStep: UpdateStepPayload
+  updatedStep: UpdateStepPayload,
 ): Promise<Step[]> => {
-  currentAgentSteps = currentAgentSteps.map((step) =>
-    step.id === updatedStep.id ? { ...step, ...updatedStep } : step
-  );
-  return currentAgentSteps;
+  const { error } = await supabase
+    .from("steps")
+    .update(updatedStep)
+    .eq("id", updatedStep.id);
+  if (error) throw error;
+  return getStep(updatedStep.agent_id);
 };
 
-export const deleteStep = async (stepIdToDelete: number): Promise<Step[]> => {
-  currentAgentSteps = currentAgentSteps.filter(
-    (step) => step.id !== stepIdToDelete
-  );
-  return currentAgentSteps;
+export const deleteStep = async (stepIdToDelete: number): Promise<void> => {
+  const { error } = await supabase
+    .from("steps")
+    .delete()
+    .eq("id", stepIdToDelete);
+  if (error) throw error;
 };
 
 export const getRuntimeSessions = async (
-  agentId: number
+  agentId: number,
 ): Promise<RuntimeSession[]> => {
   return currentRuntimeSessions.filter(
-    (session) => session.requestedByAgentId === agentId
+    (session) => session.requestedByAgentId === agentId,
   );
 };

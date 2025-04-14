@@ -287,6 +287,7 @@ table "steps" {
     column "description" {
         type = sql("varchar(255)")
         null = false
+        default = ""
     }
     column "step_type" {
         type = enum.step_type

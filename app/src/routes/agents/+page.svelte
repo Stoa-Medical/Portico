@@ -44,6 +44,7 @@
 
   // Load agents data:
   let agents;
+  let steps;
   let originalAgent = null;
   let hasAgentChanges = false;
   const loadAgents = async () => {
@@ -54,6 +55,15 @@
     }
   };
 
+  async function loadSteps(agentId) {
+    try {
+      steps = await getSteps(agentId);
+    } catch (err) {
+      console.error("Failed to load steps", err);
+      steps = [];
+    }
+  }
+
   $: if (selectedAgent && originalAgent) {
     hasAgentChanges =
       JSON.stringify(selectedAgent) !== JSON.stringify(originalAgent);
@@ -63,7 +73,9 @@
   let runtimeSessions = [];
 
   $: if (selectedAgent) {
+    loadSteps(selectedAgent.id);
     loadRuntimeSessions(selectedAgent.id);
+    console.log("loading for", selectedAgent);
   }
 
   async function loadRuntimeSessions(agentId) {
@@ -264,7 +276,7 @@
                 <TableBodyCell>{agent.type}</TableBodyCell>
                 <TableBodyCell>
                   <span
-                    class={agent.agent_state === "Active"
+                    class={agent.agent_state === "stable"
                       ? "text-green-500"
                       : "text-gray-500"}
                   >
@@ -499,26 +511,28 @@
                   </Button>
                 </div>
 
-                {#if getSteps(selectedAgent.id).length > 0}
+                {#if steps && steps.length > 0}
                   <Table hoverable={true} data-testid="steps-table">
                     <TableHead>
                       <TableHeadCell>Name</TableHeadCell>
                       <TableHeadCell>Type</TableHeadCell>
-                      <TableHeadCell>Last Edited</TableHeadCell>
+                      <!-- <TableHeadCell>Last Edited</TableHeadCell> -->
                       <TableHeadCell>Actions</TableHeadCell>
                     </TableHead>
                     <TableBody>
-                      {#each getSteps(selectedAgent.id) as step}
+                      {#each steps as step}
                         <TableBodyRow>
                           <TableBodyCell>{step.name}</TableBodyCell>
                           <TableBodyCell>
                             <Badge
-                              color={step.type === "Python" ? "blue" : "purple"}
+                              color={step.step_type === "Python"
+                                ? "blue"
+                                : "purple"}
                             >
-                              {step.type}
+                              {step.step_type}
                             </Badge>
                           </TableBodyCell>
-                          <TableBodyCell>{step.lastEdited}</TableBodyCell>
+                          <!-- <TableBodyCell>{step.lastEdited}</TableBodyCell> -->
                           <TableBodyCell>
                             <div class="flex gap-2">
                               {#if selectedStep?.id === step.id}
