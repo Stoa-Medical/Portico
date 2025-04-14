@@ -206,7 +206,7 @@
     <div>
       <div class="flex justify-between items-center mb-2">
         <Label for="content">
-          {step.step_type === "Python" ? "Python Code" : "Prompt Template"}
+          {step.step_type === "python" ? "Python Code" : "Prompt Template"}
         </Label>
         <!-- <div class="flex items-center gap-2"> -->
         <!-- <Toggle bind:checked={step.isActive} /> -->
@@ -214,7 +214,7 @@
         <!-- </div> -->
       </div>
 
-      {#if step.step_type === "Python"}
+      {#if step.step_type === "python"}
         <div
           bind:this={editorElement}
           class="border border-gray-300 rounded-lg min-h-[300px] font-mono"
@@ -231,7 +231,9 @@
 
     <div>
       <p class="text-sm text-gray-500">
-        Last edited: {step.lastEdited} | Created: {step.createdAt}
+        <!-- TODO: Add these into schema -->
+        Last edited: {step.lastEdited || "Just now"} | Created: {step.createdAt ||
+          "Just now"}
       </p>
     </div>
   </div>
