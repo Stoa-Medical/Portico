@@ -27,8 +27,9 @@ async fn main() -> Result<()> {
 
     // Define the server address
     let addr = format!("0.0.0.0:{}", grpc_port).parse::<SocketAddr>()?;
-    println!("Starting gRPC server on {}", addr);
+    println!("Will try to start the gRPC server on {}", addr);
 
+    println!("Trying to connect to the database...");
     // Connect to database (share pooled connection)
     let db_conn_pool = PgPoolOptions::new().connect(&db_url).await?;
     println!("Connected to the database successfully");
