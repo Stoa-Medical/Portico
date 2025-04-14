@@ -3,7 +3,7 @@ This is a Python microservice that:
 1. Listens to Supabase Realtime using the Supabase SDK
     - As-of this writing, Rust doesn't have a nice SDK for Supabase realtime.
       Also, keeping this service separate can help keep the code cleaner (separation of concerns)
-2. Feeds specific data to the `engine` Rust service using a persistent TCP/IP connection
+2. Feeds specific data to the `engine` Rust service using gRPC
 3. Updates the Signal row accordingly based on runtime result
 
 So the flow is:
@@ -30,19 +30,22 @@ from supabase import create_async_client
 from dotenv import load_dotenv
 
 from src.lib import logger
-from src.lib import (
-    connect_to_engine,
-    send_signal_to_engine,
-    handle_new_signal,
-    handle_general_update,
-)
+from src.lib import BridgeClient, handle_new_signal, handle_general_update
+
+# Ensure proto files are generated
+from src.proto import build_proto
 
 
-async def shutdown(channel_list, stop_event):
+async def shutdown(channel_list, stop_event, grpc_client):
     """Handle graceful shutdown"""
     logger.info("Shutting down...")
     for channel in channel_list:
         await channel.unsubscribe()
+
+    # Close gRPC connection
+    if grpc_client:
+        await grpc_client.close()
+
     stop_event.set()
 
 
@@ -57,7 +60,7 @@ async def main():
     supabase_url = os.getenv("SUPABASE_URL")
     supabase_key = os.getenv("SUPABASE_KEY")
     engine_host = os.getenv("ENGINE_CONTAINER_NAME", "engine")
-    engine_port = int(os.getenv("ENGINE_PORT", "8888"))
+    engine_port = int(os.getenv("ENGINE_PORT", "50051"))
 
     if not supabase_url or not supabase_key:
         logger.error("SUPABASE_URL and SUPABASE_KEY must be set in environment")
@@ -67,20 +70,37 @@ async def main():
     client = await create_async_client(supabase_url, supabase_key)
     logger.info(f"Initialized Supabase client to {supabase_url}")
 
-    # Send initial DB sync signal to engine
-    engine_socket_conn = await connect_to_engine(engine_host, engine_port)
-    await send_signal_to_engine(engine_socket_conn, {"server-init": True}, "msg_init")
+    # Generate proto files if they don't exist
+    try:
+        # Only regenerate if the package was not imported properly
+        if not hasattr(build_proto, "generate_proto_code"):
+            logger.info("Running build_proto.py to generate gRPC code...")
+            build_proto.generate_proto_code()
+    except Exception as e:
+        logger.error(f"Failed to generate proto files: {e}")
+        return
+
+    # Connect to the engine service using gRPC
+    grpc_client = BridgeClient(engine_host, engine_port)
+    if not await grpc_client.connect():
+        logger.error("Failed to connect to engine service via gRPC")
+        return
+
+    # Initialize engine with server-init message
+    success = await grpc_client.send_signal({"server-init": True}, "msg_init")
+    if not success:
+        logger.error("Failed to initialize engine service")
+        return
 
     # Set up Supabase realtime subscriptions
     channel_signals = client.channel("signal-inserts")
     channel_agents = client.channel("agent-changes")
-    # channel_steps = client.channel("step-changes")
 
     # Subscribe to changes on the `signals` table (only when added)
     channel_signals.on_postgres_changes(
         event="INSERT",
         callback=lambda payload, handler=handle_new_signal: asyncio.create_task(
-            handler(payload, engine_socket_conn)
+            handler(payload, grpc_client)
         ),
         table="signals",
         schema="public",
@@ -90,7 +110,7 @@ async def main():
     channel_agents.on_postgres_changes(
         event="*",
         callback=lambda payload, handler=handle_general_update: asyncio.create_task(
-            handler(payload, engine_socket_conn)
+            handler(payload, grpc_client)
         ),
         table="agents",
         schema="public",
@@ -108,7 +128,10 @@ async def main():
     # Set up signal handlers for graceful shutdown
     for sig in (SIGINT, SIGTERM):
         asyncio.get_event_loop().add_signal_handler(
-            sig, lambda: asyncio.create_task(shutdown(channel_list, stop_event))
+            sig,
+            lambda: asyncio.create_task(
+                shutdown(channel_list, stop_event, grpc_client)
+            ),
         )
 
     logger.info("Portico bridge service started. Press Ctrl+C to exit.")
