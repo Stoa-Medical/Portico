@@ -176,11 +176,20 @@ export const updateAgent = async (
 export const deleteAgent = async (
   agentIdToDelete: number,
 ): Promise<Agent[]> => {
-  const { error } = await supabase
+  // Delete dependent steps:
+  const { error: stepDeleteError } = await supabase
+    .from("steps")
+    .delete()
+    .eq("agent_id", agentIdToDelete);
+
+  if (stepDeleteError) throw stepDeleteError;
+
+  // Delete Agent:
+  const { error: agentDeleteError } = await supabase
     .from("agents")
     .delete()
     .eq("id", agentIdToDelete);
-  if (error) throw error;
+  if (agentDeleteError) throw agentDeleteError;
   return getAgents();
 };
 
