@@ -36,11 +36,12 @@
 
       if (isNewStep) {
         // TODO: Must change init here when schema changes, make this more maintainable.
+        const agentName = searchParams.get("agentName");
         step = {
           id: "new",
           step_type: "prompt",
           agent_id: parseInt(searchParams.get("agentId") || "1"),
-          name: searchParams.get("agentName") ?? "",
+          name: agentName ? agentName + " Step" : "",
           step_content: "",
           // isActive: true,
           // lastEdited: "Just now",
@@ -108,11 +109,13 @@
           <PlayOutline class="mr-2 h-5 w-5" />
           Execute
         </Button> -->
-        <Button color="red" on:click={clickDeleteStep}>
-          <TrashBinOutline class="mr-2 h-5 w-5" />
-          Delete
-        </Button>
-        <Button color="blue" on:click={clickSaveStep}>Save</Button>
+        {#if !isNewStep}
+          <Button class="bg-[#CE5A5A]" on:click={clickDeleteStep}>
+            <TrashBinOutline class="mr-2 h-5 w-5" />
+            Delete
+          </Button>
+        {/if}
+        <Button class="bg-sea text-black" on:click={clickSaveStep}>Save</Button>
       </div>
     </div>
 

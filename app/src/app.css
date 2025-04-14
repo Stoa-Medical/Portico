@@ -20,3 +20,63 @@
 }
 
 @source "../node_modules/flowbite-svelte/dist";
+
+@layer base {
+  :root {
+    --font-primary: "Helvetica", sans-serif;
+    --font-secondary: "Cormorant Garamond", serif;
+    /* Main colors */
+    --ink: #262431;
+    --papyrus: #ecd8a8;
+    --sky: #b0c3e8;
+    --sea: #a7e7df;
+    --error: #e58382;
+    --success: #76d5ac;
+    --warning: #eebd8e;
+    --white: #fdfcfb;
+    --card: #312f3b;
+    /* Color levels (mid) */
+    --ink-mid: #b2b1b9;
+    --papyrus-mid: #f4e9ce;
+    --sky-mid: #dde6f8;
+    --sea-mid: #c9f4ef;
+    --error-mid: #f1b2b0;
+    --success-mid: #a2eacb;
+    --warning-mid: #f8dabe;
+    /* Color levels (light) */
+    --ink-light: #f3f2f4;
+    --papyrus-light: #f8f2e3;
+    --sky-light: #eaeff9;
+    --sea-light: #ecf6f5;
+    --error-light: #fdeded;
+    --success-light: #e3f7ef;
+    --warning-light: #fff4ea;
+  }
+
+  body {
+    font-family: var(--font-primary);
+    @apply bg-ink text-white;
+  }
+
+  h1 {
+    font-size: 32px;
+  }
+
+  button {
+    text-color: black;
+  }
+
+  .gradient-text {
+    background: linear-gradient(to right, #a7e7df 0%, #64a9a0 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    display: inline-block;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply gradient-text;
+  }
+}

@@ -19,7 +19,7 @@
   } from "@codemirror/language";
 
   export let step;
-  export let stepTypes = ["Prompt", "Python"];
+  export let stepTypes = ["prompt", "python"];
   export let agents = [];
 
   let editorElement;

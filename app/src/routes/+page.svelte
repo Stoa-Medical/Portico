@@ -11,16 +11,26 @@
 
   <!-- Main Content -->
   <div class="grid grid-cols-1 gap-6">
-    <Card class="overflow-x-auto max-w-full">
-      <Heading tag="h2" class="mb-4">Navigation</Heading>
-      <p class="mb-4">
-        Welcome to the application. Use the links below to navigate:
-      </p>
+    <Card class="overflow-x-auto max-w-full bg-card">
+      <div class="p-4">
+        <Heading tag="h2" class="mb-4">Hi there, Howard!</Heading>
+        <Heading tag="h2" class="mb-4">Let's create a new project!</Heading>
 
-      <div class="flex flex-col sm:flex-row sm:space-y-0 sm:space-x-4 w-full">
-        <Button href="/agents" color="blue">View Agents</Button>
-        <Button href="/steps" color="green">View Steps</Button>
-        <Button href="/analytics" color="purple">Analytics</Button>
+        <p class="mt-2 mb-6">
+          Create a project from scratch or start from a template
+        </p>
+
+        <div class="flex flex-col sm:flex-row sm:space-y-0 sm:space-x-4 w-full">
+          <Button href="/agents" size="xl" class="bg-sea text-black"
+            >Agents</Button
+          >
+          <Button href="/steps" size="xl" class="bg-sea text-black"
+            >Steps</Button
+          >
+          <Button href="/analytics" size="xl" class="bg-sea text-black"
+            >Analytics</Button
+          >
+        </div>
       </div>
     </Card>
   </div>

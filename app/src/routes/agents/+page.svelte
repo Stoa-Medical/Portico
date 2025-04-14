@@ -75,7 +75,6 @@
   $: if (selectedAgent) {
     loadSteps(selectedAgent.id);
     loadRuntimeSessions(selectedAgent.id);
-    console.log("loading for", selectedAgent);
   }
 
   async function loadRuntimeSessions(agentId) {
@@ -237,7 +236,7 @@
         ]
       : [
           {
-            label: "Add Agent",
+            label: "New Agent",
             onClick: () => (showModal = true),
             icon: PlusOutline,
             color: "blue",
@@ -319,7 +318,9 @@
             <Heading tag="h2" class="text-xl font-bold"
               >{selectedAgent.name}</Heading
             >
-            <Badge color={selectedAgent.isActive ? "green" : "none"}>
+            <Badge
+              color={selectedAgent.agent_state === "stable" ? "green" : "none"}
+            >
               {selectedAgent.agent_state}
             </Badge>
           </div>
@@ -503,7 +504,7 @@
                     Python script or a prompt template.
                   </p>
                   <Button
-                    color="blue"
+                    class="bg-sea text-black"
                     href={`/steps/new?agentId=${selectedAgent.id}&agentName=${encodeURIComponent(selectedAgent.name)}`}
                   >
                     <PlusOutline class="mr-2 h-5 w-5" />
@@ -576,7 +577,7 @@
                       No steps found for this agent
                     </p>
                     <Button
-                      color="blue"
+                      class="bg-sea text-black"
                       href={`/steps/new?agentId=${selectedAgent.id}&agentName=${encodeURIComponent(selectedAgent.name)}`}
                     >
                       <PlusOutline class="mr-2 h-5 w-5" />
@@ -588,11 +589,6 @@
             </TabItem>
             <TabItem title="Runtime Sessions">
               <div class="space-y-6 py-4">
-                <p class="text-gray-700 dark:text-gray-300 mb-4">
-                  These are the completed runtime sessions initiated by this
-                  agent.
-                </p>
-
                 {#if runtimeSessions.length > 0}
                   <Table hoverable={true}>
                     <TableHead>

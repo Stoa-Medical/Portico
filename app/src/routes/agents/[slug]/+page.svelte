@@ -335,7 +335,7 @@
               Steps define the workflow for this agent. Each step can be a
               python script or a prompt template.
             </p>
-            <Button color="blue" on:click={createNewStep}>
+            <Button class="bg-sea text-black" on:click={createNewStep}>
               <PlusOutline class="mr-2 h-5 w-5" />
               Add Step
             </Button>
@@ -383,7 +383,7 @@
               <p class="text-gray-500 dark:text-gray-400 mb-4">
                 No steps found for this agent
               </p>
-              <Button color="blue" on:click={createNewStep}>
+              <Button class="bg-sea text-black" on:click={createNewStep}>
                 <PlusOutline class="mr-2 h-5 w-5" />
                 Create First Step
               </Button>

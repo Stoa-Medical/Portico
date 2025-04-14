@@ -17,7 +17,7 @@
     Badge,
   } from "flowbite-svelte";
   import { PlusOutline } from "flowbite-svelte-icons";
-  import { getSteps, saveStep, getAgents } from "../../routes/agents/api";
+  import { saveStep, getAgents } from "../../routes/agents/api";
 
   let steps = [];
   let agents = [];
@@ -37,7 +37,6 @@
   const loadData = async () => {
     try {
       agents = await getAgents();
-      steps = (await getSteps()) || [];
     } catch (err) {
       console.error("Failed to load steps or agents:", err);
     }
@@ -55,7 +54,6 @@
 
     try {
       await saveStep(newStepData);
-      steps = await getSteps(); // refresh the list
       resetForm();
       showModal = false;
     } catch (err) {
@@ -82,7 +80,7 @@
   ];
   const actionBar = [
     {
-      label: "Add Step",
+      label: "New Step",
       icon: PlusOutline,
       color: "blue",
       onClick: () => (showModal = true),
