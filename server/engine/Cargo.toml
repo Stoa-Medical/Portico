@@ -11,3 +11,11 @@ anyhow = "1.0.95"
 dotenvy = "0.15.7"
 sqlx = "0.8.3"
 portico-shared = { path = "../../shared" }
+tonic = "0.10.2"
+prost = "0.12.3"
+prost-types = "0.12.3"
+futures = "0.3.30"
+chrono = "0.4.34"
+
+[build-dependencies]
+tonic-build = "0.10.2"

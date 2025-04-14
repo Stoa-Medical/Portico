@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package portico;
+
+// Import for using google.protobuf.Value to represent JSON
+import "google/protobuf/struct.proto";
+
+// The Bridge service definition
+service BridgeService {
+  // Initialize server connection
+  rpc InitServer(ServerInitRequest) returns (ServerInitResponse);
+
+  // Handle signal creation
+  rpc CreateSignal(SignalRequest) returns (OperationResponse);
+
+  // Handle agent operations
+  rpc CreateAgent(AgentRequest) returns (OperationResponse);
+  rpc UpdateAgent(AgentRequest) returns (OperationResponse);
+  rpc DeleteAgent(AgentRequest) returns (OperationResponse);
+}
+
+// Server initialization
+message ServerInitRequest {
+  bool server_init = 1;
+}
+
+message ServerInitResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Container for Supabase record data
+message SupabaseData {
+  string table = 1;
+  string type = 2;  // INSERT, UPDATE, DELETE
+  google.protobuf.Struct record = 3;
+}
+
+// Signal-specific fields
+message Signal {
+  string id = 1;
+  string agent_id = 2;
+  string signal_type = 3;
+  string content = 4;
+  repeated string tags = 5;
+  map<string, string> metadata = 6;
+}
+
+// Agent-specific fields
+message AgentData {
+  string global_uuid = 1;
+  string name = 2;
+  string description = 3;
+  map<string, string> configuration = 4;
+}
+
+// Signal request with embedded Supabase data
+message SignalRequest {
+  SupabaseData data = 1;
+}
+
+// Agent request with embedded Supabase data
+message AgentRequest {
+  SupabaseData data = 1;
+}
+
+// Generic response for operations
+message OperationResponse {
+  bool success = 1;
+  string message = 2;
+}
