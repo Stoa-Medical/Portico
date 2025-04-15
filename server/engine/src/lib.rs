@@ -2,7 +2,6 @@ use anyhow::Result;
 use portico_shared::models::Agent;
 use portico_shared::{DatabaseItem, JsonLike};
 use prost_types::Struct;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -59,48 +58,6 @@ fn proto_struct_to_json(proto_struct: &Struct) -> Value {
     Value::Object(map)
 }
 
-// Signal data structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SignalData {
-    pub id: String,
-    pub agent_id: String,
-    pub signal_type: String,
-    pub content: String,
-    pub tags: Vec<String>,
-    pub metadata: HashMap<String, String>,
-}
-
-// Agent data structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AgentData {
-    pub global_uuid: String,
-    pub name: String,
-    pub description: String,
-    pub configuration: HashMap<String, String>,
-}
-
-// Extract data from Struct to a specific type
-fn extract_struct_to<T: for<'a> Deserialize<'a>>(
-    proto_struct: Option<Struct>,
-) -> Result<T, Status> {
-    match proto_struct {
-        Some(s) => {
-            // Convert Struct to serde_json::Value using our manual converter
-            let json_value = proto_struct_to_json(&s);
-
-            // Convert Value to target type
-            match serde_json::from_value::<T>(json_value) {
-                Ok(data) => Ok(data),
-                Err(err) => Err(Status::internal(format!(
-                    "Failed to deserialize JSON to target type: {}",
-                    err
-                ))),
-            }
-        }
-        None => Err(Status::invalid_argument("Missing required data")),
-    }
-}
-
 // Bridge service implementation
 pub struct BridgeServiceImpl {
     agent_map: AgentMap,
@@ -126,13 +83,14 @@ impl BridgeService for BridgeServiceImpl {
         let server_init = request.into_inner().server_init;
 
         if server_init {
-            println!("Received init message from bridge service");
+            println!("[INFO] Received init message from bridge service");
 
             Ok(Response::new(ServerInitResponse {
                 success: true,
                 message: "Bridge service initialized successfully".to_string(),
             }))
         } else {
+            eprintln!("[ERROR] Server init failed: expected server_init to be true, got false");
             Err(Status::invalid_argument("Expected server_init to be true"))
         }
     }
@@ -143,26 +101,57 @@ impl BridgeService for BridgeServiceImpl {
     ) -> Result<Response<OperationResponse>, Status> {
         let data = request.into_inner();
 
-        let signal_data: SignalData = match &data.data {
-            Some(data) => extract_struct_to(data.record.clone())?,
-            None => return Err(Status::invalid_argument("Missing signal data")),
+        println!("[INFO] Received create_signal request");
+
+        let signal_json = match &data.data {
+            Some(data) => match data.record.as_ref() {
+                Some(record) => proto_struct_to_json(record),
+                None => {
+                    eprintln!("[ERROR] Create signal failed: Missing record in signal data");
+                    return Err(Status::invalid_argument("Missing record in signal data"));
+                }
+            },
+            None => {
+                eprintln!("[ERROR] Create signal failed: Missing signal data");
+                return Err(Status::invalid_argument("Missing signal data"));
+            }
+        };
+
+        // Extract agent_id before moving signal_json
+        let agent_id = match signal_json.get("agent_id") {
+            Some(id) => match id.as_str() {
+                Some(id_str) if !id_str.is_empty() => id_str.to_string(),
+                _ => {
+                    eprintln!("[ERROR] Create signal failed: Invalid or empty agent_id");
+                    return Err(Status::invalid_argument("Invalid or empty agent_id"));
+                }
+            },
+            None => {
+                eprintln!("[ERROR] Create signal failed: Missing agent_id field");
+                return Err(Status::invalid_argument("Missing agent_id field"));
+            }
         };
 
         match &self.db_pool {
             Some(pool) => {
                 let agent_map_clone = self.agent_map.clone();
                 let pool_clone = pool.clone();
+                let signal_json = signal_json.clone(); // Clone before moving into async block
 
                 tokio::spawn(async move {
-                    handle_create_signal(signal_data, agent_map_clone, pool_clone).await;
+                    handle_create_signal(signal_json, agent_id, agent_map_clone, pool_clone).await;
                 });
 
+                println!("[INFO] Signal processing initiated successfully");
                 Ok(Response::new(OperationResponse {
                     success: true,
                     message: "Signal processing initiated".to_string(),
                 }))
             }
-            None => Err(Status::unavailable("Database connection not available")),
+            None => {
+                eprintln!("[ERROR] Create signal failed: Database connection not available");
+                Err(Status::unavailable("Database connection not available"))
+            }
         }
     }
 
@@ -172,16 +161,47 @@ impl BridgeService for BridgeServiceImpl {
     ) -> Result<Response<OperationResponse>, Status> {
         let data = request.into_inner();
 
-        let agent_data: AgentData = match &data.data {
-            Some(data) => extract_struct_to(data.record.clone())?,
-            None => return Err(Status::invalid_argument("Missing agent data")),
+        println!("[INFO] Received create_agent request");
+
+        let agent_json = match &data.data {
+            Some(data) => match data.record.as_ref() {
+                Some(record) => proto_struct_to_json(record),
+                None => {
+                    eprintln!("[ERROR] Create agent failed: Missing record in agent data");
+                    return Err(Status::invalid_argument("Missing record in agent data"));
+                }
+            },
+            None => {
+                eprintln!("[ERROR] Create agent failed: Missing agent data");
+                return Err(Status::invalid_argument("Missing agent data"));
+            }
         };
 
+        // Check if the agent already exists
+        let global_uuid = match agent_json.get("global_uuid").and_then(|v| v.as_str()) {
+            Some(uuid) if !uuid.is_empty() => uuid.to_string(),
+            _ => {
+                eprintln!("[ERROR] Create agent failed: Missing or invalid global_uuid");
+                return Err(Status::invalid_argument("Missing or invalid global_uuid"));
+            }
+        };
+
+        {
+            let agents = self.agent_map.read().await;
+            if agents.contains_key(&global_uuid) {
+                eprintln!("[ERROR] Create agent failed: Agent with UUID {} already exists", global_uuid);
+                return Err(Status::already_exists(format!("Agent with UUID {} already exists", global_uuid)));
+            }
+        }
+
         let agent_map_clone = self.agent_map.clone();
+        let agent_json = agent_json.clone(); // Clone before moving into async block
+
         tokio::spawn(async move {
-            handle_create_agent(agent_data, agent_map_clone).await;
+            handle_create_agent(agent_json, agent_map_clone).await;
         });
 
+        println!("[INFO] Agent creation initiated successfully");
         Ok(Response::new(OperationResponse {
             success: true,
             message: "Agent creation initiated".to_string(),
@@ -194,16 +214,47 @@ impl BridgeService for BridgeServiceImpl {
     ) -> Result<Response<OperationResponse>, Status> {
         let data = request.into_inner();
 
-        let agent_data: AgentData = match &data.data {
-            Some(data) => extract_struct_to(data.record.clone())?,
-            None => return Err(Status::invalid_argument("Missing agent data")),
+        println!("[INFO] Received update_agent request");
+
+        let agent_json = match &data.data {
+            Some(data) => match data.record.as_ref() {
+                Some(record) => proto_struct_to_json(record),
+                None => {
+                    eprintln!("[ERROR] Update agent failed: Missing record in agent data");
+                    return Err(Status::invalid_argument("Missing record in agent data"));
+                }
+            },
+            None => {
+                eprintln!("[ERROR] Update agent failed: Missing agent data");
+                return Err(Status::invalid_argument("Missing agent data"));
+            }
         };
 
+        // Extract global_uuid before moving agent_json
+        let global_uuid = match agent_json.get("global_uuid").and_then(|v| v.as_str()) {
+            Some(uuid) if !uuid.is_empty() => uuid.to_string(),
+            _ => {
+                eprintln!("[ERROR] Update agent failed: Missing or invalid global_uuid");
+                return Err(Status::invalid_argument("Missing or invalid global_uuid"));
+            }
+        };
+
+        {
+            let agents = self.agent_map.read().await;
+            if !agents.contains_key(&global_uuid) {
+                eprintln!("[ERROR] Update agent failed: Agent with UUID {} not found", global_uuid);
+                return Err(Status::not_found(format!("Agent with UUID {} not found", global_uuid)));
+            }
+        }
+
         let agent_map_clone = self.agent_map.clone();
+        let agent_json = agent_json.clone(); // Clone before moving into async block
+
         tokio::spawn(async move {
-            handle_update_agent(agent_data, agent_map_clone).await;
+            handle_update_agent(agent_json, agent_map_clone).await;
         });
 
+        println!("[INFO] Agent update initiated successfully");
         Ok(Response::new(OperationResponse {
             success: true,
             message: "Agent update initiated".to_string(),
@@ -216,16 +267,37 @@ impl BridgeService for BridgeServiceImpl {
     ) -> Result<Response<OperationResponse>, Status> {
         let data = request.into_inner();
 
-        let agent_data: AgentData = match &data.data {
-            Some(data) => extract_struct_to(data.record.clone())?,
-            None => return Err(Status::invalid_argument("Missing agent data")),
+        println!("[INFO] Received delete_agent request");
+
+        let agent_json = match &data.data {
+            Some(data) => match data.record.as_ref() {
+                Some(record) => proto_struct_to_json(record),
+                None => {
+                    eprintln!("[ERROR] Delete agent failed: Missing record in agent data");
+                    return Err(Status::invalid_argument("Missing record in agent data"));
+                }
+            },
+            None => {
+                eprintln!("[ERROR] Delete agent failed: Missing agent data");
+                return Err(Status::invalid_argument("Missing agent data"));
+            }
+        };
+
+        let global_uuid = match agent_json.get("global_uuid").and_then(|v| v.as_str()) {
+            Some(uuid) if !uuid.is_empty() => uuid.to_string(),
+            _ => {
+                eprintln!("[ERROR] Delete agent failed: Missing or invalid global_uuid");
+                return Err(Status::invalid_argument("Missing or invalid global_uuid"));
+            }
         };
 
         let agent_map_clone = self.agent_map.clone();
+
         tokio::spawn(async move {
-            handle_delete_agent(agent_data, agent_map_clone).await;
+            handle_delete_agent(global_uuid, agent_map_clone).await;
         });
 
+        println!("[INFO] Agent deletion initiated successfully");
         Ok(Response::new(OperationResponse {
             success: true,
             message: "Agent deletion initiated".to_string(),
@@ -234,179 +306,94 @@ impl BridgeService for BridgeServiceImpl {
 }
 
 // Handler for CreateSignal messages
-pub async fn handle_create_signal(data: SignalData, agent_map: AgentMap, pool: PgPool) {
-    println!("Processing Signal creation: {:?}", data);
-
-    // Extract agent_id from signal data
-    let agent_id = &data.agent_id;
-
-    if agent_id.is_empty() {
-        eprintln!("Signal missing agent_id field");
-        return;
-    }
+pub async fn handle_create_signal(signal_json: Value, agent_id: String, agent_map: AgentMap, pool: PgPool) {
+    println!("[INFO] Processing Signal creation: {}", signal_json);
 
     // Find the agent and process it
     {
-        // Scope the read lock to this block
-        let agents_guard = agent_map.read().await;
+        let agents_guard = match agent_map.read().await {
+            guard => guard,
+        };
 
-        // Get a reference to the agent
-        if let Some(agent_ref) = agents_guard.get(agent_id) {
-            // Convert SignalData to Value for compatibility with existing agent.run method
-            let data_value = match serde_json::to_value(&data) {
-                Ok(value) => value,
-                Err(e) => {
-                    eprintln!("Failed to convert SignalData to Value: {}", e);
-                    return;
-                }
-            };
-
-            // Now we can use the immutable reference directly
-            println!("Found agent with ID: {}", agent_id);
-            match agent_ref.run(data_value).await {
+        if let Some(agent_ref) = agents_guard.get(&agent_id) {
+            println!("[INFO] Found agent with ID: {}", agent_id);
+            match agent_ref.run(signal_json).await {
                 Ok(session) => {
-                    // Successfully ran the agent, try to save the session to the database
-                    println!("Agent execution successful, saving session");
+                    println!("[INFO] Agent execution successful, saving session");
                     if let Err(e) = session.try_db_create(&pool).await {
-                        eprintln!("Failed to save session to database: {}", e);
+                        eprintln!("[ERROR] Signal processing failed: Unable to save session to database: {}", e);
+                        eprintln!("[DEBUG] Session data that failed to save: {:?}", session);
                     }
                 }
                 Err(e) => {
-                    eprintln!("Agent execution failed: {}", e);
+                    eprintln!("[ERROR] Signal processing failed: Agent execution error: {}", e);
+                    eprintln!("[DEBUG] Agent ID: {}", agent_id);
                 }
             }
         } else {
-            eprintln!("Agent with ID {} not found", agent_id);
+            eprintln!("[ERROR] Signal processing failed: Agent with ID {} not found in agent map", agent_id);
+            let available_agents: Vec<String> = agents_guard.keys().cloned().collect();
+            eprintln!("[DEBUG] Available agents: {:?}", available_agents);
         }
     }
 }
 
 // Handler for CreateAgent messages
-pub async fn handle_create_agent(data: AgentData, agent_map: AgentMap) {
-    println!("Processing Agent creation: {:?}", data);
+pub async fn handle_create_agent(agent_json: Value, agent_map: AgentMap) {
+    println!("[INFO] Processing Agent creation: {}", agent_json);
 
-    // Convert AgentData to Value for compatibility with existing from_json method
-    let data_value = match serde_json::to_value(&data) {
-        Ok(value) => value,
-        Err(e) => {
-            eprintln!("Failed to convert AgentData to Value: {}", e);
-            return;
-        }
-    };
-
-    // Attempt to deserialize the Agent from JSON using the from_json method
-    match portico_shared::models::agents::Agent::from_json(data_value) {
+    match Agent::from_json(agent_json.clone()) {
         Ok(agent) => {
-            // Extract the UUID to use as the map key
             let agent_uuid = agent.identifiers.global_uuid.clone();
+            println!("[INFO] Adding agent with UUID: {} to map", agent_uuid);
 
-            if agent_uuid.is_empty() {
-                eprintln!("Agent has empty global_uuid, cannot add to map");
-                return;
-            }
-
-            println!("Adding agent with UUID: {} to map", agent_uuid);
-
-            // Get write access to the agent map
             let mut agents = agent_map.write().await;
-
-            // Insert the agent into the map
             agents.insert(agent_uuid, agent);
-
-            // Note: We might want to handle persisting to DB here as well if needed
-            println!("Agent added to map successfully");
+            println!("[INFO] Agent added to map successfully");
         }
         Err(e) => {
-            eprintln!("Failed to deserialize Agent from JSON: {}", e);
-            eprintln!("Agent data: {:?}", data);
+            eprintln!("[ERROR] Agent creation failed: Unable to create Agent from JSON: {}", e);
+            eprintln!("[DEBUG] JSON that failed to parse: {}", agent_json);
         }
     }
 }
 
 // Handler for UpdateAgent messages
-pub async fn handle_update_agent(data: AgentData, agent_map: AgentMap) {
-    println!("Processing Agent update: {:?}", data);
+pub async fn handle_update_agent(agent_json: Value, agent_map: AgentMap) {
+    println!("[INFO] Processing Agent update: {}", agent_json);
 
-    // Extract the UUID to identify which agent to update
-    let uuid = &data.global_uuid;
+    let global_uuid = agent_json.get("global_uuid")
+        .and_then(|v| v.as_str())
+        .expect("global_uuid validation already performed");
 
-    if uuid.is_empty() {
-        eprintln!("Update Agent data missing valid global_uuid field");
-        return;
-    }
-
-    println!("Updating agent with UUID: {}", uuid);
-
-    // Convert AgentData to Value for compatibility with existing update_from_json method
-    let data_value = match serde_json::to_value(&data) {
-        Ok(value) => value,
-        Err(e) => {
-            eprintln!("Failed to convert AgentData to Value: {}", e);
-            return;
-        }
-    };
-
-    // Get write access to the agent map
     let mut agents = agent_map.write().await;
-
-    if let Some(existing_agent) = agents.get_mut(uuid) {
-        // Update the existing agent with the new data
-        match existing_agent.update_from_json(data_value.clone()) {
+    if let Some(existing_agent) = agents.get_mut(global_uuid) {
+        match existing_agent.update_from_json(agent_json.clone()) {
             Ok(updated_fields) => {
                 if !updated_fields.is_empty() {
-                    println!("Agent updated: fields changed: {:?}", updated_fields);
-
-                    // Optionally update the agent in the database if needed
-                    // This could be added if there's a need to persist changes made by the bridge
+                    println!("[INFO] Agent updated: fields changed: {:?}", updated_fields);
                 } else {
-                    println!("No fields were changed during agent update");
+                    println!("[INFO] No fields were changed during agent update");
                 }
             }
             Err(e) => {
-                eprintln!("Failed to update agent: {}", e);
-            }
-        }
-    } else {
-        // Agent not found in the map, fallback to creating a new one
-        println!(
-            "Agent with UUID {} not found in map, creating new instead",
-            uuid
-        );
-        match portico_shared::models::agents::Agent::from_json(data_value) {
-            Ok(new_agent) => {
-                agents.insert(uuid.clone(), new_agent);
-                println!("New agent inserted into map");
-            }
-            Err(e) => {
-                eprintln!("Failed to deserialize agent for insert: {}", e);
+                eprintln!("[ERROR] Agent update failed: {}", e);
+                eprintln!("[DEBUG] Agent UUID: {}, JSON: {}", global_uuid, agent_json);
             }
         }
     }
 }
 
 // Handler for DeleteAgent messages
-pub async fn handle_delete_agent(data: AgentData, agent_map: AgentMap) {
-    println!("Processing Agent deletion: {:?}", data);
+pub async fn handle_delete_agent(global_uuid: String, agent_map: AgentMap) {
+    println!("[INFO] Processing Agent deletion for UUID: {}", global_uuid);
 
-    // Extract agent UUID
-    let uuid = &data.global_uuid;
-
-    if uuid.is_empty() {
-        eprintln!("Delete Agent data missing valid global_uuid field");
-        return;
-    }
-
-    println!("Removing agent with UUID: {}", uuid);
-
-    // Get write access to the agent map and remove the agent
     let mut agents = agent_map.write().await;
-
-    if agents.remove(uuid).is_some() {
-        println!("Agent successfully removed from map");
-
-        // Optionally, we could also delete from the database if needed
-        // This would be useful if the bridge needs to manage database state
+    if agents.remove(&global_uuid).is_some() {
+        println!("[INFO] Agent successfully removed from map");
     } else {
-        println!("Agent with UUID {} not found in map", uuid);
+        eprintln!("[ERROR] Agent deletion failed: Agent with UUID {} not found in map", global_uuid);
+        let available_agents: Vec<String> = agents.keys().cloned().collect();
+        eprintln!("[DEBUG] Currently available agents: {:?}", available_agents);
     }
 }
