@@ -29,7 +29,7 @@ services:
     depends_on:
       - supabase
     ports:
-      - "8888:8888"
+      - "50051:50051"
     networks:
       - portico-network
     restart: unless-stopped

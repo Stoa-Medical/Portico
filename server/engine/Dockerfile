@@ -27,7 +27,7 @@ COPY --from=builder /usr/src/app/target/release/portico-engine /usr/local/bin/
 WORKDIR /app
 
 # Expose the port the engine listens on
-EXPOSE 8888
+EXPOSE 50051
 
 # Run the engine
 CMD ["portico-engine"]

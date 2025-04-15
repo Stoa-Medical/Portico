@@ -1,5 +1,5 @@
 # Use Python 3.9 or higher
-FROM python:3.10-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 
