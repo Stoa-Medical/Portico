@@ -105,9 +105,8 @@ impl Default for IdFields {
 }
 
 impl IdFields {
-    // TODO: Have some way to increment correctly
-    //    Primarily matters for `RuntimeSession` which is created here
-    //    (everything else is created in the UI, and Supabase is the source-of-truth)
+    // Primarily matters for `RuntimeSession` which is created here
+    //  (Supabase is the source-of-truth)
     pub fn new() -> Self {
         Self {
             local_id: None,
@@ -151,7 +150,6 @@ impl TimestampFields {
 
 // ============ Trait definitions =============
 
-// TODO: NEXT STEP -- implement this for the different models
 /// Item that is in the `public` schema (Portico-custom, not Supabase-predefined)
 #[async_trait]
 pub trait DatabaseItem: Sized {

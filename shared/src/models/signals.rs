@@ -108,7 +108,6 @@ impl Signal {
                 }?;
                 self.status = RunningStatus::Completed;
 
-                // TODO Save the results to the database
                 Ok(res)
             }
             None => Err(anyhow!("Cannot process signal with no associated data")),
