@@ -36,24 +36,6 @@ message SupabaseData {
   google.protobuf.Struct record = 3;
 }
 
-// Signal-specific fields
-message Signal {
-  string id = 1;
-  string agent_id = 2;
-  string signal_type = 3;
-  string content = 4;
-  repeated string tags = 5;
-  map<string, string> metadata = 6;
-}
-
-// Agent-specific fields
-message AgentData {
-  string global_uuid = 1;
-  string name = 2;
-  string description = 3;
-  map<string, string> configuration = 4;
-}
-
 // Signal request with embedded Supabase data
 message SignalRequest {
   SupabaseData data = 1;
