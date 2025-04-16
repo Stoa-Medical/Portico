@@ -103,6 +103,7 @@ impl BridgeService for BridgeServiceImpl {
 
         println!("[INFO] Received create_signal request");
 
+        // Extract the record data from the SupabaseData structure
         let signal_json = match &data.data {
             Some(data) => match data.record.as_ref() {
                 Some(record) => proto_struct_to_json(record),
@@ -117,18 +118,24 @@ impl BridgeService for BridgeServiceImpl {
             }
         };
 
-        // Extract agent_id before moving signal_json
+        // Validate agent_id - required for signal processing as per system design
+        // Signals must be associated with an Agent that will process them
+        // See: server/scheme.hcl - signals.agent_id foreign key to agents table
         let agent_id = match signal_json.get("agent_id") {
             Some(id) => match id.as_str() {
                 Some(id_str) if !id_str.is_empty() => id_str.to_string(),
                 _ => {
-                    eprintln!("[ERROR] Create signal failed: Invalid or empty agent_id");
-                    return Err(Status::invalid_argument("Invalid or empty agent_id"));
+                    eprintln!("[ERROR] Create signal failed: Invalid or empty agent_id in record");
+                    return Err(Status::invalid_argument(
+                        "Invalid or empty agent_id in record. Signals must be associated with an Agent for processing."
+                    ));
                 }
             },
             None => {
-                eprintln!("[ERROR] Create signal failed: Missing agent_id field");
-                return Err(Status::invalid_argument("Missing agent_id field"));
+                eprintln!("[ERROR] Create signal failed: Missing agent_id field in record");
+                return Err(Status::invalid_argument(
+                    "Missing agent_id field in record. Signals must be associated with an Agent for processing."
+                ));
             }
         };
 
@@ -136,7 +143,7 @@ impl BridgeService for BridgeServiceImpl {
             Some(pool) => {
                 let agent_map_clone = self.agent_map.clone();
                 let pool_clone = pool.clone();
-                let signal_json = signal_json.clone(); // Clone before moving into async block
+                let signal_json = signal_json.clone();
 
                 tokio::spawn(async move {
                     handle_create_signal(signal_json, agent_id, agent_map_clone, pool_clone).await;
@@ -163,6 +170,7 @@ impl BridgeService for BridgeServiceImpl {
 
         println!("[INFO] Received create_agent request");
 
+        // Extract the record data from the SupabaseData structure
         let agent_json = match &data.data {
             Some(data) => match data.record.as_ref() {
                 Some(record) => proto_struct_to_json(record),
@@ -181,8 +189,8 @@ impl BridgeService for BridgeServiceImpl {
         let global_uuid = match agent_json.get("global_uuid").and_then(|v| v.as_str()) {
             Some(uuid) if !uuid.is_empty() => uuid.to_string(),
             _ => {
-                eprintln!("[ERROR] Create agent failed: Missing or invalid global_uuid");
-                return Err(Status::invalid_argument("Missing or invalid global_uuid"));
+                eprintln!("[ERROR] Create agent failed: Missing or invalid global_uuid in record");
+                return Err(Status::invalid_argument("Missing or invalid global_uuid in record"));
             }
         };
 
@@ -195,7 +203,7 @@ impl BridgeService for BridgeServiceImpl {
         }
 
         let agent_map_clone = self.agent_map.clone();
-        let agent_json = agent_json.clone(); // Clone before moving into async block
+        let agent_json = agent_json.clone();
 
         tokio::spawn(async move {
             handle_create_agent(agent_json, agent_map_clone).await;
@@ -216,6 +224,7 @@ impl BridgeService for BridgeServiceImpl {
 
         println!("[INFO] Received update_agent request");
 
+        // Extract the record data from the SupabaseData structure
         let agent_json = match &data.data {
             Some(data) => match data.record.as_ref() {
                 Some(record) => proto_struct_to_json(record),
@@ -230,12 +239,11 @@ impl BridgeService for BridgeServiceImpl {
             }
         };
 
-        // Extract global_uuid before moving agent_json
         let global_uuid = match agent_json.get("global_uuid").and_then(|v| v.as_str()) {
             Some(uuid) if !uuid.is_empty() => uuid.to_string(),
             _ => {
-                eprintln!("[ERROR] Update agent failed: Missing or invalid global_uuid");
-                return Err(Status::invalid_argument("Missing or invalid global_uuid"));
+                eprintln!("[ERROR] Update agent failed: Missing or invalid global_uuid in record");
+                return Err(Status::invalid_argument("Missing or invalid global_uuid in record"));
             }
         };
 
@@ -248,7 +256,7 @@ impl BridgeService for BridgeServiceImpl {
         }
 
         let agent_map_clone = self.agent_map.clone();
-        let agent_json = agent_json.clone(); // Clone before moving into async block
+        let agent_json = agent_json.clone();
 
         tokio::spawn(async move {
             handle_update_agent(agent_json, agent_map_clone).await;
@@ -269,6 +277,7 @@ impl BridgeService for BridgeServiceImpl {
 
         println!("[INFO] Received delete_agent request");
 
+        // Extract the record data from the SupabaseData structure
         let agent_json = match &data.data {
             Some(data) => match data.record.as_ref() {
                 Some(record) => proto_struct_to_json(record),
@@ -286,8 +295,8 @@ impl BridgeService for BridgeServiceImpl {
         let global_uuid = match agent_json.get("global_uuid").and_then(|v| v.as_str()) {
             Some(uuid) if !uuid.is_empty() => uuid.to_string(),
             _ => {
-                eprintln!("[ERROR] Delete agent failed: Missing or invalid global_uuid");
-                return Err(Status::invalid_argument("Missing or invalid global_uuid"));
+                eprintln!("[ERROR] Delete agent failed: Missing or invalid global_uuid in record");
+                return Err(Status::invalid_argument("Missing or invalid global_uuid in record"));
             }
         };
 
