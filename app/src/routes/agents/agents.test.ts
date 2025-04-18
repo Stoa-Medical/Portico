@@ -32,12 +32,9 @@ function getMockSteps() {
     {
       id: 101,
       name: "Data Collection",
-      type: "Prompt",
-      agentId: 1,
+      step_type: "prompt",
+      agent_id: 1,
       content: "Collect all relevant data",
-      isActive: true,
-      lastEdited: "1 hour ago",
-      createdAt: "2025-04-01",
     },
   ];
 }
@@ -57,6 +54,27 @@ function getMockRuntimeSessions() {
     },
   ];
 }
+
+export const deleteEqMock = vi.fn(() => ({ data: null, error: null }));
+export const deleteMock = vi.fn(() => ({ eq: deleteEqMock }));
+export const insertAgentMock = vi.fn(() => ({ data: null, error: null }));
+export const updateAgentMock = vi.fn(() => ({ data: null, error: null }));
+
+vi.mock("$lib/supabase", () => {
+  return {
+    default: {
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({ data: [], error: null })),
+        insert: insertAgentMock,
+        update: updateAgentMock,
+        delete: deleteMock,
+      })),
+      auth: {
+        getUser: vi.fn(() => ({ data: { user: null }, error: null })),
+      },
+    },
+  };
+});
 
 vi.mock("./api", async () => {
   const originalModule = await vi.importActual("./api");
@@ -119,15 +137,16 @@ describe("agents.test.ts - Agents Page", () => {
     const deleteButton = await screen.findByText("Delete");
     await fireEvent.click(deleteButton);
 
-    // Then the agent is removed from the list
-    expect(screen.queryByText("Test Agent 1")).not.toBeInTheDocument();
+    // Then the agent remove API is called
+    expect(deleteMock).toHaveBeenCalled();
+    expect(deleteEqMock).toHaveBeenCalledWith("agent_id", 1);
   });
 
   it("allows a user to create a new agent", async () => {
     t.render();
 
-    // When you click the 'Add Agent' button in the action bar
-    const addButton = await screen.findByText("Add Agent");
+    // When you click the 'New Agent' button in the action bar
+    const addButton = await screen.findByText("New Agent");
     fireEvent.click(addButton);
 
     // Wait for the modal to appear by checking for the title
@@ -143,17 +162,23 @@ describe("agents.test.ts - Agents Page", () => {
     const submitButton = await screen.findByText("Create");
     fireEvent.click(submitButton);
 
-    // Then the new agent is added to the table
-    const newAgentInTable = await t.findInTable({ text: "New Agent Test" });
-
-    expect(newAgentInTable).toBeInTheDocument();
+    // Then the create agent API is called
+    expect(insertAgentMock).toHaveBeenCalled();
+    expect(insertAgentMock.mock.calls[0][0]).toMatchObject([
+      {
+        agent_state: "stable",
+        description: "",
+        name: "New Agent Test",
+        type: "Assistant",
+      },
+    ]);
   });
 
   it("resets and closes the create agent modal when cancelled", async () => {
     t.render();
 
-    // When you open the Add Agent modal
-    const addButton = await screen.findByText("Add Agent");
+    // When you open the New Agent modal
+    const addButton = await screen.findByText("New Agent");
     await fireEvent.click(addButton);
 
     // Then you enter a name
@@ -171,9 +196,8 @@ describe("agents.test.ts - Agents Page", () => {
     await fireEvent.click(addButton);
 
     // Then the form should be reset
-    const reopenedInput = await screen.findByPlaceholderText(
-      "Enter agent name"
-    );
+    const reopenedInput =
+      await screen.findByPlaceholderText("Enter agent name");
     expect((reopenedInput as HTMLInputElement).value).toBe("");
   });
 
@@ -205,10 +229,9 @@ describe("agents.test.ts - Agents Page", () => {
       {
         id: 101,
         name: "My First Step",
-        type: "Prompt",
-        agentId: 1,
-        content: "Step content here",
-        lastEdited: "1 hour ago",
+        step_type: "prompt",
+        agent_id: 1,
+        step_content: "Step content here",
       },
     ]);
 
@@ -228,19 +251,19 @@ describe("agents.test.ts - Agents Page", () => {
     expect((stepNameInput as HTMLInputElement).value).toBe("My First Step");
 
     const typeSelect = (await screen.findByLabelText(
-      "Step Type"
+      "Step Type",
     )) as HTMLSelectElement;
     expect(typeSelect).toBeInTheDocument();
-    expect(typeSelect.value).toBe("Prompt");
+    expect(typeSelect.value).toBe("prompt");
 
     const contentArea = await screen.findByLabelText("Prompt Template");
     expect(contentArea).toBeInTheDocument();
     expect((contentArea as HTMLTextAreaElement).value).toContain(
-      "Step content here"
+      "Step content here",
     );
   });
 
-  it.skip("allows a user to add steps an existing agent", async () => {
+  it("allows a user to add steps an existing agent", async () => {
     t.render();
 
     // When you click on "Test Agent 1"
@@ -252,8 +275,6 @@ describe("agents.test.ts - Agents Page", () => {
     // Then click "Add step"
     const addStepButton = await screen.findByText("Add Step");
     fireEvent.click(addStepButton);
-
-    // Then should go to new step view
   });
 
   it("allows a user to view runtime sessions and see details", async () => {
@@ -273,14 +294,14 @@ describe("agents.test.ts - Agents Page", () => {
 
     // Then you should see the details for that session
     expect(
-      await screen.findByText("Runtime Session Details")
+      await screen.findByText("Runtime Session Details"),
     ).toBeInTheDocument();
     expect(
-      await screen.findByText((text) => text.includes("Example input"))
+      await screen.findByText((text) => text.includes("Example input")),
     ).toBeInTheDocument();
 
     expect(
-      await screen.findByText((text) => text.includes("Final result"))
+      await screen.findByText((text) => text.includes("Final result")),
     ).toBeInTheDocument();
 
     // When you click close
@@ -289,7 +310,7 @@ describe("agents.test.ts - Agents Page", () => {
 
     // Them the detail view should disappear
     await waitForElementToBeRemoved(() =>
-      screen.queryByText("Runtime Session Details")
+      screen.queryByText("Runtime Session Details"),
     );
   });
 });

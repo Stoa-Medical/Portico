@@ -162,15 +162,15 @@
   }
 
   onMount(() => {
-    if (step.step_type === "Python") initCodeEditor();
+    if (step.step_type === "python") initCodeEditor();
     return () => {
       if (editorView) editorView.destroy();
     };
   });
 
-  $: if (step.step_type === "Python" && editorElement && !editorView) {
+  $: if (step.step_type === "python" && editorElement && !editorView) {
     initCodeEditor();
-  } else if (step.step_type !== "Python" && editorView) {
+  } else if (step.step_type !== "python" && editorView) {
     editorView.destroy();
     editorView = null;
   }

@@ -47,10 +47,8 @@
           // lastEdited: "Just now",
           created_timestamp: new Date().toISOString().split("T")[0],
         };
-        console.log("set step", step);
       } else {
         step = await getStep(stepId);
-        console.log("fetched step", step);
       }
     } catch (err) {
       console.error("Failed to load data:", err);
@@ -74,7 +72,8 @@
   }
 
   function goBack() {
-    goto(isNewStep ? "/agents/" : "/steps");
+    const agentId = parseInt(searchParams.get("agentId") || "");
+    goto(isNewStep ? `/agents?agentId=${agentId}&tab=Steps` : "/steps");
   }
 </script>
 

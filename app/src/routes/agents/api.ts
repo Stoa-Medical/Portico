@@ -1,10 +1,6 @@
-import { createClient } from "@supabase/supabase-js";
+import supabase from "$lib/supabase";
 
-// Set up Supabase client:
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
-
+// TODO: Should be connected to a prompt step rather than the agent:
 type AgentLLMConfig = {
   temperature: number;
   maxTokens: number;
@@ -32,7 +28,7 @@ export type Step = {
   agent_id: number;
   name: string;
   description?: string;
-  content: string;
+  step_content: string;
   step_type: "Python" | "Prompt" | string;
 };
 
@@ -91,7 +87,7 @@ let currentAgentSteps: Step[] = [
     name: "Data Collection",
     step_type: "Python",
     // lastEdited: "2 hours ago",
-    content: defaultPythonContent,
+    step_content: defaultPythonContent,
   },
   {
     id: 2,
@@ -99,7 +95,7 @@ let currentAgentSteps: Step[] = [
     name: "Text Analysis",
     step_type: "Prompt",
     // lastEdited: "1 day ago",
-    content: `You are an AI assistant that helps with data analysis.
+    step_content: `You are an AI assistant that helps with data analysis.
 Please analyze the following data and provide insights:
 {{data}}
 
@@ -111,7 +107,7 @@ Focus on trends, anomalies, and potential actionable insights.`,
     name: "Data Visualization",
     step_type: "Python",
     // lastEdited: "3 days ago",
-    content: defaultPythonContent,
+    step_content: defaultPythonContent,
   },
 ];
 

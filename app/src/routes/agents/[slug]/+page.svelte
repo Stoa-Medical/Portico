@@ -10,11 +10,8 @@
     Input,
     Textarea,
     Select,
-    Checkbox,
     Toggle,
     Badge,
-    Accordion,
-    AccordionItem,
     Table,
     TableBody,
     TableBodyCell,
@@ -212,118 +209,6 @@
           <div>
             <Label class="mb-2">Created On</Label>
             <p class="text-gray-700 dark:text-gray-300">{agent.createdAt}</p>
-          </div>
-        </div>
-      </TabItem>
-
-      <TabItem title="Model Settings">
-        <div class="space-y-6 py-4">
-          <div>
-            <Label for="model" class="mb-2">AI Model</Label>
-            <Select id="model" items={models} bind:value={agent.model} />
-          </div>
-
-          <div>
-            <Label for="apiKey" class="mb-2">API Key</Label>
-            <Input id="apiKey" type="password" bind:value={agent.apiKey} />
-          </div>
-
-          <Accordion>
-            <AccordionItem>
-              <span slot="header">Advanced Settings</span>
-              <div class="space-y-4 pt-2">
-                <div>
-                  <Label for="temperature" class="mb-2"
-                    >Temperature: {agent.settings.temperature}</Label
-                  >
-                  <Input
-                    id="temperature"
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    bind:value={agent.settings.temperature}
-                  />
-                </div>
-
-                <div>
-                  <Label for="maxTokens" class="mb-2"
-                    >Max Tokens: {agent.settings.maxTokens}</Label
-                  >
-                  <Input
-                    id="maxTokens"
-                    type="range"
-                    min="256"
-                    max="4096"
-                    step="256"
-                    bind:value={agent.settings.maxTokens}
-                  />
-                </div>
-
-                <div>
-                  <Label for="topP" class="mb-2"
-                    >Top P: {agent.settings.topP}</Label
-                  >
-                  <Input
-                    id="topP"
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    bind:value={agent.settings.topP}
-                  />
-                </div>
-
-                <div>
-                  <Label for="frequencyPenalty" class="mb-2"
-                    >Frequency Penalty: {agent.settings.frequencyPenalty}</Label
-                  >
-                  <Input
-                    id="frequencyPenalty"
-                    type="range"
-                    min="0"
-                    max="2"
-                    step="0.1"
-                    bind:value={agent.settings.frequencyPenalty}
-                  />
-                </div>
-
-                <div>
-                  <Label for="presencePenalty" class="mb-2"
-                    >Presence Penalty: {agent.settings.presencePenalty}</Label
-                  >
-                  <Input
-                    id="presencePenalty"
-                    type="range"
-                    min="0"
-                    max="2"
-                    step="0.1"
-                    bind:value={agent.settings.presencePenalty}
-                  />
-                </div>
-              </div>
-            </AccordionItem>
-          </Accordion>
-        </div>
-      </TabItem>
-
-      <TabItem title="Capabilities">
-        <div class="space-y-6 py-4">
-          <p class="text-gray-700 dark:text-gray-300 mb-4">
-            Select the capabilities this agent should have:
-          </p>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {#each availableCapabilities as capability}
-              <div class="flex items-center gap-2">
-                <Checkbox
-                  id={`capability-${capability}`}
-                  checked={agent.capabilities.includes(capability)}
-                  on:change={() => toggleCapability(capability)}
-                />
-                <Label for={`capability-${capability}`}>{capability}</Label>
-              </div>
-            {/each}
           </div>
         </div>
       </TabItem>

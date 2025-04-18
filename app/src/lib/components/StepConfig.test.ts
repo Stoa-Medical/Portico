@@ -3,12 +3,10 @@ import StepConfig from "./StepConfig.svelte";
 
 const stepMock = {
   name: "My Step",
-  type: "Prompt",
-  content: "Hello, world!",
-  agentId: 1,
-  isActive: true,
-  lastEdited: "1 hour ago",
-  createdAt: "2023-10-01",
+  step_type: "prompt",
+  step_content: "Hello, world!",
+  agent_id: 1,
+  id: "new",
 };
 
 const agents = [
@@ -16,7 +14,7 @@ const agents = [
   { id: 2, name: "Agent Johnson" },
 ];
 
-const stepTypes = ["Prompt", "Python"];
+const stepTypes = ["prompt", "python"];
 
 const t = {
   render: (stepOverrides = {}) => {
@@ -51,10 +49,10 @@ describe("StepConfig.test.ts - StepConfig Component", () => {
     t.render();
 
     const typeSelect = screen.getByLabelText("Step Type") as HTMLSelectElement;
-    expect(typeSelect.value).toBe("Prompt");
+    expect(typeSelect.value).toBe("prompt");
 
-    await fireEvent.change(typeSelect, { target: { value: "Python" } });
-    expect(typeSelect.value).toBe("Python");
+    await fireEvent.change(typeSelect, { target: { value: "python" } });
+    expect(typeSelect.value).toBe("python");
   });
 
   it("renders textarea for prompt type", () => {
@@ -66,25 +64,8 @@ describe("StepConfig.test.ts - StepConfig Component", () => {
   });
 
   it("renders code editor container for Python type", () => {
-    const { container } = t.render({ type: "Python" });
+    const { container } = t.render({ step_type: "python" });
     const editorContainer = container.querySelector(".cm-editor");
     expect(editorContainer).toBeTruthy();
-  });
-
-  it("toggles isActive correctly", async () => {
-    t.render({ isActive: false });
-
-    const toggleText = screen.getByText("Active");
-    const toggle = toggleText.previousElementSibling as HTMLElement;
-
-    await fireEvent.click(toggle);
-    expect(toggle).toBeTruthy();
-  });
-
-  it("displays last edited and created metadata", () => {
-    t.render();
-
-    expect(screen.getByText(/Last edited: 1 hour ago/)).toBeInTheDocument();
-    expect(screen.getByText(/Created: 2023-10-01/)).toBeInTheDocument();
   });
 });
