@@ -77,8 +77,8 @@ describe("PageHeader.test.ts - PageHeader Component", () => {
     const addButton = screen.getByText("Add Agent");
     const deleteButton = screen.getByText("Delete");
 
-    expect(addButton).toHaveClass("bg-blue-500");
-    expect(deleteButton).toHaveClass("bg-red-500");
+    expect(addButton).toHaveClass("bg-sea");
+    expect(deleteButton).toHaveClass("bg-[#CE5A5A]");
   });
 
   it("renders a disabled button correctly", () => {

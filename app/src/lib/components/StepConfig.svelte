@@ -19,7 +19,7 @@
   } from "@codemirror/language";
 
   export let step;
-  export let stepTypes = ["Prompt", "Python"];
+  export let stepTypes = ["prompt", "python"];
   export let agents = [];
 
   let editorElement;
@@ -112,7 +112,7 @@
     if (!editorElement) return;
 
     const startState = EditorState.create({
-      doc: step.content,
+      doc: step.step_content,
       extensions: [
         python(),
         syntaxHighlighting(defaultHighlightStyle),
@@ -122,7 +122,7 @@
         EditorView.lineWrapping,
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
-            step.content = update.state.doc.toString();
+            step.step_content = update.state.doc.toString();
           }
         }),
         EditorState.allowMultipleSelections.of(true),
@@ -162,15 +162,15 @@
   }
 
   onMount(() => {
-    if (step.type === "Python") initCodeEditor();
+    if (step.step_type === "python") initCodeEditor();
     return () => {
       if (editorView) editorView.destroy();
     };
   });
 
-  $: if (step.type === "Python" && editorElement && !editorView) {
+  $: if (step.step_type === "python" && editorElement && !editorView) {
     initCodeEditor();
-  } else if (step.type !== "Python" && editorView) {
+  } else if (step.step_type !== "python" && editorView) {
     editorView.destroy();
     editorView = null;
   }
@@ -186,7 +186,7 @@
 
       <div>
         <Label for="type">Step Type</Label>
-        <Select id="type" bind:value={step.type}>
+        <Select id="type" bind:value={step.step_type}>
           {#each stepTypes as type}
             <option value={type}>{type}</option>
           {/each}
@@ -196,7 +196,7 @@
 
     <div>
       <Label for="agent">Associated Agent</Label>
-      <Select id="agent" bind:value={step.agentId}>
+      <Select id="agent" bind:value={step.agent_id}>
         {#each agents as agent}
           <option value={agent.id}>{agent.name}</option>
         {/each}
@@ -206,15 +206,15 @@
     <div>
       <div class="flex justify-between items-center mb-2">
         <Label for="content">
-          {step.type === "Python" ? "Python Code" : "Prompt Template"}
+          {step.step_type === "python" ? "Python Code" : "Prompt Template"}
         </Label>
-        <div class="flex items-center gap-2">
-          <Toggle bind:checked={step.isActive} />
-          <span class="text-sm">Active</span>
-        </div>
+        <!-- <div class="flex items-center gap-2"> -->
+        <!-- <Toggle bind:checked={step.isActive} /> -->
+        <!-- <span class="text-sm">Active</span> -->
+        <!-- </div> -->
       </div>
 
-      {#if step.type === "Python"}
+      {#if step.step_type === "python"}
         <div
           bind:this={editorElement}
           class="border border-gray-300 rounded-lg min-h-[300px] font-mono"
@@ -223,7 +223,7 @@
         <Textarea
           id="content"
           rows="15"
-          bind:value={step.content}
+          bind:value={step.step_content}
           class="font-mono"
         />
       {/if}
@@ -231,7 +231,9 @@
 
     <div>
       <p class="text-sm text-gray-500">
-        Last edited: {step.lastEdited} | Created: {step.createdAt}
+        <!-- TODO: Add these into schema -->
+        Last edited: {step.lastEdited || "Just now"} | Created: {step.createdAt ||
+          "Just now"}
       </p>
     </div>
   </div>

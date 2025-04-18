@@ -26,13 +26,13 @@
         <button
           on:click={onClick}
           disabled={shouldBeDisabled}
-          class={`py-2 px-4 rounded text-white transition
+          class={`py-2 px-4 rounded transition
   ${
     shouldBeDisabled
       ? "bg-gray-400 cursor-not-allowed"
       : color === "red"
-        ? "bg-red-500 hover:bg-red-600"
-        : "bg-blue-500 hover:bg-blue-600"
+        ? "bg-[#CE5A5A] hover:bg-red"
+        : "bg-sea text-black hover:bg-sea"
   }`}
         >
           {#if icon}

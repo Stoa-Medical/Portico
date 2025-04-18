@@ -17,8 +17,6 @@
     Checkbox,
     Toggle,
     Badge,
-    Accordion,
-    AccordionItem,
     Tabs,
     TabItem,
   } from "flowbite-svelte";
@@ -36,16 +34,20 @@
     saveAgent,
     getRuntimeSessions,
   } from "./api";
+  import { onMount } from "svelte";
 
   // Selected resources for detail views
   let selectedAgent = null;
   let selectedStep = null;
   let selectedRuntimeSession = null;
+  let currentTab = null;
 
-  // Load agents data:
+  // Load agents data
   let agents;
+  let steps;
   let originalAgent = null;
   let hasAgentChanges = false;
+
   const loadAgents = async () => {
     try {
       agents = await getAgents();
@@ -54,17 +56,16 @@
     }
   };
 
-  $: if (selectedAgent && originalAgent) {
-    hasAgentChanges =
-      JSON.stringify(selectedAgent) !== JSON.stringify(originalAgent);
+  async function loadSteps(agentId) {
+    try {
+      steps = await getSteps(agentId);
+    } catch (err) {
+      console.error("Failed to load steps", err);
+      steps = [];
+    }
   }
 
-  // Load runtime session data on agent select
   let runtimeSessions = [];
-
-  $: if (selectedAgent) {
-    loadRuntimeSessions(selectedAgent.id);
-  }
 
   async function loadRuntimeSessions(agentId) {
     try {
@@ -75,10 +76,22 @@
     }
   }
 
-  // Modal state
+  $: if (selectedAgent && originalAgent) {
+    hasAgentChanges =
+      JSON.stringify(selectedAgent) !== JSON.stringify(originalAgent);
+  }
+
+  $: if (selectedAgent) {
+    loadSteps(selectedAgent.id);
+    loadRuntimeSessions(selectedAgent.id);
+  }
+
+  $: if (selectedAgent && currentTab) {
+    updateUrl(selectedAgent.id, currentTab);
+  }
+
   let showModal = false;
 
-  // Formdata for new agent flow
   let agentFormData = {
     name: "",
     type: "Assistant",
@@ -86,7 +99,6 @@
     isActive: true,
   };
 
-  // Agent types for dropdown
   const agentTypes = [
     { value: "Assistant", name: "Assistant" },
     { value: "Researcher", name: "Researcher" },
@@ -94,61 +106,20 @@
     { value: "Custom", name: "Custom" },
   ];
 
-  // Available models
-  const models = [
-    { value: "gpt-4", name: "GPT-4" },
-    { value: "gpt-3.5-turbo", name: "GPT-3.5 Turbo" },
-    { value: "claude-3-opus", name: "Claude 3 Opus" },
-    { value: "claude-3-sonnet", name: "Claude 3 Sonnet" },
-    { value: "llama-3", name: "Llama 3" },
-  ];
-
-  // Available capabilities
-  const availableCapabilities = [
-    "Text Generation",
-    "Question Answering",
-    "Summarization",
-    "Translation",
-    "Code Generation",
-    "Data Analysis",
-    "Research",
-    "Visualization",
-    "Reporting",
-  ];
-
-  // Handle form submission
   async function handleSubmit() {
     const newAgent = {
-      name: agentFormData.name,
-      status: agentFormData.isActive ? "Active" : "Inactive",
-      type: agentFormData.type,
-      lastActive: "Just now",
       description: agentFormData.description,
-      settings: {
-        temperature: 0.7,
-        maxTokens: 2048,
-        topP: 0.9,
-        frequencyPenalty: 0.5,
-        presencePenalty: 0.5,
-      },
-      capabilities: ["Text Generation"],
-      isActive: agentFormData.isActive,
-      model: "gpt-4",
-      apiKey: "sk-••••••••••••••••••••••••",
-      createdAt: new Date().toISOString().split("T")[0],
+      agent_state: agentFormData.isActive ? "stable" : "inactive",
+      name: agentFormData.name,
+      type: agentFormData.type,
     };
 
     agents = await saveAgent(newAgent);
-
-    // Reset form and close modal
     resetForm();
     showModal = false;
-
-    // Select the newly created agent
-    selectedAgent = newAgent;
+    selectAgent(newAgent);
   }
 
-  // Reset form fields
   function resetForm() {
     agentFormData = {
       name: "",
@@ -158,42 +129,51 @@
     };
   }
 
-  // Select an agent to view details
+  function updateUrl(agentId, tab) {
+    const url = new URL(window.location);
+    if (agentId) {
+      url.searchParams.set("agentId", agentId);
+    } else {
+      url.searchParams.delete("agentId");
+    }
+    if (tab) {
+      url.searchParams.set("tab", tab);
+    } else {
+      url.searchParams.delete("tab");
+    }
+    window.history.replaceState({}, "", url);
+  }
+
   function selectAgent(agent) {
     originalAgent = structuredClone(agent);
     selectedAgent = structuredClone(agent);
+    currentTab = "General";
+    updateUrl(agent.id, currentTab);
   }
 
-  // Go back to list view
+  function changeTab(tab) {
+    currentTab = tab;
+    updateUrl(selectedAgent?.id, currentTab);
+  }
+
   function backToList() {
     selectedAgent = null;
+    currentTab = "General";
+    updateUrl(null, null);
   }
 
-  // Handle agent deletion
   async function deleteAgentClick() {
     if (confirm("Are you sure you want to delete this agent?")) {
       const deleteAgentResponse = await deleteAgent(selectedAgent.id);
       agents = deleteAgentResponse;
       selectedAgent = null;
+      updateUrl(null, null);
     }
   }
 
-  // Save changes to agent
   function saveChanges() {
-    // In a real app, this would send data to an API
     agents = agents.map((a) => (a.id === selectedAgent.id ? selectedAgent : a));
     alert("Agent settings saved!");
-  }
-
-  // Toggle capability selection
-  function toggleCapability(capability) {
-    if (selectedAgent.capabilities.includes(capability)) {
-      selectedAgent.capabilities = selectedAgent.capabilities.filter(
-        (c) => c !== capability,
-      );
-    } else {
-      selectedAgent.capabilities = [...selectedAgent.capabilities, capability];
-    }
   }
 
   const breadcrumbs = [
@@ -219,14 +199,33 @@
         ]
       : [
           {
-            label: "Add Agent",
+            label: "New Agent",
             onClick: () => (showModal = true),
             icon: PlusOutline,
             color: "blue",
           },
         ];
 
-  loadAgents();
+  onMount(async () => {
+    await loadAgents();
+
+    const url = new URL(window.location.href);
+    const agentId = url.searchParams.get("agentId");
+    const tab = url.searchParams.get("tab");
+
+    if (agentId && agents?.length) {
+      const agent = agents.filter((a) => a.id === +agentId)[0];
+      if (agent) {
+        originalAgent = structuredClone(agent);
+        selectedAgent = structuredClone(agent);
+        currentTab = tab || "General";
+
+        // Loading data for the agent
+        loadSteps(agent.id);
+        loadRuntimeSessions(agent.id);
+      }
+    }
+  });
 </script>
 
 <main class="container mx-auto p-4">
@@ -258,14 +257,14 @@
                 <TableBodyCell>{agent.type}</TableBodyCell>
                 <TableBodyCell>
                   <span
-                    class={agent.status === "Active"
+                    class={agent.agent_state === "stable"
                       ? "text-green-500"
                       : "text-gray-500"}
                   >
-                    {agent.status}
+                    {agent.agent_state}
                   </span>
                 </TableBodyCell>
-                <TableBodyCell>{agent.lastActive}</TableBodyCell>
+                <TableBodyCell>{agent.lastActive || "Just now"}</TableBodyCell>
               </TableBodyRow>
             {/each}
 
@@ -301,13 +300,19 @@
             <Heading tag="h2" class="text-xl font-bold"
               >{selectedAgent.name}</Heading
             >
-            <Badge color={selectedAgent.isActive ? "green" : "none"}>
-              {selectedAgent.status}
+            <Badge
+              color={selectedAgent.agent_state === "stable" ? "green" : "none"}
+            >
+              {selectedAgent.agent_state}
             </Badge>
           </div>
 
           <Tabs style="underline">
-            <TabItem open title="General">
+            <TabItem
+              open={currentTab === "General"}
+              title="General"
+              on:click={() => changeTab("General")}
+            >
               <div class="space-y-6 py-4">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
@@ -348,134 +353,11 @@
               </div>
             </TabItem>
 
-            <TabItem title="Model Settings">
-              <div class="space-y-6 py-4">
-                <div>
-                  <Label for="model" class="mb-2">AI Model</Label>
-                  <Select
-                    id="model"
-                    items={models}
-                    bind:value={selectedAgent.model}
-                  />
-                </div>
-
-                <div>
-                  <Label for="apiKey" class="mb-2">API Key</Label>
-                  <Input
-                    id="apiKey"
-                    type="password"
-                    bind:value={selectedAgent.apiKey}
-                  />
-                </div>
-
-                <Accordion>
-                  <AccordionItem>
-                    <span slot="header">Advanced Settings</span>
-                    <div class="space-y-4 pt-2">
-                      <div>
-                        <Label for="temperature" class="mb-2"
-                          >Temperature: {selectedAgent.settings
-                            .temperature}</Label
-                        >
-                        <Input
-                          id="temperature"
-                          type="range"
-                          min="0"
-                          max="1"
-                          step="0.1"
-                          bind:value={selectedAgent.settings.temperature}
-                        />
-                      </div>
-
-                      <div>
-                        <Label for="maxTokens" class="mb-2"
-                          >Max Tokens: {selectedAgent.settings.maxTokens}</Label
-                        >
-                        <Input
-                          id="maxTokens"
-                          type="range"
-                          min="256"
-                          max="4096"
-                          step="256"
-                          bind:value={selectedAgent.settings.maxTokens}
-                        />
-                      </div>
-
-                      <div>
-                        <Label for="topP" class="mb-2"
-                          >Top P: {selectedAgent.settings.topP}</Label
-                        >
-                        <Input
-                          id="topP"
-                          type="range"
-                          min="0"
-                          max="1"
-                          step="0.1"
-                          bind:value={selectedAgent.settings.topP}
-                        />
-                      </div>
-
-                      <div>
-                        <Label for="frequencyPenalty" class="mb-2"
-                          >Frequency Penalty: {selectedAgent.settings
-                            .frequencyPenalty}</Label
-                        >
-                        <Input
-                          id="frequencyPenalty"
-                          type="range"
-                          min="0"
-                          max="2"
-                          step="0.1"
-                          bind:value={selectedAgent.settings.frequencyPenalty}
-                        />
-                      </div>
-
-                      <div>
-                        <Label for="presencePenalty" class="mb-2"
-                          >Presence Penalty: {selectedAgent.settings
-                            .presencePenalty}</Label
-                        >
-                        <Input
-                          id="presencePenalty"
-                          type="range"
-                          min="0"
-                          max="2"
-                          step="0.1"
-                          bind:value={selectedAgent.settings.presencePenalty}
-                        />
-                      </div>
-                    </div>
-                  </AccordionItem>
-                </Accordion>
-              </div>
-            </TabItem>
-
-            <TabItem title="Capabilities">
-              <div class="space-y-6 py-4">
-                <p class="text-gray-700 dark:text-gray-300 mb-4">
-                  Select the capabilities this agent should have:
-                </p>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {#each availableCapabilities as capability}
-                    <div class="flex items-center gap-2">
-                      <Checkbox
-                        id={`capability-${capability}`}
-                        checked={selectedAgent.capabilities.includes(
-                          capability,
-                        )}
-                        on:change={() => toggleCapability(capability)}
-                      />
-                      <Label for={`capability-${capability}`}
-                        >{capability}</Label
-                      >
-                    </div>
-                  {/each}
-                </div>
-              </div>
-            </TabItem>
-
-            <TabItem title="Steps">
+            <TabItem
+              open={currentTab === "Steps"}
+              title="Steps"
+              on:click={() => changeTab("Steps")}
+            >
               <div class="space-y-6 py-4">
                 <div class="flex justify-between items-center mb-4">
                   <p class="text-gray-700 dark:text-gray-300">
@@ -483,7 +365,7 @@
                     Python script or a prompt template.
                   </p>
                   <Button
-                    color="blue"
+                    class="bg-sea text-black"
                     href={`/steps/new?agentId=${selectedAgent.id}&agentName=${encodeURIComponent(selectedAgent.name)}`}
                   >
                     <PlusOutline class="mr-2 h-5 w-5" />
@@ -491,26 +373,28 @@
                   </Button>
                 </div>
 
-                {#if getSteps(selectedAgent.id).length > 0}
+                {#if steps && steps.length > 0}
                   <Table hoverable={true} data-testid="steps-table">
                     <TableHead>
                       <TableHeadCell>Name</TableHeadCell>
                       <TableHeadCell>Type</TableHeadCell>
-                      <TableHeadCell>Last Edited</TableHeadCell>
+                      <!-- <TableHeadCell>Last Edited</TableHeadCell> -->
                       <TableHeadCell>Actions</TableHeadCell>
                     </TableHead>
                     <TableBody>
-                      {#each getSteps(selectedAgent.id) as step}
+                      {#each steps as step}
                         <TableBodyRow>
                           <TableBodyCell>{step.name}</TableBodyCell>
                           <TableBodyCell>
                             <Badge
-                              color={step.type === "Python" ? "blue" : "purple"}
+                              color={step.step_type === "Python"
+                                ? "blue"
+                                : "purple"}
                             >
-                              {step.type}
+                              {step.step_type}
                             </Badge>
                           </TableBodyCell>
-                          <TableBodyCell>{step.lastEdited}</TableBodyCell>
+                          <!-- <TableBodyCell>{step.lastEdited}</TableBodyCell> -->
                           <TableBodyCell>
                             <div class="flex gap-2">
                               {#if selectedStep?.id === step.id}
@@ -554,7 +438,7 @@
                       No steps found for this agent
                     </p>
                     <Button
-                      color="blue"
+                      class="bg-sea text-black"
                       href={`/steps/new?agentId=${selectedAgent.id}&agentName=${encodeURIComponent(selectedAgent.name)}`}
                     >
                       <PlusOutline class="mr-2 h-5 w-5" />
@@ -564,13 +448,12 @@
                 {/if}
               </div>
             </TabItem>
-            <TabItem title="Runtime Sessions">
+            <TabItem
+              open={currentTab === "Sessions"}
+              title="Runtime Sessions"
+              on:click={() => changeTab("Sessions")}
+            >
               <div class="space-y-6 py-4">
-                <p class="text-gray-700 dark:text-gray-300 mb-4">
-                  These are the completed runtime sessions initiated by this
-                  agent.
-                </p>
-
                 {#if runtimeSessions.length > 0}
                   <Table hoverable={true}>
                     <TableHead>

@@ -180,9 +180,18 @@ table "agents" {
     }
 
     # === Custom (table-specific) ===
+    column "name" {
+        type = sql("varchar(255)")
+        null = true
+    }
+    column "type" {
+        type = sql("varchar(255)")
+        null = true
+    }
     column "description" {
         type = sql("text")
         null = false
+        default = ""
     }
     column "agent_state" {
         type = enum.agent_state
@@ -191,14 +200,17 @@ table "agents" {
     column "accepted_completion_rate" {
         type = float
         null = false
+        default = 0
     }
     column "completion_count" {
         type = int
         null = false
+        default = 0
     }
     column "run_count" {
         type = int
         null = false
+        default = 0
     }
 }
 
@@ -275,6 +287,7 @@ table "steps" {
     column "description" {
         type = sql("varchar(255)")
         null = false
+        default = ""
     }
     column "step_type" {
         type = enum.step_type
