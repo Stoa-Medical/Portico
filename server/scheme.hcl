@@ -316,7 +316,7 @@ table "runtime_sessions" {
     }
 
     # === Custom (table-specific) ===
-    column "runtime_session_status" {
+    column "rts_status" {
         type = enum.running_status
         null = false
     }

@@ -58,7 +58,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
                 updated: row.try_get("updated_at")?,
             },
             steps,
-            status: row.try_get("runtime_session_status")?,
+            status: row.try_get("rts_status")?,
             source_data: row.try_get("initial_data")?,
             last_step_idx: Some(row.try_get("latest_step_idx")?),
             last_successful_result: row.try_get("latest_result")?,
@@ -132,7 +132,7 @@ impl DatabaseItem for RuntimeSession {
         let record = sqlx::query(
             r#"
             INSERT INTO runtime_sessions (
-                global_uuid, runtime_session_status, initial_data,
+                global_uuid, rts_status, initial_data,
                 latest_step_idx, latest_result, created_at, updated_at
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -182,7 +182,7 @@ impl DatabaseItem for RuntimeSession {
         sqlx::query(
             r#"
             UPDATE runtime_sessions
-            SET runtime_session_status = $1,
+            SET rts_status = $1,
                 initial_data = $2,
                 latest_step_idx = $3,
                 latest_result = $4,
