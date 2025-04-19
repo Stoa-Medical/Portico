@@ -25,7 +25,8 @@ repos:
   hooks:
     - id: prettier
       name: Prettier
-      entry: npx prettier --write
+      entry: bash -c 'cd app && npx prettier --write $(echo "$@" | sed "s|app/||g")' --
       language: node
       types_or: [svelte, javascript, ts, json, css, markdown]
       additional_dependencies: ['prettier@3.0.3', 'prettier-plugin-svelte@3.0.0']
+      files: ^app/
