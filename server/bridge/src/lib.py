@@ -70,6 +70,9 @@ class BridgeClient:
     async def send_signal(self, data: Dict[str, Any], meta: str = "🏹") -> bool:
         """Send a signal to the engine"""
         try:
+            # Sanitize the incoming data first
+            data = sanitize_data(data)
+
             # Check if 'data' key exists with table and record fields
             if "data" in data and isinstance(data["data"], dict):
                 supabase_data = data["data"]
@@ -77,7 +80,7 @@ class BridgeClient:
                 event_type = supabase_data.get("type", "")
                 record = supabase_data.get("record", {})
 
-                # Convert record to Struct
+                # Convert sanitized record to Struct
                 record_struct = dict_to_struct(record)
 
                 # Create SupabaseData message
@@ -100,14 +103,18 @@ class BridgeClient:
                     elif event_type == "DELETE":
                         response = await self.stub.DeleteAgent(request)  # type: ignore
                     else:
-                        logger.error(f"Unsupported event type: {event_type}")
+                        logger.error(
+                            f"Unsupported event type: {sanitize_data(event_type)}"
+                        )
                         return False
                 else:
-                    logger.error(f"Unsupported table: {table}")
+                    logger.error(f"Unsupported table: {sanitize_data(table)}")
                     return False
 
                 if response and response.success:
-                    logger.info(f"Successfully sent {meta} message: {response.message}")
+                    logger.info(
+                        f"Successfully sent {meta} message: {sanitize_data(response.message)}"
+                    )
                     return True
                 else:
                     logger.error(f"Failed to send {meta} message to engine")
@@ -116,10 +123,10 @@ class BridgeClient:
                 # This is an initialization message
                 return await self.initialize_server() is not None
             else:
-                logger.error(f"Invalid message format: {data}")
+                logger.error(f"Invalid message format: {sanitize_data(data)}")
                 return False
         except Exception as e:
-            logger.error(f"Error sending message to engine: {e}")
+            logger.error(f"Error sending message to engine: {sanitize_data(str(e))}")
             return False
 
     async def close(self):
@@ -129,24 +136,39 @@ class BridgeClient:
             logger.info("Closed gRPC channel")
 
 
+def sanitize_data(data: Any) -> Any:
+    """Sanitize data by removing null characters that Postgres can't handle."""
+    if isinstance(data, str):
+        return data.replace("\u0000", "")
+    elif isinstance(data, dict):
+        return {k: sanitize_data(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [sanitize_data(v) for v in data]
+    return data
+
+
 # Public API for the bridge service
 async def handle_new_signal(payload: Dict[str, Any], client: BridgeClient) -> None:
     """Handle a new signal inserted into the signals table"""
+    # Sanitize the payload before any processing
+    payload = sanitize_data(payload)
     logger.info(f"🔔 New signal detected: {payload}")
 
     try:
-        # Send signal to engine
+        # Send sanitized signal to engine
         await client.send_signal(payload, "handle_new_signal")
     except Exception as e:
-        logger.error(f"Error handling new signal: {e}")
+        logger.error(f"Error handling new signal: {str(e)}")
 
 
 async def handle_general_update(payload: Dict[str, Any], client: BridgeClient) -> None:
     """Handle changes to agents"""
+    # Sanitize the payload before any processing
+    payload = sanitize_data(payload)
     data = payload.get("data", {})
     logger.info(
         f"🔃 General Update detected: {payload.get('ids')} | {data.get('table')} | {data.get('type')}"
     )
 
-    # Notify the engine to sync its agent data
+    # Send sanitized data to engine
     await client.send_signal(payload, "handle_general_update")
