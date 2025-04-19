@@ -1,0 +1,50 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+// Svelte 5 specific rules
+
+rule "Use Svelte 5 runes syntax" {
+  pattern = /const [a-zA-Z0-9_]+ = writable\([^)]*\)/
+  message = "In Svelte 5, use $state, $derived or $props instead of writable stores"
+  severity = "warning"
+}
+
+rule "Prefer runes over reactive statements" {
+  pattern = /\$: [a-zA-Z0-9_]+ =/
+  message = "Consider using Svelte 5 runes ($state, $derived) instead of reactive statements"
+  severity = "info"
+}
+
+rule "Use Svelte 5 component props syntax" {
+  pattern = /<script[^>]*>\s*export let [a-zA-Z0-9_]+:/
+  message = "Consider using the new Svelte 5 $props() syntax instead of export let"
+  severity = "info"
+}
+
+rule "Check SvelteKit routes structure" {
+  pattern = /\.\/routes\/\+page\.(svelte|ts|js)/
+  scope = "import"
+  message = "Ensure you're following SvelteKit's routing conventions for Svelte 5"
+  severity = "warning"
+}
+
+rule "Check for correct JSX-style bind syntax" {
+  pattern = /bind:[a-zA-Z0-9_]+={/
+  message = "In Svelte 5, consider using bind:prop instead of bind:prop={prop} when variable name matches"
+  severity = "info"
+}
+
+rule "Check for named slot usage" {
+  pattern = /<slot name=/
+  not_pattern = /<slot name=["'][a-zA-Z0-9_]+["']/
+  message = "Ensure named slots follow Svelte 5 conventions"
+  severity = "warning"
+}
+
+rule "Check for Svelte transitions" {
+  pattern = /(in|out|transition):[a-zA-Z0-9_]+/
+  message = "Verify transitions are compatible with Svelte 5"
+  severity = "info"
+}

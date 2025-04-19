@@ -4,17 +4,37 @@ This directory contains custom Cursor MDC (Metalinter Domain Configuration) rule
 
 ## Rule Files
 
-- **app.mdc**: Rules for the Tauri 2.0 app with Svelte 5 and SvelteKit in the `/app` directory
-- **python_bridge.mdc**: Rules for the Python code in the `/server/bridge` directory
-- **rust_engine.mdc**: Rules for the Rust code in the `/server/engine` directory
-- **shared_rust.mdc**: Rules for the shared Rust code in the `/shared` directory
-- **general.mdc**: General rules applicable to the entire codebase
+### Language-Specific Rules (/languages)
+
+- **svelte.mdc**: Svelte 5 specific language rules for UI components
+- **rust.mdc**: Rust language rules for all Rust code in the project
+- **python.mdc**: Python language rules for all Python code in the project
+
+### Framework-Specific Rules (/frameworks)
+
+- **tauri.mdc**: Tauri 2.0 specific rules for the desktop app components
+
+### Repo-Specific Rules
+- **python_bridge.mdc**: Rules for the Python bridge component in `/server/bridge`
+- **rust_engine.mdc**: Rules for the Rust engine component in `/server/engine`
+- **shared_rust.mdc**: Rules for shared Rust code in `/shared`
+
+### General Rules
+
+- **general.mdc**: Rules applicable to all files in the codebase
 
 ## Severity Levels
 
 - **error**: Critical issues that should be fixed immediately
 - **warning**: Potential problems that should be addressed
 - **info**: Suggestions for code improvements
+
+## Rule Configuration
+
+Each rule file contains:
+- **description**: What the ruleset covers
+- **globs**: File patterns the rules apply to
+- **alwaysApply**: Whether to always run these rules or only on matched files
 
 ## Adding New Rules
 

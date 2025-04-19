@@ -1,0 +1,48 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+// Tauri 2.0 specific rules
+
+rule "Check for Tauri 2.0 API usage" {
+  pattern = /import \{ [^}]* \} from '@tauri-apps\/api/
+  message = "Ensure you're using Tauri 2.0 compatible imports (API has changed from 1.x)"
+  severity = "error"
+}
+
+rule "Check for Tauri command declarations" {
+  pattern = /@command\(/
+  message = "Ensure Tauri commands are properly declared with appropriate permissions"
+  severity = "warning"
+}
+
+rule "Check for proper Tauri window events" {
+  pattern = /window\.(listen|once)\(/
+  message = "Ensure you're using the correct Tauri 2.0 window event API"
+  severity = "warning"
+}
+
+rule "Check for Tauri filesystem access" {
+  pattern = /fs\.(read|write)File/
+  message = "Verify filesystem permissions are properly set for Tauri 2.0"
+  severity = "warning"
+}
+
+rule "Check for Tauri dialog usage" {
+  pattern = /dialog\.(open|save)/
+  message = "Ensure dialog API usage is compatible with Tauri 2.0"
+  severity = "warning"
+}
+
+rule "Check for Tauri 2.0 IPC patterns" {
+  pattern = /invoke\(/
+  message = "Verify IPC invoke patterns follow Tauri 2.0 conventions"
+  severity = "warning"
+}
+
+rule "Check for Tauri plugin imports" {
+  pattern = /import \{ [^}]* \} from '@tauri-apps\/plugin-/
+  message = "Ensure plugin imports are compatible with Tauri 2.0"
+  severity = "warning"
+}
