@@ -230,8 +230,8 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
     //         SELECT json_agg(json_build_object(
     //             'id', s.id,
     //             'global_uuid', s.global_uuid,
-    //             'created_timestamp', s.created_timestamp,
-    //             'last_updated_timestamp', s.last_updated_timestamp,
+    //             'created_at', s.created_at,
+    //             'updated_at', s.updated_at,
     //             'agent_id', s.agent_id,
     //             'name', s.name,
     //             'description', s.description,
@@ -263,8 +263,8 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
                 global_uuid: row.try_get::<Uuid, _>("global_uuid")?.to_string(),
             },
             timestamps: TimestampFields {
-                created: row.try_get("created_timestamp")?,
-                updated: row.try_get("last_updated_timestamp")?,
+                created: row.try_get("created_at")?,
+                updated: row.try_get("updated_at")?,
             },
             description: row.try_get("description")?,
             agent_state: Mutex::new(state),
@@ -285,8 +285,8 @@ impl JsonLike for Agent {
         serde_json::json!({
             "id": self.identifiers.local_id,
             "global_uuid": self.identifiers.global_uuid,
-            "created_timestamp": self.timestamps.created.format("%Y-%m-%d %H:%M:%S").to_string(),
-            "last_updated_timestamp": self.timestamps.updated.format("%Y-%m-%d %H:%M:%S").to_string(),
+            "created_at": self.timestamps.created.format("%Y-%m-%d %H:%M:%S").to_string(),
+            "updated_at": self.timestamps.updated.format("%Y-%m-%d %H:%M:%S").to_string(),
             "description": self.description,
             "agent_state": self.state(),
             "accepted_completion_rate": self.accepted_completion_rate,
@@ -309,7 +309,7 @@ impl JsonLike for Agent {
                 },
                 timestamps: TimestampFields {
                     created: chrono::DateTime::parse_from_str(
-                        &obj.get("created_timestamp")
+                        &obj.get("created_at")
                             .and_then(|v| v.as_str())
                             .unwrap_or_default(),
                         "%Y-%m-%d %H:%M:%S %z",
@@ -317,7 +317,7 @@ impl JsonLike for Agent {
                     .unwrap_or_default()
                     .with_timezone(&chrono::Utc),
                     updated: chrono::DateTime::parse_from_str(
-                        &obj.get("last_updated_timestamp")
+                        &obj.get("updated_at")
                             .and_then(|v| v.as_str())
                             .unwrap_or_default(),
                         "%Y-%m-%d %H:%M:%S %z",
@@ -462,7 +462,7 @@ impl JsonLike for Agent {
                         }
                     }
                     // Skip fields that shouldn't be updated directly
-                    "id" | "global_uuid" | "created_timestamp" | "last_updated_timestamp" => {
+                    "id" | "global_uuid" | "created_at" | "updated_at" => {
                         // These fields are skipped intentionally
                     }
                     // Unknown fields
@@ -475,7 +475,7 @@ impl JsonLike for Agent {
             // If any fields were updated, update the timestamp
             if !updated_fields.is_empty() {
                 self.timestamps.update();
-                updated_fields.push("last_updated_timestamp".to_string());
+                updated_fields.push("updated_at".to_string());
             }
 
             Ok(updated_fields)
@@ -502,7 +502,7 @@ impl DatabaseItem for Agent {
             r#"
             INSERT INTO agents (
                 global_uuid, description, agent_state, accepted_completion_rate,
-                completion_count, run_count, created_timestamp, last_updated_timestamp
+                completion_count, run_count, created_at, updated_at
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING id
@@ -529,7 +529,7 @@ impl DatabaseItem for Agent {
                 INSERT INTO steps (
                     global_uuid, agent_id, sequence_number, name, description,
                     step_type, step_content, success_count, run_count,
-                    created_timestamp, last_updated_timestamp
+                    created_at, updated_at
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 "#,
@@ -562,7 +562,7 @@ impl DatabaseItem for Agent {
                 accepted_completion_rate = $3,
                 completion_count = $4,
                 run_count = $5,
-                last_updated_timestamp = $6
+                updated_at = $6
             WHERE global_uuid = $7
             "#,
         )

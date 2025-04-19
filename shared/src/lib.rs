@@ -191,8 +191,8 @@ pub fn steps_json_agg_sql(parent_table: &str, parent_id_column: &str) -> String 
                 SELECT json_agg(json_build_object(
                     'id', s.id,
                     'global_uuid', s.global_uuid,
-                    'created_timestamp', s.created_timestamp,
-                    'last_updated_timestamp', s.last_updated_timestamp,
+                    'created_at', s.created_at,
+                    'updated_at', s.updated_at,
                     'name', s.name,
                     'description', s.description,
                     'step_type', s.step_type,
@@ -222,8 +222,8 @@ pub fn signal_with_agent_sql(where_clause: &str) -> String {
             a.accepted_completion_rate as agent_accepted_completion_rate,
             a.completion_count as agent_completion_count,
             a.run_count as agent_run_count,
-            a.created_timestamp as agent_created_timestamp,
-            a.last_updated_timestamp as agent_last_updated_timestamp
+            a.created_at as agent_created_at,
+            a.updated_at as agent_updated_at
         FROM signals s
         LEFT JOIN agents a ON s.agent_id = a.id
         {}

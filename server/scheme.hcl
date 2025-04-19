@@ -12,7 +12,6 @@ atlas schema apply \
 NOTE: the Atlas HCL syntax is custom and doesn't support everything yet (e.g. `mixin`, `domain`, etc.)
     Docs: https:atlasgo.io/atlas-schema/hcl
 
-
 To reset database state -- generation for the YOLO SQL below (run in `psql`):
 ```
 psql -h localhost -p 54322 -U postgres -d postgres
@@ -24,7 +23,6 @@ SELECT 'DROP TABLE IF EXISTS "' || tablename || '" CASCADE;'
 FROM pg_tables
 WHERE schemaname = 'public'
     AND tablename NOT LIKE 'supabase_%';
-
 
 --- ... then copy that code and drop the tables
 
@@ -87,13 +85,13 @@ table "signals" {
         ]
     }
     # === Timestamps ===
-    column "created_timestamp" {
+    column "created_at" {
         type = sql("timestamptz")
         null = false
         default = sql("CURRENT_TIMESTAMP")
     }
 
-    column "last_updated_timestamp" {
+    column "updated_at" {
         type = sql("timestamptz")
         null = false
         default = sql("CURRENT_TIMESTAMP")
@@ -167,13 +165,13 @@ table "agents" {
     # An Agent can have many Steps (a Step points to an Agent)
 
     # === Timestamps ===
-    column "created_timestamp" {
+    column "created_at" {
         type = sql("timestamptz")
         null = false
         default = sql("CURRENT_TIMESTAMP")
     }
 
-    column "last_updated_timestamp" {
+    column "updated_at" {
         type = sql("timestamptz")
         null = false
         default = sql("CURRENT_TIMESTAMP")
@@ -267,13 +265,13 @@ table "steps" {
     }
 
     # === Timestamps ===
-    column "created_timestamp" {
+    column "created_at" {
         type = sql("timestamptz")
         null = false
         default = sql("CURRENT_TIMESTAMP")
     }
 
-    column "last_updated_timestamp" {
+    column "updated_at" {
         type = sql("timestamptz")
         null = false
         default = sql("CURRENT_TIMESTAMP")
@@ -350,13 +348,13 @@ table "runtime_sessions" {
     }
 
     # === Timestamps ===
-    column "created_timestamp" {
+    column "created_at" {
         type = sql("timestamptz")
         null = false
         default = sql("CURRENT_TIMESTAMP")
     }
 
-    column "last_updated_timestamp" {
+    column "updated_at" {
         type = sql("timestamptz")
         null = false
         default = sql("CURRENT_TIMESTAMP")

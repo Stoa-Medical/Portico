@@ -35,8 +35,8 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Signal {
                     global_uuid: row.try_get::<Uuid, _>("agent_global_uuid")?.to_string(),
                 },
                 timestamps: TimestampFields {
-                    created: row.try_get("agent_created_timestamp")?,
-                    updated: row.try_get("agent_last_updated_timestamp")?,
+                    created: row.try_get("agent_created_at")?,
+                    updated: row.try_get("agent_updated_at")?,
                 },
                 description: row.try_get("agent_description")?,
                 agent_state: Mutex::new(row.try_get("agent_state")?),
@@ -59,8 +59,8 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Signal {
                 global_uuid: row.try_get::<Uuid, _>("global_uuid")?.to_string(),
             },
             timestamps: TimestampFields {
-                created: row.try_get("created_timestamp")?,
-                updated: row.try_get("last_updated_timestamp")?,
+                created: row.try_get("created_at")?,
+                updated: row.try_get("updated_at")?,
             },
             user_requested_uuid: row.try_get("user_requested_uuid")?,
             signal_type: row.try_get("signal_type")?,
@@ -120,8 +120,8 @@ impl JsonLike for Signal {
         serde_json::json!({
             "id": self.identifiers.local_id,
             "global_uuid": self.identifiers.global_uuid,
-            "created_timestamp": self.timestamps.created.format("%Y-%m-%d %H:%M:%S").to_string(),
-            "last_updated_timestamp": self.timestamps.updated.format("%Y-%m-%d %H:%M:%S").to_string(),
+            "created_at": self.timestamps.created.format("%Y-%m-%d %H:%M:%S").to_string(),
+            "updated_at": self.timestamps.updated.format("%Y-%m-%d %H:%M:%S").to_string(),
             "user_requested_uuid": self.user_requested_uuid,
             "agent": self.agent.as_ref().map(|a| a.to_json()),
             "status": self.status,
@@ -250,7 +250,7 @@ impl JsonLike for Signal {
                         }
                     }
                     // Skip fields that shouldn't be updated directly
-                    "id" | "global_uuid" | "created_timestamp" | "last_updated_timestamp" => {
+                    "id" | "global_uuid" | "created_at" | "updated_at" => {
                         // These fields are skipped intentionally
                     }
                     // Unknown fields
@@ -263,7 +263,7 @@ impl JsonLike for Signal {
             // If any fields were updated, update the timestamp
             if !updated_fields.is_empty() {
                 self.timestamps.update();
-                updated_fields.push("last_updated_timestamp".to_string());
+                updated_fields.push("updated_at".to_string());
             }
 
             Ok(updated_fields)
@@ -285,7 +285,7 @@ impl JsonLike for Signal {
                 },
                 timestamps: TimestampFields {
                     created: chrono::DateTime::parse_from_str(
-                        &obj.get("created_timestamp")
+                        &obj.get("created_at")
                             .and_then(|v| v.as_str())
                             .unwrap_or_default(),
                         "%Y-%m-%d %H:%M:%S %z",
@@ -293,7 +293,7 @@ impl JsonLike for Signal {
                     .unwrap_or_default()
                     .with_timezone(&chrono::Utc),
                     updated: chrono::DateTime::parse_from_str(
-                        &obj.get("last_updated_timestamp")
+                        &obj.get("updated_at")
                             .and_then(|v| v.as_str())
                             .unwrap_or_default(),
                         "%Y-%m-%d %H:%M:%S %z",
@@ -355,7 +355,7 @@ impl DatabaseItem for Signal {
             INSERT INTO signals (
                 global_uuid, user_requested_uuid, agent_id, agent_uuid,
                 signal_type, signal_status, initial_data, response_data,
-                error_message, created_timestamp, last_updated_timestamp
+                error_message, created_at, updated_at
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             "#,
@@ -395,7 +395,7 @@ impl DatabaseItem for Signal {
                 initial_data = $6,
                 response_data = $7,
                 error_message = $8,
-                last_updated_timestamp = $9
+                updated_at = $9
             WHERE global_uuid = $10
             "#,
         )

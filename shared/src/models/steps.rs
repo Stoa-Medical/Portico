@@ -78,8 +78,8 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Step {
                 global_uuid: row.try_get("global_uuid")?,
             },
             timestamps: TimestampFields {
-                created: row.try_get("created_timestamp")?,
-                updated: row.try_get("last_updated_timestamp")?,
+                created: row.try_get("created_at")?,
+                updated: row.try_get("updated_at")?,
             },
             // agent_owner_uuid: row.try_get("agent_id")?,
             name: row.try_get("name")?,
@@ -212,8 +212,8 @@ impl JsonLike for Step {
         serde_json::json!({
             "id": self.identifiers.local_id,
             "global_uuid": self.identifiers.global_uuid,
-            "created_timestamp": self.timestamps.created.format("%Y-%m-%d %H:%M:%S").to_string(),
-            "last_updated_timestamp": self.timestamps.updated.format("%Y-%m-%d %H:%M:%S").to_string(),
+            "created_at": self.timestamps.created.format("%Y-%m-%d %H:%M:%S").to_string(),
+            "updated_at": self.timestamps.updated.format("%Y-%m-%d %H:%M:%S").to_string(),
             "name": self.name,
             "description": self.description,
             "step_type": self.step_type.as_str(),
@@ -236,7 +236,7 @@ impl JsonLike for Step {
                 },
                 timestamps: TimestampFields {
                     created: chrono::DateTime::parse_from_str(
-                        &obj.get("created_timestamp")
+                        &obj.get("created_at")
                             .and_then(|v| v.as_str())
                             .unwrap_or_default(),
                         "%Y-%m-%d %H:%M:%S %z",
@@ -244,7 +244,7 @@ impl JsonLike for Step {
                     .unwrap_or_default()
                     .with_timezone(&chrono::Utc),
                     updated: chrono::DateTime::parse_from_str(
-                        &obj.get("last_updated_timestamp")
+                        &obj.get("updated_at")
                             .and_then(|v| v.as_str())
                             .unwrap_or_default(),
                         "%Y-%m-%d %H:%M:%S %z",
@@ -356,7 +356,7 @@ impl JsonLike for Step {
                         }
                     }
                     // Skip fields that shouldn't be updated directly
-                    "id" | "global_uuid" | "created_timestamp" | "last_updated_timestamp" => {
+                    "id" | "global_uuid" | "created_at" | "updated_at" => {
                         // These fields are skipped intentionally
                     }
                     // Unknown fields
@@ -369,7 +369,7 @@ impl JsonLike for Step {
             // If any fields were updated, update the timestamp
             if !updated_fields.is_empty() {
                 self.timestamps.update();
-                updated_fields.push("last_updated_timestamp".to_string());
+                updated_fields.push("updated_at".to_string());
             }
 
             Ok(updated_fields)
@@ -395,7 +395,7 @@ impl DatabaseItem for Step {
             r#"
             INSERT INTO steps (
                 global_uuid, name, description, step_type, step_content,
-                success_count, run_count, created_timestamp, last_updated_timestamp
+                success_count, run_count, created_at, updated_at
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             "#,
@@ -425,7 +425,7 @@ impl DatabaseItem for Step {
                 step_content = $4,
                 success_count = $5,
                 run_count = $6,
-                last_updated_timestamp = $7
+                updated_at = $7
             WHERE global_uuid = $8
             "#,
         )

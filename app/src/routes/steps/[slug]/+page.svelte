@@ -45,7 +45,7 @@
           step_content: "",
           // isActive: true,
           // lastEdited: "Just now",
-          created_timestamp: new Date().toISOString().split("T")[0],
+          created_at: new Date().toISOString().split("T")[0],
         };
       } else {
         step = await getStep(stepId);

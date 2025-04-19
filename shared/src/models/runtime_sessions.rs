@@ -27,8 +27,8 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
     //         SELECT json_agg(json_build_object(
     //             'id', s.id,
     //             'global_uuid', s.global_uuid,
-    //             'created_timestamp', s.created_timestamp,
-    //             'last_updated_timestamp', s.last_updated_timestamp,
+    //             'created_at', s.created_at,
+    //             'updated_at', s.updated_at,
     //             'agent_id', s.agent_id,
     //             'name', s.name,
     //             'description', s.description,
@@ -57,8 +57,8 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
                 global_uuid: row.try_get::<Uuid, _>("global_uuid")?.to_string(),
             },
             timestamps: TimestampFields {
-                created: row.try_get("created_timestamp")?,
-                updated: row.try_get("last_updated_timestamp")?,
+                created: row.try_get("created_at")?,
+                updated: row.try_get("updated_at")?,
             },
             steps,
             status: row.try_get("runtime_session_status")?,
@@ -136,7 +136,7 @@ impl DatabaseItem for RuntimeSession {
             r#"
             INSERT INTO runtime_sessions (
                 global_uuid, runtime_session_status, initial_data,
-                latest_step_idx, latest_result, created_timestamp, last_updated_timestamp
+                latest_step_idx, latest_result, created_at, updated_at
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING id
@@ -161,7 +161,7 @@ impl DatabaseItem for RuntimeSession {
                 INSERT INTO steps (
                     global_uuid, runtime_session_id, sequence_number, name, description,
                     step_type, step_content, success_count, run_count,
-                    created_timestamp, last_updated_timestamp
+                    created_at, updated_at
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 "#,
@@ -193,7 +193,7 @@ impl DatabaseItem for RuntimeSession {
                 initial_data = $2,
                 latest_step_idx = $3,
                 latest_result = $4,
-                last_updated_timestamp = $5
+                updated_at = $5
             WHERE global_uuid = $6
             "#,
         )
