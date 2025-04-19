@@ -7,8 +7,6 @@ use async_trait::async_trait;
 use serde_json::Value;
 use sqlx::{PgPool, Row};
 use std::str::FromStr;
-use std::sync::atomic::AtomicU64;
-use std::sync::Arc;
 use std::sync::Mutex;
 use uuid::Uuid;
 
@@ -40,14 +38,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Signal {
                 },
                 description: row.try_get("agent_description")?,
                 agent_state: Mutex::new(row.try_get("agent_state")?),
-                accepted_completion_rate: row.try_get("agent_accepted_completion_rate")?,
                 steps: Vec::new(), // Steps are loaded separately
-                completion_count: Arc::new(AtomicU64::new(
-                    row.try_get::<i32, _>("agent_completion_count")? as u64,
-                )),
-                run_count: Arc::new(AtomicU64::new(
-                    row.try_get::<i32, _>("agent_run_count")? as u64
-                )),
             })
         } else {
             None

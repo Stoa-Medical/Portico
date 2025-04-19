@@ -16,10 +16,7 @@ fn create_test_signal() -> Signal {
         agent_id,
         timestamps,
         "Test Agent".to_string(),
-        0.8,
-        vec![],
-        0,
-        0,
+        vec![]
     );
 
     let initial_data = Some(json!({"value": 5}));
@@ -52,10 +49,7 @@ fn test_signal_without_data() {
         agent_id,
         timestamps,
         "Test Agent".to_string(),
-        0.8,
-        vec![],
-        0,
-        0,
+        vec![]
     );
 
     // Create signal with no initial data

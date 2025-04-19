@@ -195,21 +195,6 @@ table "agents" {
         type = enum.agent_state
         null = false
     }
-    column "accepted_completion_rate" {
-        type = float
-        null = false
-        default = 0
-    }
-    column "completion_count" {
-        type = int
-        null = false
-        default = 0
-    }
-    column "run_count" {
-        type = int
-        null = false
-        default = 0
-    }
 }
 
 table "steps" {
@@ -294,16 +279,6 @@ table "steps" {
     column "step_content" {
         type = sql("text")
         null = false
-    }
-    column "run_count" {
-        type = int
-        null = false
-        default = 0
-    }
-    column "success_count" {
-        type = int
-        null = false
-        default = 0
     }
 }
 

@@ -33,9 +33,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
     //             'name', s.name,
     //             'description', s.description,
     //             'step_type', s.step_type,
-    //             'step_content', s.step_content,
-    //             'success_count', s.success_count,
-    //             'run_count', s.run_count
+    //             'step_content', s.step_content
     //         ))
     //         FROM steps s
     //         WHERE s.runtime_session_id = rs.id
@@ -160,10 +158,9 @@ impl DatabaseItem for RuntimeSession {
                 r#"
                 INSERT INTO steps (
                     global_uuid, runtime_session_id, sequence_number, name, description,
-                    step_type, step_content, success_count, run_count,
-                    created_at, updated_at
+                    step_type, step_content, created_at, updated_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 "#,
             )
             .bind(&step.identifiers.global_uuid)
@@ -173,8 +170,6 @@ impl DatabaseItem for RuntimeSession {
             .bind(&step.description)
             .bind(&step.step_type)
             .bind(&step.step_content)
-            .bind(step.get_success_count() as i32)
-            .bind(step.get_run_count() as i32)
             .bind(&step.timestamps.created)
             .bind(&step.timestamps.updated)
             .execute(pool)

@@ -196,9 +196,7 @@ pub fn steps_json_agg_sql(parent_table: &str, parent_id_column: &str) -> String 
                     'name', s.name,
                     'description', s.description,
                     'step_type', s.step_type,
-                    'step_content', s.step_content,
-                    'success_count', s.success_count,
-                    'run_count', s.run_count
+                    'step_content', s.step_content
                 ) ORDER BY s.sequence_number)
                 FROM steps s
                 WHERE s.{} = {}.id
@@ -219,9 +217,6 @@ pub fn signal_with_agent_sql(where_clause: &str) -> String {
             a.global_uuid as agent_global_uuid,
             a.description as agent_description,
             a.agent_state as agent_state,
-            a.accepted_completion_rate as agent_accepted_completion_rate,
-            a.completion_count as agent_completion_count,
-            a.run_count as agent_run_count,
             a.created_at as agent_created_at,
             a.updated_at as agent_updated_at
         FROM signals s

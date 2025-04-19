@@ -16,8 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::{postgres::PgArgumentBuffer, PgPool, Postgres, Row};
 use std::str::FromStr;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -26,10 +25,7 @@ pub struct Agent {
     pub timestamps: TimestampFields,
     pub description: String,
     pub agent_state: Mutex<AgentState>,  // Make public for direct construction in other modules
-    pub accepted_completion_rate: f64,
     pub steps: Vec<Step>,
-    pub completion_count: Arc<AtomicU64>,
-    pub run_count: Arc<AtomicU64>,
 }
 
 /// Different states for Agent to be in. State diagram:
@@ -119,10 +115,7 @@ impl Agent {
         identifiers: IdFields,
         timestamps: TimestampFields,
         description: String,
-        accepted_completion_rate: f64,
         steps: Vec<Step>,
-        completion_count: u64,
-        run_count: u64,
     ) -> Self {
         // Start all agents in an inactive state
         Self {
@@ -130,10 +123,7 @@ impl Agent {
             timestamps,
             description,
             agent_state: Mutex::new(AgentState::Inactive),
-            accepted_completion_rate,
             steps,
-            completion_count: Arc::new(AtomicU64::new(completion_count)),
-            run_count: Arc::new(AtomicU64::new(run_count)),
         }
     }
 
@@ -141,9 +131,8 @@ impl Agent {
         let current_state = self.state();
         match current_state {
             AgentState::Inactive => {
-                // Update stability and set new state
-                let new_state = self.check_stability();
-                self.set_state(new_state);
+                // Set new state to Stable
+                self.set_state(AgentState::Stable);
                 Ok(())
             }
             _ => Err(anyhow!("Can only start from Inactive state")),
@@ -157,23 +146,11 @@ impl Agent {
             return Err(anyhow!("Cannot run agent in Inactive state"));
         }
 
-        // Increment run count
-        self.run_count.fetch_add(1, Ordering::Relaxed);
-
         // Create a new RuntimeSession
         let mut session = RuntimeSession::new(source, self.steps.clone());
 
         // Start the RuntimeSession and handle the result
         let result = session.start().await;
-
-        // If all steps completed successfully, increment completion count
-        if result.is_ok() {
-            self.completion_count.fetch_add(1, Ordering::Relaxed);
-        }
-
-        // Check stability and update state if needed
-        let new_state = self.check_stability();
-        self.set_state(new_state);
 
         // If there was an error, propagate it
         if let Err(e) = result {
@@ -182,17 +159,6 @@ impl Agent {
 
         // Return final session
         Ok(session)
-    }
-
-    fn check_stability(&self) -> AgentState {
-        let curr_completion_rate = self.collect_completion_rate();
-
-        // Determine new state based on error rate
-        if curr_completion_rate < self.accepted_completion_rate {
-            AgentState::Unstable
-        } else {
-            AgentState::Stable
-        }
     }
 
     pub fn stop(&self) -> Result<()> {
@@ -205,18 +171,6 @@ impl Agent {
             }
             _ => Err(anyhow!("Can only stop from a running state")),
         }
-    }
-
-    fn collect_completion_rate(&self) -> f64 {
-        // Calculate error rate based on this Agent's `run`s
-        let collected_run_count = self.run_count.load(Ordering::Relaxed);
-        let collected_completion_count = self.completion_count.load(Ordering::Relaxed);
-
-        if collected_run_count == 0 {
-            return 0.0; // No runs yet, so no errors
-        }
-
-        collected_completion_count as f64 / collected_run_count as f64
     }
 }
 
@@ -236,9 +190,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
     //             'name', s.name,
     //             'description', s.description,
     //             'step_type', s.step_type,
-    //             'step_content', s.step_content,
-    //             'success_count', s.success_count,
-    //             'run_count', s.run_count
+    //             'step_content', s.step_content
     //         ))
     //         FROM steps s
     //         WHERE s.agent_id = a.id
@@ -248,34 +200,29 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
     // ) as steps
     // FROM agents a
     fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
-        // Get the steps JSON array from the row
+        let id: i32 = row.try_get("id")?;
+        let global_uuid: String = row.try_get("global_uuid")?;
+        let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
+        let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
+        let description: String = row.try_get::<Option<String>, _>("description")?.unwrap_or_default();
+        let agent_state: AgentState = row.try_get("agent_state")?;
+
+        // Parse steps - each raw JSON will look like a `json_build_object` result
         let steps_json: Value = row.try_get("steps")?;
-
-        // Convert the JSON array into Vec<Step> using the shared function
         let steps = Step::from_json_array(&steps_json);
-
-        // Get the agent state from the row
-        let state: AgentState = row.try_get("agent_state")?;
 
         Ok(Self {
             identifiers: IdFields {
-                local_id: row.try_get("id")?,
-                global_uuid: row.try_get::<Uuid, _>("global_uuid")?.to_string(),
+                local_id: Some(id),
+                global_uuid,
             },
             timestamps: TimestampFields {
-                created: row.try_get("created_at")?,
-                updated: row.try_get("updated_at")?,
+                created: created_at,
+                updated: updated_at,
             },
-            description: row.try_get("description")?,
-            agent_state: Mutex::new(state),
-            accepted_completion_rate: row.try_get("accepted_completion_rate")?,
+            description,
+            agent_state: Mutex::new(agent_state),
             steps,
-            completion_count: Arc::new(AtomicU64::new(
-                row.try_get::<i32, _>("completion_count")? as u64
-            )),
-            run_count: Arc::new(AtomicU64::new(
-                row.try_get::<i32, _>("run_count")? as u64,
-            )),
         })
     }
 }
@@ -289,10 +236,7 @@ impl JsonLike for Agent {
             "updated_at": self.timestamps.updated.format("%Y-%m-%d %H:%M:%S").to_string(),
             "description": self.description,
             "agent_state": self.state(),
-            "accepted_completion_rate": self.accepted_completion_rate,
             "steps": self.steps.iter().map(|step| step.to_json()).collect::<Vec<Value>>(),
-            "completion_count": self.completion_count.load(Ordering::Relaxed),
-            "run_count": self.run_count.load(Ordering::Relaxed)
         })
     }
 
@@ -336,10 +280,6 @@ impl JsonLike for Agent {
                         .and_then(|s| AgentState::from_str(s).ok())
                         .unwrap_or_default()
                 ),
-                accepted_completion_rate: obj
-                    .get("accepted_completion_rate")
-                    .and_then(|v| v.as_f64())
-                    .unwrap_or(0.0) as f64,
                 steps: obj
                     .get("steps")
                     .and_then(|v| v.as_array())
@@ -349,14 +289,6 @@ impl JsonLike for Agent {
                             .collect()
                     })
                     .unwrap_or_default(),
-                completion_count: Arc::new(AtomicU64::new(
-                    obj.get("completion_count")
-                        .and_then(|v| v.as_i64())
-                        .unwrap_or(0) as u64,
-                )),
-                run_count: Arc::new(AtomicU64::new(
-                    obj.get("run_count").and_then(|v| v.as_i64()).unwrap_or(0) as u64,
-                )),
             })
         } else {
             Err(anyhow!("Expected JSON object"))
@@ -397,15 +329,6 @@ impl JsonLike for Agent {
                             }
                         }
                     }
-                    "accepted_completion_rate" => {
-                        if let Some(rate) = value.as_f64() {
-                            let rate = rate as f64;
-                            if (self.accepted_completion_rate - rate).abs() > f64::EPSILON {
-                                self.accepted_completion_rate = rate;
-                                updated_fields.push(key.to_string());
-                            }
-                        }
-                    }
                     "steps" => {
                         if let Some(steps_array) = value.as_array() {
                             // This is more complex since we need to match existing steps
@@ -440,24 +363,6 @@ impl JsonLike for Agent {
                                     self.steps = new_steps;
                                     updated_fields.push(key.to_string());
                                 }
-                            }
-                        }
-                    }
-                    "completion_count" => {
-                        if let Some(count) = value.as_u64() {
-                            let current = self.completion_count.load(Ordering::Relaxed);
-                            if current != count {
-                                self.completion_count.store(count, Ordering::Relaxed);
-                                updated_fields.push(key.to_string());
-                            }
-                        }
-                    }
-                    "run_count" => {
-                        if let Some(count) = value.as_u64() {
-                            let current = self.run_count.load(Ordering::Relaxed);
-                            if current != count {
-                                self.run_count.store(count, Ordering::Relaxed);
-                                updated_fields.push(key.to_string());
                             }
                         }
                     }
@@ -501,19 +406,15 @@ impl DatabaseItem for Agent {
         let record = sqlx::query(
             r#"
             INSERT INTO agents (
-                global_uuid, description, agent_state, accepted_completion_rate,
-                completion_count, run_count, created_at, updated_at
+                global_uuid, description, agent_state, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING id
             "#,
         )
         .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
         .bind(&self.description)
         .bind(&self.state())
-        .bind(self.accepted_completion_rate)
-        .bind(self.completion_count.load(Ordering::Relaxed) as i32)
-        .bind(self.run_count.load(Ordering::Relaxed) as i32)
         .bind(&self.timestamps.created)
         .bind(&self.timestamps.updated)
         .fetch_one(pool)
@@ -528,10 +429,9 @@ impl DatabaseItem for Agent {
                 r#"
                 INSERT INTO steps (
                     global_uuid, agent_id, sequence_number, name, description,
-                    step_type, step_content, success_count, run_count,
-                    created_at, updated_at
+                    step_type, step_content, created_at, updated_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 "#,
             )
             .bind(&step.identifiers.global_uuid)
@@ -541,8 +441,6 @@ impl DatabaseItem for Agent {
             .bind(&step.description)
             .bind(&step.step_type)
             .bind(&step.step_content)
-            .bind(step.get_success_count() as i32)
-            .bind(step.get_run_count() as i32)
             .bind(&step.timestamps.created)
             .bind(&step.timestamps.updated)
             .execute(pool)
@@ -559,18 +457,12 @@ impl DatabaseItem for Agent {
             UPDATE agents
             SET description = $1,
                 agent_state = $2,
-                accepted_completion_rate = $3,
-                completion_count = $4,
-                run_count = $5,
-                updated_at = $6
-            WHERE global_uuid = $7
+                updated_at = $3
+            WHERE global_uuid = $4
             "#,
         )
         .bind(&self.description)
         .bind(&self.state())
-        .bind(self.accepted_completion_rate)
-        .bind(self.completion_count.load(Ordering::Relaxed) as i32)
-        .bind(self.run_count.load(Ordering::Relaxed) as i32)
         .bind(&self.timestamps.updated)
         .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
         .execute(pool)

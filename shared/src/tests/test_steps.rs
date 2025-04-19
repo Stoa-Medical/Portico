@@ -12,35 +12,12 @@ fn create_test_step(step_type: StepType) -> Step {
         step_type,
         content,
         "Test Step".to_string(),
-        Some("A test step that adds 10 to the input value".to_string()),
-        0,
-        0,
+        Some("A test step that adds 10 to the input value".to_string())
     )
 }
 
 #[test]
-fn test_step_creation() {
-    let step = create_test_step(StepType::Python);
-
-    assert_eq!(step.get_run_count(), 0);
-    assert_eq!(step.get_success_count(), 0);
-}
-
-#[test]
-fn test_step_counters() {
-    let step = create_test_step(StepType::Python);
-
-    // Initial counts should be 0
-    assert_eq!(step.get_run_count(), 0);
-    assert_eq!(step.get_success_count(), 0);
-
-    // We can't directly modify private fields, so we'd need to mock
-    // or actually run a step which would increment these counters
-    // In real tests you might use test doubles/mocks
-}
-
-#[test]
-fn test_step_type_behavior() {
+fn test_create_step() {
     let _python_step = create_test_step(StepType::Python);
     let _prompt_step = create_test_step(StepType::Prompt);
 

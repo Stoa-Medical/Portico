@@ -1,9 +1,6 @@
 use crate::{call_llm, exec_python, DatabaseItem, IdFields, JsonLike, TimestampFields};
 use serde_json::Value;
 
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
-
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -66,8 +63,6 @@ pub struct Step {
     pub description: Option<String>,
     pub step_type: StepType,
     pub step_content: String,
-    pub success_count: Arc<AtomicU64>,
-    pub run_count: Arc<AtomicU64>,
 }
 
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Step {
@@ -86,10 +81,6 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Step {
             description: row.try_get("description")?,
             step_type: row.try_get("step_type")?,
             step_content: row.try_get("step_content")?,
-            success_count: Arc::new(AtomicU64::new(
-                row.try_get::<i32, _>("success_count")? as u64
-            )),
-            run_count: Arc::new(AtomicU64::new(row.try_get::<i32, _>("run_count")? as u64)),
         })
     }
 }
@@ -101,8 +92,6 @@ impl Step {
         step_content: String,
         name: String,
         description: Option<String>,
-        success_count: u64,
-        run_count: u64,
     ) -> Self {
         Self {
             identifiers,
@@ -111,8 +100,6 @@ impl Step {
             step_content,
             name,
             description,
-            run_count: Arc::new(AtomicU64::new(run_count)),
-            success_count: Arc::new(AtomicU64::new(success_count)),
         }
     }
 
@@ -166,33 +153,16 @@ result = {}(source)"#,
 
     /// Runs the step with fresh context
     pub async fn run(&self, source_data: Value, step_idx: usize) -> Result<Value> {
-        // Increment FIRST, before any potential errors
-        self.run_count.fetch_add(1, Ordering::Relaxed);
-
         match &self.step_type {
             StepType::Prompt => match call_llm(&self.step_content, source_data).await {
-                Ok(res_str) => {
-                    self.success_count.fetch_add(1, Ordering::Relaxed);
-                    Ok(Value::String(res_str))
-                }
+                Ok(res_str) => Ok(Value::String(res_str)),
                 Err(err) => Err(anyhow!("Step {} failed: {}", step_idx, err)),
             },
             StepType::Python => match exec_python(source_data, &self.generate_python_template()) {
-                Ok(result) => {
-                    self.success_count.fetch_add(1, Ordering::Relaxed);
-                    Ok(result)
-                }
+                Ok(result) => Ok(result),
                 Err(err) => Err(anyhow!("Step {} failed: {}", step_idx, err)),
             },
         }
-    }
-
-    pub fn get_run_count(&self) -> u64 {
-        self.run_count.load(Ordering::Relaxed)
-    }
-
-    pub fn get_success_count(&self) -> u64 {
-        self.success_count.load(Ordering::Relaxed)
     }
 
     pub fn from_json_array(steps_json: &Value) -> Vec<Self> {
@@ -218,8 +188,6 @@ impl JsonLike for Step {
             "description": self.description,
             "step_type": self.step_type.as_str(),
             "step_content": self.step_content,
-            "success_count": self.success_count.load(Ordering::Relaxed),
-            "run_count": self.run_count.load(Ordering::Relaxed)
         })
     }
 
@@ -257,14 +225,17 @@ impl JsonLike for Step {
                     .and_then(|v| v.as_str())
                     .unwrap_or_default()
                     .to_string(),
-                description: obj
-                    .get("description")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                description: obj.get("description").and_then(|v| {
+                    if v.is_null() {
+                        None
+                    } else {
+                        Some(v.as_str().unwrap_or_default().to_string())
+                    }
+                }),
                 step_type: StepType::from_str(
                     obj.get("step_type")
                         .and_then(|v| v.as_str())
-                        .unwrap_or_default(),
+                        .unwrap_or("python"),
                 )
                 .unwrap_or(StepType::Python),
                 step_content: obj
@@ -272,30 +243,22 @@ impl JsonLike for Step {
                     .and_then(|v| v.as_str())
                     .unwrap_or_default()
                     .to_string(),
-                success_count: Arc::new(AtomicU64::new(
-                    obj.get("success_count")
-                        .and_then(|v| v.as_i64())
-                        .unwrap_or(0) as u64,
-                )),
-                run_count: Arc::new(AtomicU64::new(
-                    obj.get("run_count").and_then(|v| v.as_i64()).unwrap_or(0) as u64,
-                )),
             })
         } else {
-            Err(anyhow!("Expected JSON object"))
+            Err(anyhow!("Step::from_json - not a JSON object"))
         }
     }
 
     fn update_from_json(&mut self, obj: Value) -> Result<Vec<String>> {
         let mut updated_fields = Vec::new();
 
-        if let Some(obj_map) = obj.as_object() {
-            for (key, value) in obj_map {
+        if let Some(obj) = obj.as_object() {
+            for (key, value) in obj {
                 match key.as_str() {
                     "name" => {
-                        if let Some(new_name) = value.as_str() {
-                            if self.name != new_name {
-                                self.name = new_name.to_string();
+                        if let Some(s) = value.as_str() {
+                            if self.name != s {
+                                self.name = s.to_string();
                                 updated_fields.push(key.to_string());
                             }
                         }
@@ -306,76 +269,44 @@ impl JsonLike for Step {
                                 self.description = None;
                                 updated_fields.push(key.to_string());
                             }
-                        } else if let Some(new_desc) = value.as_str() {
+                        } else if let Some(s) = value.as_str() {
                             let current = self.description.as_deref().unwrap_or("");
-                            if current != new_desc {
-                                self.description = Some(new_desc.to_string());
+                            if current != s {
+                                self.description = Some(s.to_string());
                                 updated_fields.push(key.to_string());
                             }
                         }
                     }
                     "step_type" => {
-                        if let Some(type_str) = value.as_str() {
-                            match StepType::from_str(type_str) {
-                                Ok(new_type) => {
-                                    if self.step_type.as_str() != new_type.as_str() {
-                                        self.step_type = new_type;
-                                        updated_fields.push(key.to_string());
-                                    }
-                                }
-                                Err(e) => {
-                                    return Err(anyhow!("Invalid step type '{}': {}", type_str, e))
+                        if let Some(s) = value.as_str() {
+                            if let Ok(new_type) = StepType::from_str(s) {
+                                if self.step_type.as_str() != new_type.as_str() {
+                                    self.step_type = new_type;
+                                    updated_fields.push(key.to_string());
                                 }
                             }
                         }
                     }
                     "step_content" => {
-                        if let Some(new_content) = value.as_str() {
-                            if self.step_content != new_content {
-                                self.step_content = new_content.to_string();
-                                updated_fields.push(key.to_string());
-                            }
-                        }
-                    }
-                    "success_count" => {
-                        if let Some(count) = value.as_u64() {
-                            let current = self.success_count.load(Ordering::Relaxed);
-                            if current != count {
-                                self.success_count.store(count, Ordering::Relaxed);
-                                updated_fields.push(key.to_string());
-                            }
-                        }
-                    }
-                    "run_count" => {
-                        if let Some(count) = value.as_u64() {
-                            let current = self.run_count.load(Ordering::Relaxed);
-                            if current != count {
-                                self.run_count.store(count, Ordering::Relaxed);
+                        if let Some(s) = value.as_str() {
+                            if self.step_content != s {
+                                self.step_content = s.to_string();
                                 updated_fields.push(key.to_string());
                             }
                         }
                     }
                     // Skip fields that shouldn't be updated directly
                     "id" | "global_uuid" | "created_at" | "updated_at" => {
-                        // These fields are skipped intentionally
+                        // These are either ID fields or timestamp fields
+                        // Skip updating them via this method
                     }
-                    // Unknown fields
-                    _ => {
-                        // Optionally: log or warn about unknown fields
-                    }
+                    // If we don't recognize the field, just skip
+                    _ => {}
                 }
             }
-
-            // If any fields were updated, update the timestamp
-            if !updated_fields.is_empty() {
-                self.timestamps.update();
-                updated_fields.push("updated_at".to_string());
-            }
-
-            Ok(updated_fields)
-        } else {
-            Err(anyhow!("Expected JSON object"))
         }
+
+        Ok(updated_fields)
     }
 }
 
@@ -386,97 +317,131 @@ impl DatabaseItem for Step {
     }
 
     async fn try_db_create(&self, pool: &PgPool) -> Result<()> {
-        // Check if a step with the same UUID already exists
-        if crate::check_exists_by_uuid(pool, "steps", &self.identifiers.global_uuid).await? {
-            return Ok(());  // Step already exists, no need to create it again
-        }
+        let agent_id = if let Some(id) = self.identifiers.local_id {
+            id
+        } else {
+            return Err(anyhow!("Cannot create a Step without a local_id"));
+        };
 
-        sqlx::query(
+        let mut tx = pool.begin().await?;
+
+        // Get the next sequence_number for this step
+        let next_seq: i32 = sqlx::query_scalar(
+            r#"
+            SELECT COALESCE(MAX(sequence_number), -1) + 1
+            FROM steps
+            WHERE agent_id = $1
+            "#,
+        )
+        .bind(agent_id)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        // Create the step
+        let res = sqlx::query(
             r#"
             INSERT INTO steps (
-                global_uuid, name, description, step_type, step_content,
-                success_count, run_count, created_at, updated_at
+                global_uuid, agent_id, sequence_number, name, description,
+                step_type, step_content, created_at, updated_at
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             "#,
         )
         .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
+        .bind(agent_id)
+        .bind(next_seq)
         .bind(&self.name)
         .bind(&self.description)
         .bind(&self.step_type)
         .bind(&self.step_content)
-        .bind(self.success_count.load(Ordering::Relaxed) as i32)
-        .bind(self.run_count.load(Ordering::Relaxed) as i32)
         .bind(&self.timestamps.created)
         .bind(&self.timestamps.updated)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
 
-        Ok(())
+        tx.commit().await?;
+
+        if res.rows_affected() == 1 {
+            Ok(())
+        } else {
+            Err(anyhow!("Failed to create Step"))
+        }
     }
 
     async fn try_db_update(&self, pool: &PgPool) -> Result<()> {
-        sqlx::query(
+        let res = sqlx::query(
             r#"
             UPDATE steps
             SET name = $1,
                 description = $2,
                 step_type = $3,
                 step_content = $4,
-                success_count = $5,
-                run_count = $6,
-                updated_at = $7
-            WHERE global_uuid = $8
+                updated_at = $5
+            WHERE global_uuid = $6
             "#,
         )
         .bind(&self.name)
         .bind(&self.description)
         .bind(&self.step_type)
         .bind(&self.step_content)
-        .bind(self.success_count.load(Ordering::Relaxed) as i32)
-        .bind(self.run_count.load(Ordering::Relaxed) as i32)
         .bind(&self.timestamps.updated)
         .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
         .execute(pool)
         .await?;
 
-        Ok(())
+        if res.rows_affected() == 1 {
+            Ok(())
+        } else {
+            Err(anyhow!("Failed to update Step"))
+        }
     }
 
     async fn try_db_delete(&self, pool: &PgPool) -> Result<()> {
-        sqlx::query("DELETE FROM steps WHERE global_uuid = $1")
+        // Simply delete this Step by UUID
+        let res = sqlx::query("DELETE FROM steps WHERE global_uuid = $1")
             .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
             .execute(pool)
             .await?;
 
-        Ok(())
+        if res.rows_affected() == 1 {
+            Ok(())
+        } else {
+            Err(anyhow!("Failed to delete Step"))
+        }
     }
 
     async fn try_db_select_all(pool: &PgPool) -> Result<Vec<Self>> {
-        let rows = sqlx::query_as::<_, Step>(
-            r#"
-            SELECT * FROM steps
-            "#,
-        )
-        .fetch_all(pool)
-        .await?;
+        let steps = sqlx::query_as::<_, Self>("SELECT * FROM steps ORDER BY id")
+            .fetch_all(pool)
+            .await?;
 
-        Ok(rows)
+        Ok(steps)
     }
 
     async fn try_db_select_by_id(pool: &PgPool, id: &IdFields) -> Result<Option<Self>> {
-        let row = if let Some(local_id) = id.local_id {
-            sqlx::query_as::<_, Step>("SELECT * FROM steps WHERE id = $1")
+        // Try to find by global UUID
+        if !id.global_uuid.is_empty() {
+            let step = sqlx::query_as::<_, Self>("SELECT * FROM steps WHERE global_uuid = $1")
+                .bind(Uuid::parse_str(&id.global_uuid)?)
+                .fetch_optional(pool)
+                .await?;
+
+            if step.is_some() {
+                return Ok(step);
+            }
+        }
+
+        // Fall back to local ID if available and uuid not found
+        if let Some(local_id) = id.local_id {
+            let step = sqlx::query_as::<_, Self>("SELECT * FROM steps WHERE id = $1")
                 .bind(local_id)
                 .fetch_optional(pool)
-                .await?
-        } else {
-            sqlx::query_as::<_, Step>("SELECT * FROM steps WHERE global_uuid = $1")
-                .bind(&id.global_uuid)
-                .fetch_optional(pool)
-                .await?
-        };
+                .await?;
 
-        Ok(row)
+            return Ok(step);
+        }
+
+        // If we get here, neither UUID nor local ID matched
+        Ok(None)
     }
 }

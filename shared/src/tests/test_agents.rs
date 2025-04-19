@@ -4,7 +4,6 @@ use crate::{
     IdFields, TimestampFields,
 };
 use serde_json::json;
-use std::sync::atomic::Ordering;
 
 #[test]
 fn test_new_agent() {
@@ -90,10 +89,6 @@ fn test_agent_state_transitions() {
 fn test_completion_rate() {
     let agent = create_test_agent();
 
-    // Create agent with completion history
-    agent.completion_count.store(4, Ordering::Relaxed); // completed
-    agent.run_count.store(5, Ordering::Relaxed); // total runs
-
     // Start the agent - should transition to a running state
     let start_result = agent.start();
     if start_result.is_err() {
@@ -126,7 +121,6 @@ fn create_test_agent() -> Agent {
     let id_fields = IdFields::new();
     let timestamps = TimestampFields::new();
     let description = "Test Agent".to_string();
-    let accepted_rate = 0.8;
 
     // Create a simple step that adds 10 to the input value
     let step = Step::new(
@@ -134,9 +128,7 @@ fn create_test_agent() -> Agent {
         StepType::Python,
         "source['value'] += 10\nresult = source".to_string(),
         "Add 10".to_string(),
-        Some("Adds 10 to the input value".to_string()),
-        0,
-        0,
+        Some("Adds 10 to the input value".to_string())
     );
 
     let steps = vec![step];
@@ -145,9 +137,6 @@ fn create_test_agent() -> Agent {
         id_fields,
         timestamps,
         description,
-        accepted_rate,
-        steps,
-        0,
-        0,
+        steps
     )
 }
