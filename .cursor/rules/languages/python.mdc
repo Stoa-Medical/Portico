@@ -1,50 +1,27 @@
 ---
-description: "Rules for Python code quality, type safety, and best practices"
-globs:
-  - "**/*.py"
+description:
+globs: *.py
 alwaysApply: false
 ---
-// Python language rules
+# Python Specific Heuristics
 
-rule "Check for type annotations" {
-  pattern = /def [a-zA-Z0-9_]+\([^)]*\):/
-  not_pattern = /def [a-zA-Z0-9_]+\([^)]*\) -> [a-zA-Z0-9_]+:/
-  message = "Consider adding return type annotations to improve type safety"
-  severity = "warning"
-}
+# Imports and Dependencies
+- Prefer specific imports (`from module import member`) over whole module imports (`import module`) unless multiple members are needed from the module.
+- Automatically remove unused imports when editing code blocks.
+- Strongly prefer standard library modules (e.g., `pathlib`, `datetime`, `json`, `csv`, `collections`, `itertools`, `re`) over external packages for common tasks. Only suggest external packages if standard options are insufficient or explicitly requested.
 
-rule "Ensure proper exception handling" {
-  pattern = /except Exception:/
-  message = "Avoid catching generic exceptions; catch specific exception types instead"
-  severity = "warning"
-}
+# Idiomatic & Modern Python
+- Use list/dict/set comprehensions or generator expressions for concise sequence/mapping creation or transformation where readable.
+- Use f-strings for string formatting (assume Python 3.10+ unless context indicates otherwise).
+- Employ context managers (`with` statement) for reliable resource management, especially for file I/O (`with open(...)`) and locks.
+- Utilize built-in functions (`sum`, `map`, `filter`, `any`, `all`, etc.) effectively where they simplify code.
 
-rule "Check for docstrings" {
-  pattern = /def [a-zA-Z0-9_]+\([^)]*\):[^"""]*\n\s+[^"""]/
-  message = "Consider adding docstrings to functions for better documentation"
-  severity = "info"
-}
+# Code Structure & Clarity
+- Follow PEP 8 naming conventions (`snake_case` for variables/functions/methods, `PascalCase` for classes).
+- Add basic type hints (PEP 484) to function signatures (arguments and return value) for clarity, but keep them concise. Avoid overly complex generic types unless necessary.
+- Generate concise docstrings for new functions and classes (e.g., a single summary line), unless more detailed documentation is specifically requested.
+- When handling exceptions, catch specific exception types rather than using a bare `except:` or overly broad `except Exception:`.
 
-rule "Use f-strings instead of format" {
-  pattern = /\.format\(/
-  message = "Consider using f-strings instead of .format() for better readability"
-  severity = "info"
-}
-
-rule "Check for proper imports" {
-  pattern = /import \*/
-  message = "Avoid wildcard imports for better code clarity and avoiding namespace pollution"
-  severity = "warning"
-}
-
-rule "Use named tuples or dataclasses" {
-  pattern = /tuple\([^)]+\)/
-  message = "Consider using named tuples or dataclasses for better code clarity"
-  severity = "info"
-}
-
-rule "Check for list/dict comprehensions" {
-  pattern = /for [a-zA-Z0-9_]+ in [^:]+:[^:]+\.append\(/
-  message = "Consider using list comprehension for better readability and performance"
-  severity = "info"
-}
+# Boilerplate Reduction
+- Avoid redundant `self.` qualification if defining helper functions *within* a method where a local function suffices (use with caution, ensure clarity).
+- Avoid creating trivial classes when simple functions or data structures (like dictionaries or named tuples) are sufficient.

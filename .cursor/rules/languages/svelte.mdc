@@ -1,51 +1,30 @@
 ---
-description: "Rules for Svelte 5 components and syntax"
-globs:
-  - "**/*.svelte"
+description:
+globs: *.svelte
 alwaysApply: false
 ---
-// Svelte 5 specific rules
+# Svelte 5 Specific Heuristics (Runes)
 
-rule "Use Svelte 5 runes syntax" {
-  pattern = /const [a-zA-Z0-9_]+ = writable\([^)]*\)/
-  message = "In Svelte 5, use $state, $derived or $props instead of writable stores"
-  severity = "warning"
-}
+# Core Reactivity & State Management (Runes First)
+- **Prioritize Runes:** Use Svelte 5 Runes exclusively for reactivity in new components. Avoid Svelte 4 syntax (`let` for reactive state, `$:`, lifecycle functions like `onMount`) unless necessary for legacy compatibility.
+- **State Declaration:** Use `$state()` for all reactive local component state variables.
+- **Derived State:** Use `$derived()` for values computed reactively from `$state` or other `$derived` runes.
+- **Side Effects:** Use `$effect()` for side effects that need to react to changes in state (e.g., data fetching based on props/state, manual DOM manipulation, setting up/tearing down subscriptions).
+- **Effect Timing:** Prefer plain `$effect()` unless specific timing is needed (`$effect.pre()` for reading DOM before updates, `$effect.root()` for effects outside component lifecycle).
 
-rule "Prefer runes over reactive statements" {
-  pattern = /\$: [a-zA-Z0-9_]+ =/
-  message = "Consider using Svelte 5 runes ($state, $derived) instead of reactive statements"
-  severity = "info"
-}
+# Component Interface & Interaction
+- **Props:** Define component properties using `$props()`. Avoid `export let`.
+- **Bindable Props:** Use the `$bindable()` helper within `$props()` for properties intended for two-way binding (`bind:propName`).
+- **Bindings:** Use the `bind:property` directive for two-way data binding, typically linking parent state to child `$bindable` props or binding directly to `$state` variables on HTML elements (`bind:value={$state(..)}`).
+- **Event Handling:** Define event handler logic as functions within the `<script>` block. Keep inline handlers (`onclick={() => ...}`) concise, primarily for calling script functions or simple state updates.
 
-rule "Use Svelte 5 component props syntax" {
-  pattern = /<script[^>]*>\s*export let [a-zA-Z0-9_]+:/
-  message = "Consider using the new Svelte 5 $props() syntax instead of export let"
-  severity = "info"
-}
+# Markup and Structure
+- **Control Flow:** Use `{#each ...}` blocks for loops (use keys like `{#each items as item (item.id)}` when list identity matters) and `{#if ...}`, `{:else if ...}`, `{:else}` blocks for conditional rendering.
+- **Simplicity in Template:** Keep expressions within the template (`{...}`) simple. Move complex logic or multi-step computations into `$derived` runes or helper functions in the `<script>`.
+- **Componentization:** Break down complex UIs into smaller, focused, reusable components.
+- **Stores (`svelte/store`):** Reserve Svelte stores (`writable`, `readable`, `derived`) primarily for *cross-component* state that is difficult or verbose to manage solely via props and `$bindable` runes. Prefer runes for local component state.
 
-rule "Check SvelteKit routes structure" {
-  pattern = /\.\/routes\/\+page\.(svelte|ts|js)/
-  scope = "import"
-  message = "Ensure you're following SvelteKit's routing conventions for Svelte 5"
-  severity = "warning"
-}
-
-rule "Check for correct JSX-style bind syntax" {
-  pattern = /bind:[a-zA-Z0-9_]+={/
-  message = "In Svelte 5, consider using bind:prop instead of bind:prop={prop} when variable name matches"
-  severity = "info"
-}
-
-rule "Check for named slot usage" {
-  pattern = /<slot name=/
-  not_pattern = /<slot name=["'][a-zA-Z0-9_]+["']/
-  message = "Ensure named slots follow Svelte 5 conventions"
-  severity = "warning"
-}
-
-rule "Check for Svelte transitions" {
-  pattern = /(in|out|transition):[a-zA-Z0-9_]+/
-  message = "Verify transitions are compatible with Svelte 5"
-  severity = "info"
-}
+# General Style & Snippets
+- Generate concise code, avoiding unnecessary wrappers or abstractions.
+- When generating snippets, focus only on the requested functionality using Runes.
+- (Optional: TypeScript) If using TypeScript, apply types correctly with runes (e.g., `$state<string>('')`, `$props<{ name: string }>()`).

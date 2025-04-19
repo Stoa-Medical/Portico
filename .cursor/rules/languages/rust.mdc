@@ -1,59 +1,36 @@
 ---
-description: "Rules for Rust code quality, memory safety, error handling, and idiomatic patterns"
-globs:
-  - "**/*.rs"
+description:
+globs: *.rs
 alwaysApply: false
 ---
-// Rust language rules
+# Rust Specific Heuristics
 
-rule "Check for proper error handling" {
-  pattern = /Result<[^>]*>/
-  not_pattern = /anyhow::Result|thiserror|Error/
-  message = "Consider using a proper error handling crate like anyhow or thiserror"
-  severity = "warning"
-}
+# Dependencies & Standard Library
+- Strongly prefer using items from the Rust standard library (`std`, `core`, `alloc`) over external crates whenever possible (e.g., use `std::fs`, `std::io`, `std::collections`, `std::sync`, `std::error::Error`, `std::path::{Path, PathBuf}`).
+- Do *not* add new external crate dependencies to `Cargo.toml` unless explicitly requested by the user or if the required functionality is clearly complex and absent from `std`.
 
-rule "Ensure proper lifetime annotations" {
-  pattern = /fn [a-zA-Z0-9_]+<.*>\(/
-  not_pattern = /fn [a-zA-Z0-9_]+<.*'[a-z].*>\(/
-  message = "Check if lifetime annotations are needed for references in generic functions"
-  severity = "info"
-}
+# Error Handling & Safety
+- Use `Result<T, E>` for functions that can fail recoverably, using crates like `anyhow` if appropriate and already present or requested.
+- Avoid `panic!` for expected error conditions.
+- Implement the `std::error::Error` trait for custom error types, possibly using crates like `thiserror` if appropriate *and already present or requested*.
+- Utilize the `?` operator liberally for propagating errors within functions returning `Result`.
+- Strictly avoid `.unwrap()` or `.expect()` on `Option` and `Result` types in most cases. Prefer explicit handling using `match`, `if let`, `let else`, `map`, `ok_or`, `ok_or_else`, `unwrap_or`, `unwrap_or_default`, etc. Use `.expect("clear reason why this cannot fail")` only when the condition is *absolutely guaranteed* by program logic/invariants.
 
-rule "Check for unsafe blocks" {
-  pattern = /unsafe \{/
-  message = "Unsafe code detected - ensure it's properly documented and necessary"
-  severity = "warning"
-}
+# Ownership, Borrowing & Lifetimes
+- Write code that clearly adheres to Rust's ownership and borrowing rules.
+- Prefer immutable borrows (`&T`) by default. Use mutable borrows (`&mut T`) only when mutation is necessary.
+- Avoid unnecessary cloning (`.clone()`). Pass data by reference (`&` or `&mut`) when ownership transfer is not required.
+- Let the compiler infer lifetimes where possible. Only specify explicit lifetimes when disambiguation is necessary.
 
-rule "Use of unwrap" {
-  pattern = /\.unwrap\(\)/
-  message = "Avoid using .unwrap() in production code; handle errors explicitly"
-  severity = "warning"
-}
+# Idiomatic Rust & Conciseness
+- Leverage iterators and their adapter methods (`.map()`, `.filter()`, `.fold()`, `.collect()`, `.find()`, etc.) for data processing instead of manual `for` or `while` loops when it improves conciseness and clarity.
+- Implement common standard library traits (`Debug`, `Display`, `Clone`, `Copy` (if applicable), `Default`, `From`, `Into`, `PartialEq`, `Eq`, `Ord`, `PartialOrd`, `Hash`, `Send`, `Sync`) where they make sense for custom types.
+- Use standard library macros (`println!`, `eprintln!`, `format!`, `vec!`, `dbg!`) appropriately.
+- Use `Path`/`PathBuf` for filesystem paths instead of `String` or `&str`.
+- Allow type inference (`let x = ...;`) where the type is clear from the context, avoiding redundant annotations.
 
-rule "Check for proper documentation" {
-  pattern = /pub (struct|enum|fn|trait) [a-zA-Z0-9_]+/
-  not_pattern = /\/\/\/|\s*\/\*\*/
-  message = "Consider adding documentation comments to public items"
-  severity = "info"
-}
-
-rule "Check for proper logging" {
-  pattern = /(println!|eprintln!)/
-  message = "Consider using a logging framework instead of println!/eprintln!"
-  severity = "warning"
-}
-
-rule "Check for derive usage" {
-  pattern = /pub (struct|enum) [a-zA-Z0-9_]+/
-  not_pattern = /#\[derive\(/
-  message = "Consider adding derives for common traits like Debug, Clone, etc."
-  severity = "info"
-}
-
-rule "Use clippy annotations intentionally" {
-  pattern = /#\[allow\(clippy::/
-  message = "Ensure clippy warnings are allowed intentionally and with comments"
-  severity = "info"
-}
+# Code Quality & Structure
+- Generate code that adheres to standard `rustfmt` formatting.
+- Follow Rust naming conventions (`snake_case` for variables, functions, modules; `PascalCase` for types, traits, enums, variants).
+- Use modules (`mod`) to organize code logically. Apply visibility modifiers (`pub`, `pub(crate)`, etc.) judiciously – avoid making everything `pub`.
+- Keep functions small and focused on a single responsibility.
