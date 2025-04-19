@@ -1,6 +1,7 @@
 ---
-description:
+description: "Rules for shared Rust code that might be used across components"
 globs:
+  - "shared/*.rs"
 alwaysApply: false
 ---
 // Shared Rust code rules

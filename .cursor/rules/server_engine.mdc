@@ -1,6 +1,7 @@
 ---
-description:
+description: "Rules for the Rust engine component in /server/engine"
 globs:
+  - "server/engine/*.rs"
 alwaysApply: false
 ---
 // Rust engine rules

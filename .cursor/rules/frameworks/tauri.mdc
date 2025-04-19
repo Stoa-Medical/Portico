@@ -1,6 +1,16 @@
 ---
-description:
+description: "Rules for Tauri 2.0 application code, ensuring proper API usage, permissions, and compatibility"
 globs:
+  - "app/**/*.ts"
+  - "app/**/*.js"
+  - "app/**/*.tsx"
+  - "app/**/*.jsx"
+  - "!app/**/node_modules/**"
+  - "!app/**/dist/**"
+  - "!app/**/build/**"
+  - "src-tauri/**/*.rs"
+  - "src-tauri/src/**/*.rs"
+  - "src-tauri/Cargo.toml"
 alwaysApply: false
 ---
 // Tauri 2.0 specific rules

@@ -1,6 +1,7 @@
 ---
-description:
+description: "Rules for Rust code quality, memory safety, error handling, and idiomatic patterns"
 globs:
+  - "**/*.rs"
 alwaysApply: false
 ---
 // Rust language rules

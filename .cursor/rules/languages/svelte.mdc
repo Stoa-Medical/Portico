@@ -1,6 +1,7 @@
 ---
-description:
+description: "Rules for Svelte 5 components and syntax"
 globs:
+  - "**/*.svelte"
 alwaysApply: false
 ---
 // Svelte 5 specific rules

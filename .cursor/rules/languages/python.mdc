@@ -1,3 +1,9 @@
+---
+description: "Rules for Python code quality, type safety, and best practices"
+globs:
+  - "**/*.py"
+alwaysApply: false
+---
 // Python language rules
 
 rule "Check for type annotations" {
