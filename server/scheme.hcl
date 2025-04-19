@@ -110,13 +110,9 @@ table "signals" {
         null = false
     }
 
-    // check "valid_signal_type_format" {
-    //     expr = "signal_type ~ '^[a-z]+_[a-z-]+$'"
-    // }
-
     column "signal_status" {
         type = enum.running_status
-        null = false
+        null = true
     }
 
     column "initial_data" {
@@ -129,10 +125,6 @@ table "signals" {
         null = true
     }
 
-    column error_message {
-        type = sql("text")
-        null = true
-    }
 }
 
 table "agents" {
@@ -178,14 +170,6 @@ table "agents" {
     }
 
     # === Custom (table-specific) ===
-    column "name" {
-        type = sql("varchar(255)")
-        null = true
-    }
-    column "type" {
-        type = sql("varchar(255)")
-        null = true
-    }
     column "description" {
         type = sql("text")
         null = false
@@ -263,10 +247,6 @@ table "steps" {
     }
 
     # === Custom (table-specific) ===
-    column "name" {
-        type = sql("varchar(255)")
-        null = true
-    }
     column "description" {
         type = sql("varchar(255)")
         null = false
@@ -378,7 +358,7 @@ enum "step_type" {
 enum "running_status" {
     schema = schema.public
     values = [
-        "waiting",  # This means it is on the queue
+        "waiting",  # This means it is on the queue (not started)
         "running",  # This means it is actively being worked on (in the thread)
         "completed",  # This means it was seen-through to completion (even if resulting data is error, workflow completed)
         "cancelled"   # This means it was intentionally cancelled (e.g. workflow error)

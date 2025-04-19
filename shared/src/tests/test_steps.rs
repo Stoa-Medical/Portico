@@ -11,7 +11,6 @@ fn create_test_step(step_type: StepType) -> Step {
         id_fields,
         step_type,
         content,
-        "Test Step".to_string(),
         Some("A test step that adds 10 to the input value".to_string())
     )
 }

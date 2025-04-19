@@ -59,7 +59,6 @@ impl<'q> sqlx::Encode<'q, Postgres> for StepType {
 pub struct Step {
     pub identifiers: IdFields,
     pub timestamps: TimestampFields,
-    pub name: String,
     pub description: Option<String>,
     pub step_type: StepType,
     pub step_content: String,
@@ -77,7 +76,6 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Step {
                 updated: row.try_get("updated_at")?,
             },
             // agent_owner_uuid: row.try_get("agent_id")?,
-            name: row.try_get("name")?,
             description: row.try_get("description")?,
             step_type: row.try_get("step_type")?,
             step_content: row.try_get("step_content")?,
@@ -90,7 +88,6 @@ impl Step {
         identifiers: IdFields,
         step_type: StepType,
         step_content: String,
-        name: String,
         description: Option<String>,
     ) -> Self {
         Self {
@@ -98,7 +95,6 @@ impl Step {
             timestamps: TimestampFields::new(),
             step_type,
             step_content,
-            name,
             description,
         }
     }
@@ -184,7 +180,6 @@ impl JsonLike for Step {
             "global_uuid": self.identifiers.global_uuid,
             "created_at": self.timestamps.created.format("%Y-%m-%d %H:%M:%S").to_string(),
             "updated_at": self.timestamps.updated.format("%Y-%m-%d %H:%M:%S").to_string(),
-            "name": self.name,
             "description": self.description,
             "step_type": self.step_type.as_str(),
             "step_content": self.step_content,
@@ -220,11 +215,6 @@ impl JsonLike for Step {
                     .unwrap_or_default()
                     .with_timezone(&chrono::Utc),
                 },
-                name: obj
-                    .get("name")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default()
-                    .to_string(),
                 description: obj.get("description").and_then(|v| {
                     if v.is_null() {
                         None
@@ -255,14 +245,6 @@ impl JsonLike for Step {
         if let Some(obj) = obj.as_object() {
             for (key, value) in obj {
                 match key.as_str() {
-                    "name" => {
-                        if let Some(s) = value.as_str() {
-                            if self.name != s {
-                                self.name = s.to_string();
-                                updated_fields.push(key.to_string());
-                            }
-                        }
-                    }
                     "description" => {
                         if value.is_null() {
                             if self.description.is_some() {
@@ -350,7 +332,6 @@ impl DatabaseItem for Step {
         .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
         .bind(agent_id)
         .bind(next_seq)
-        .bind(&self.name)
         .bind(&self.description)
         .bind(&self.step_type)
         .bind(&self.step_content)
@@ -372,15 +353,13 @@ impl DatabaseItem for Step {
         let res = sqlx::query(
             r#"
             UPDATE steps
-            SET name = $1,
-                description = $2,
-                step_type = $3,
-                step_content = $4,
-                updated_at = $5
-            WHERE global_uuid = $6
+            SET description = $1,
+                step_type = $2,
+                step_content = $3,
+                updated_at = $4
+            WHERE global_uuid = $5
             "#,
         )
-        .bind(&self.name)
         .bind(&self.description)
         .bind(&self.step_type)
         .bind(&self.step_content)

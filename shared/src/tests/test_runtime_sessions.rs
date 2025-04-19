@@ -41,7 +41,6 @@ fn test_session_with_steps() {
         id_fields,
         StepType::Python,
         "source['value'] += 10\nresult = source".to_string(),
-        "Test Step".to_string(),
         Some("A test step".to_string())
     );
 

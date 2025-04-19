@@ -193,7 +193,6 @@ pub fn steps_json_agg_sql(parent_table: &str, parent_id_column: &str) -> String 
                     'global_uuid', s.global_uuid,
                     'created_at', s.created_at,
                     'updated_at', s.updated_at,
-                    'name', s.name,
                     'description', s.description,
                     'step_type', s.step_type,
                     'step_content', s.step_content

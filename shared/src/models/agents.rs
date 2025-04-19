@@ -187,7 +187,6 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
     //             'created_at', s.created_at,
     //             'updated_at', s.updated_at,
     //             'agent_id', s.agent_id,
-    //             'name', s.name,
     //             'description', s.description,
     //             'step_type', s.step_type,
     //             'step_content', s.step_content
@@ -428,16 +427,15 @@ impl DatabaseItem for Agent {
             sqlx::query(
                 r#"
                 INSERT INTO steps (
-                    global_uuid, agent_id, sequence_number, name, description,
+                    global_uuid, agent_id, sequence_number, description,
                     step_type, step_content, created_at, updated_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 "#,
             )
             .bind(&step.identifiers.global_uuid)
             .bind(agent_id)
             .bind(idx as i32)
-            .bind(&step.name)
             .bind(&step.description)
             .bind(&step.step_type)
             .bind(&step.step_content)
