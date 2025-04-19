@@ -1,0 +1,49 @@
+---
+description:
+globs: *.svelte
+alwaysApply: false
+---
+// Tauri 2.0 app with Svelte 5 and SvelteKit rules
+
+rule "Use Svelte 5 syntax for stores" {
+  pattern = /const [a-zA-Z0-9_]+ = writable\([^)]*\)/
+  message = "In Svelte 5, consider using the new model-based syntax instead of writable stores"
+  severity = "warning"
+}
+
+rule "Check for Tauri 2.0 API usage" {
+  pattern = /import \{ [^}]* \} from '@tauri-apps\/api/
+  message = "Ensure you're using Tauri 2.0 compatible imports (API has changed from 1.x)"
+  severity = "error"
+}
+
+rule "Prefer runes over reactive statements" {
+  pattern = /\$: [a-zA-Z0-9_]+ =/
+  message = "Consider using Svelte 5 runes ($state, $derived, etc.) instead of reactive statements"
+  severity = "info"
+}
+
+rule "Check SvelteKit routes structure" {
+  pattern = /\.\/routes\/\+page\.(svelte|ts|js)/
+  scope = "import"
+  message = "Ensure you're following SvelteKit's routing conventions for Svelte 5"
+  severity = "warning"
+}
+
+rule "Check for Tauri command declarations" {
+  pattern = /@command\(/
+  message = "Ensure Tauri commands are properly declared with appropriate permissions"
+  severity = "warning"
+}
+
+rule "Use Svelte 5 component syntax" {
+  pattern = /<script lang="ts">\s*export let [a-zA-Z0-9_]+:/
+  message = "Consider using the new Svelte 5 props syntax with defineProps()"
+  severity = "info"
+}
+
+rule "Check for proper Tauri window events" {
+  pattern = /window\.(listen|once)\(/
+  message = "Ensure you're using the correct Tauri 2.0 window event API"
+  severity = "warning"
+}

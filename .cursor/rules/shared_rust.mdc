@@ -1,0 +1,57 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+// Shared Rust code rules
+
+rule "Ensure serializable types" {
+  pattern = /pub struct [a-zA-Z0-9_]+/
+  not_pattern = /#\[derive\(Serialize, Deserialize\)\]/
+  message = "Consider adding Serialize/Deserialize for types that might be shared between components"
+  severity = "warning"
+}
+
+rule "Check for proper Clone implementations" {
+  pattern = /pub struct [a-zA-Z0-9_]+/
+  not_pattern = /#\[derive\([^)]*Clone[^)]*\)\]/
+  message = "Consider deriving Clone for shared types to improve usability"
+  severity = "info"
+}
+
+rule "Use strong typing for IDs" {
+  pattern = /: (u32|u64|i32|i64|String) \/\/ .*id/i
+  message = "Consider using newtype pattern for IDs to improve type safety"
+  severity = "info"
+}
+
+rule "Ensure public API is documented" {
+  pattern = /pub (fn|struct|enum|trait|type) [a-zA-Z0-9_]+/
+  not_pattern = /\/\/\/|\s*\/\*\*/
+  message = "Public API in shared code should be well documented"
+  severity = "warning"
+}
+
+rule "Check for FFI safety" {
+  pattern = /#\[repr\(C\)\]/
+  message = "Ensure FFI-safe types are properly designed and documented"
+  severity = "warning"
+}
+
+rule "Use appropriate visibility" {
+  pattern = /pub\(crate\) /
+  message = "Good use of restricted visibility - verify this is the intended scope"
+  severity = "info"
+}
+
+rule "Check cross-platform compatibility" {
+  pattern = /#\[cfg\(/
+  message = "Ensure conditional compilation is properly handled for cross-platform compatibility"
+  severity = "info"
+}
+
+rule "Optimize shared data structures" {
+  pattern = /pub struct [a-zA-Z0-9_]+<.*>/
+  message = "Review generic shared data structures for performance implications"
+  severity = "info"
+}

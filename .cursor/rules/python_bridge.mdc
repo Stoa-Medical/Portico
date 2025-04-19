@@ -1,0 +1,49 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+// Python bridge rules
+
+rule "Check for type annotations" {
+  pattern = /def [a-zA-Z0-9_]+\([^)]*\):/
+  not_pattern = /def [a-zA-Z0-9_]+\([^)]*\) -> [a-zA-Z0-9_]+:/
+  message = "Consider adding return type annotations to improve type safety"
+  severity = "warning"
+}
+
+rule "Ensure proper exception handling" {
+  pattern = /except Exception:/
+  message = "Avoid catching generic exceptions; catch specific exception types instead"
+  severity = "warning"
+}
+
+rule "Check for docstrings" {
+  pattern = /def [a-zA-Z0-9_]+\([^)]*\):[^"""]*\n\s+[^"""]/
+  message = "Consider adding docstrings to functions for better documentation"
+  severity = "info"
+}
+
+rule "Use f-strings instead of format" {
+  pattern = /\.format\(/
+  message = "Consider using f-strings instead of .format() for better readability"
+  severity = "info"
+}
+
+rule "Check for proper imports" {
+  pattern = /import \*/
+  message = "Avoid wildcard imports for better code clarity and avoiding namespace pollution"
+  severity = "warning"
+}
+
+rule "Ensure thread safety" {
+  pattern = /threading\./
+  message = "Ensure thread safety when using threading in bridge communication"
+  severity = "warning"
+}
+
+rule "Check bridge communication patterns" {
+  pattern = /(json\.dumps|json\.loads)/
+  message = "Verify JSON serialization/deserialization for bridge communication"
+  severity = "info"
+}

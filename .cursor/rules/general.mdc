@@ -1,0 +1,54 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+// General rules for the entire codebase
+
+rule "Check for TODO comments" {
+  pattern = /TODO|FIXME/
+  message = "Unresolved TODO or FIXME comment found"
+  severity = "info"
+}
+
+rule "Ensure file length is manageable" {
+  filesize_max = 1000
+  message = "File is very large, consider breaking it down into smaller modules"
+  severity = "warning"
+}
+
+rule "Ensure consistent line endings" {
+  pattern = /\r\n/
+  message = "Mixed line endings detected (CRLF), consider using LF consistently"
+  severity = "warning"
+}
+
+rule "Check for trailing whitespace" {
+  pattern = /[ \t]+$/
+  message = "Trailing whitespace detected"
+  severity = "info"
+}
+
+rule "Ensure files end with newline" {
+  pattern = /[^\n]$/
+  message = "File should end with a newline"
+  severity = "info"
+}
+
+rule "Check for debugging print statements" {
+  pattern = /(console\.log|println!|print|dbg!)/
+  message = "Debug print statement detected, consider removing before production"
+  severity = "warning"
+}
+
+rule "Check for hardcoded credentials" {
+  pattern = /(password|api[_]?key|secret|token)\s*[:=]\s*['"][^'"]+['"]|const\s+(PASSWORD|API[_]?KEY|SECRET|TOKEN)\s*=\s*['"][^'"]+['"]|\.env/i
+  message = "Possible hardcoded credential detected, consider using environment variables"
+  severity = "error"
+}
+
+rule "Enforce maximum line length" {
+  line_length_max = 100
+  message = "Line exceeds maximum length of 100 characters"
+  severity = "warning"
+}
