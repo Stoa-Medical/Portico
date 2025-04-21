@@ -18,6 +18,14 @@
     defaultHighlightStyle,
   } from "@codemirror/language";
 
+  const defaultPythonTemplate = `# Write your custom Python code below.
+# - Use the \`source\` dictionary to access data from previous steps: source["variable_name"]
+# - Your function must return a dictionary with the output data for the next step.
+#
+def executeScript(source):
+    return source;
+`;
+
   export let step;
   export let stepTypes = ["prompt", "python"];
   export let agents = [];
@@ -168,11 +176,21 @@
     };
   });
 
-  $: if (step.step_type === "python" && editorElement && !editorView) {
-    initCodeEditor();
-  } else if (step.step_type !== "python" && editorView) {
+  let prevStepType = step.step_type;
+
+  $: if (step.step_type === "python") {
+    console.log(step.step_type, prevStepType);
+    if (!step.step_content?.trim() && step.step_type !== prevStepType) {
+      step.step_content = defaultPythonTemplate;
+    }
+    if (editorElement && !editorView) {
+      initCodeEditor();
+    }
+    prevStepType = step.step_type;
+  } else if (editorView) {
     editorView.destroy();
     editorView = null;
+    prevStepType = step.step_type;
   }
 </script>
 
