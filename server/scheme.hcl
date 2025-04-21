@@ -106,7 +106,7 @@ table "signals" {
     // NOTE: This should match the regex below, please design accordingly
     //   regex: ^[a-z]+_[a-z-]+$
     column "signal_type" {
-        type = sql("varchar(255)")
+        type = sql("text")
         null = false
     }
 
@@ -188,11 +188,11 @@ table "agents" {
         null = false
     }
     column "agent_name" {
-        type = sql("varchar(255)")
+        type = sql("text")
         null = true
     }
     column "agent_type" {
-        type = sql("varchar(255)")
+        type = sql("text")
         null = true
     }
 }
@@ -268,7 +268,7 @@ table "steps" {
         null = true
     }
     column "description" {
-        type = sql("varchar(255)")
+        type = sql("text")
         null = false
         default = ""
     }
