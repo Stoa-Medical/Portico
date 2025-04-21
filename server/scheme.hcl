@@ -187,6 +187,14 @@ table "agents" {
         type = enum.agent_state
         null = false
     }
+    column "agent_name" {
+        type = sql("varchar(255)")
+        null = true
+    }
+    column "agent_type" {
+        type = sql("varchar(255)")
+        null = true
+    }
 }
 
 table "steps" {
