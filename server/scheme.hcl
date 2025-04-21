@@ -180,8 +180,7 @@ table "agents" {
     }
     column "description" {
         type = sql("text")
-        null = false
-        default = ""
+        null = true
     }
     column "agent_state" {
         type = enum.agent_state
@@ -269,8 +268,7 @@ table "steps" {
     }
     column "description" {
         type = sql("text")
-        null = false
-        default = ""
+        null = true
     }
     column "step_type" {
         type = enum.step_type
