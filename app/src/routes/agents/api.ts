@@ -21,7 +21,7 @@ export type Agent = {
   // capabilities: string[];
   // isActive: boolean;
   // model: string;
-  // createdAt: string;
+  // created_at: string;
 };
 
 export type Step = {
@@ -30,7 +30,7 @@ export type Step = {
   name: string;
   description?: string;
   step_content: string;
-  step_type: "Python" | "Prompt" | string;
+  step_type: "python" | "prompt" | string;
 };
 
 export type RuntimeSession = {
@@ -54,96 +54,6 @@ export type UpdateStepPayload = Partial<Step> & {
   agent_id: number;
 };
 export type UpdateAgentPayload = Partial<Agent> & { id: number };
-
-const defaultPythonContent = `import pandas as pd
-import matplotlib.pyplot as plt
-
-# Load the data
-def process_data(file_path):
-    df = pd.read_csv(file_path)
-
-    # Clean the data
-    df = df.dropna()
-
-    # Perform analysis
-    summary = df.describe()
-
-    # Create visualization
-    plt.figure(figsize=(10, 6))
-    df.plot(kind='bar')
-    plt.title('Data Analysis')
-    plt.savefig('analysis_result.png')
-
-    return summary
-
-# Main function
-if __name__ == "__main__":
-    result = process_data('data.csv')
-    print(result)`;
-
-let currentAgentSteps: Step[] = [
-  {
-    id: 1,
-    agent_id: 1,
-    name: "Data Collection",
-    step_type: "Python",
-    // lastEdited: "2 hours ago",
-    step_content: defaultPythonContent,
-  },
-  {
-    id: 2,
-    agent_id: 1,
-    name: "Text Analysis",
-    step_type: "Prompt",
-    // lastEdited: "1 day ago",
-    step_content: `You are an AI assistant that helps with data analysis.
-Please analyze the following data and provide insights:
-{{data}}
-
-Focus on trends, anomalies, and potential actionable insights.`,
-  },
-  {
-    id: 3,
-    agent_id: 1,
-    name: "Data Visualization",
-    step_type: "Python",
-    // lastEdited: "3 days ago",
-    step_content: defaultPythonContent,
-  },
-];
-
-function generateCompletedSessionsForAgent(
-  agentId: number,
-  count: number,
-): RuntimeSession[] {
-  return Array.from({ length: count }, (_, i) => {
-    const stepCount = currentAgentSteps.filter(
-      (step) => step.agent_id === agentId,
-    ).length;
-    return {
-      id: agentId * 100 + i + 1,
-      globalUuid: crypto.randomUUID(),
-      requestedByAgentId: agentId,
-      createdTimestamp: new Date().toISOString(),
-      lastUpdatedTimestamp: new Date().toISOString(),
-      runtimeSessionStatus: "completed",
-      initialData: {
-        input: `Sample input for Agent ${agentId}, Session ${i + 1}`,
-      },
-      latestStepIdx: stepCount,
-      latestResult: {
-        summary: `Completed ${stepCount} steps successfully.`,
-        output: `Result data for Agent ${agentId}, Session ${i + 1}`,
-      },
-    };
-  });
-}
-
-let currentRuntimeSessions: RuntimeSession[] = [
-  ...generateCompletedSessionsForAgent(1, 5),
-  ...generateCompletedSessionsForAgent(2, 5),
-  ...generateCompletedSessionsForAgent(3, 5),
-];
 
 export const getAgents = async (): Promise<Agent[]> => {
   const { data, error } = await supabase.from("agents").select("*");
@@ -243,7 +153,7 @@ export const saveStep = async (step: Step): Promise<Step[]> => {
           ...rest,
           sequence_number: nextSequenceNumber,
         }
-      : step;
+      : { step, sequence_number: nextSequenceNumber };
 
   const { error: insertError } = await supabase
     .from("steps")

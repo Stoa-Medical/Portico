@@ -28,7 +28,6 @@
     { value: "7d", name: "Last 7 days" },
     { value: "30d", name: "Last 30 days" },
     { value: "90d", name: "Last 90 days" },
-    { value: "all", name: "All time" },
   ];
 
   let selectedTimePeriod = "30d";
@@ -92,61 +91,65 @@
     },
   ];
 
-  // Mock data for charts
-  let successRateChartData;
-  let executionTimeChartData;
-  let usageChartData;
-  let errorDistributionData;
-
   // Chart rendering functions
   function renderSuccessRateChart() {
-    // In a real app, this would use a charting library like Chart.js
-    // For now, we'll just create a mock chart element
     const chartElement = document.getElementById("success-rate-chart");
-    if (chartElement) {
-      chartElement.innerHTML = `
-        <div class="flex items-end h-40 gap-2">
-          <div class="bg-green-500 w-10 h-[92%] rounded-t-md relative">
-            <span class="absolute -top-6 left-0 text-xs">92%</span>
+    if (!chartElement) return;
+
+    const agents = [
+      { name: "Agent Smith", percent: 92, color: "bg-green-500" },
+      { name: "Agent Johnson", percent: 78, color: "bg-yellow-500" },
+      { name: "Agent Brown", percent: 95, color: "bg-green-600" },
+    ];
+
+    chartElement.innerHTML = `
+    <div class="flex justify-around items-end h-48 w-full">
+      ${agents
+        .map(
+          (a) => `
+        <div class="flex flex-col items-center w-1/4">
+          <div class="relative h-full flex items-end">
+            <div class="${a.color} w-10 rounded-t-md transition-all duration-300"
+                 style="height: ${a.percent}%; min-height: 2rem;">
+              <span class="absolute -top-5 left-1/2 -translate-x-1/2 text-xs text-white">${a.percent}%</span>
+            </div>
           </div>
-          <div class="bg-yellow-500 w-10 h-[78%] rounded-t-md relative">
-            <span class="absolute -top-6 left-0 text-xs">78%</span>
-          </div>
-          <div class="bg-green-600 w-10 h-[95%] rounded-t-md relative">
-            <span class="absolute -top-6 left-0 text-xs">95%</span>
-          </div>
-        </div>
-        <div class="flex justify-between mt-2 text-xs text-gray-500">
-          <div>Agent Smith</div>
-          <div>Agent Johnson</div>
-          <div>Agent Brown</div>
-        </div>
-      `;
-    }
+          <div class="text-xs mt-2 text-center text-gray-400">${a.name}</div>
+        </div>`,
+        )
+        .join("")}
+    </div>
+  `;
   }
 
   function renderExecutionTimeChart() {
     const chartElement = document.getElementById("execution-time-chart");
-    if (chartElement) {
-      chartElement.innerHTML = `
-        <div class="flex items-end h-40 gap-2">
-          <div class="bg-blue-500 w-10 h-[60%] rounded-t-md relative">
-            <span class="absolute -top-6 left-0 text-xs">1.2s</span>
+    if (!chartElement) return;
+
+    const agents = [
+      { name: "Agent Smith", value: "1.2s", height: 60 },
+      { name: "Agent Johnson", value: "2.5s", height: 80 },
+      { name: "Agent Brown", value: "0.8s", height: 40 },
+    ];
+
+    chartElement.innerHTML = `
+    <div class="flex justify-around items-end h-48 w-full">
+      ${agents
+        .map(
+          (a) => `
+        <div class="flex flex-col items-center w-1/4">
+          <div class="relative h-full flex items-end">
+            <div class="bg-blue-500 w-10 rounded-t-md transition-all duration-300"
+                 style="height: ${a.height}%; min-height: 2rem;">
+              <span class="absolute -top-5 left-1/2 -translate-x-1/2 text-xs text-white">${a.value}</span>
+            </div>
           </div>
-          <div class="bg-blue-500 w-10 h-[80%] rounded-t-md relative">
-            <span class="absolute -top-6 left-0 text-xs">2.5s</span>
-          </div>
-          <div class="bg-blue-500 w-10 h-[40%] rounded-t-md relative">
-            <span class="absolute -top-6 left-0 text-xs">0.8s</span>
-          </div>
-        </div>
-        <div class="flex justify-between mt-2 text-xs text-gray-500">
-          <div>Agent Smith</div>
-          <div>Agent Johnson</div>
-          <div>Agent Brown</div>
-        </div>
-      `;
-    }
+          <div class="text-xs mt-2 text-center text-gray-400">${a.name}</div>
+        </div>`,
+        )
+        .join("")}
+    </div>
+  `;
   }
 
   function renderUsageChart() {
@@ -275,7 +278,7 @@
 
   <!-- Charts Section -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-    <Card>
+    <Card class="max-w-full">
       <div class="p-4">
         <div class="flex justify-between items-center mb-4">
           <Heading tag="h3" class="text-lg font-semibold"
@@ -287,7 +290,7 @@
       </div>
     </Card>
 
-    <Card>
+    <Card class="max-w-full">
       <div class="p-4">
         <div class="flex justify-between items-center mb-4">
           <Heading tag="h3" class="text-lg font-semibold"
@@ -299,7 +302,7 @@
       </div>
     </Card>
 
-    <Card>
+    <Card class="max-w-full">
       <div class="p-4">
         <div class="flex justify-between items-center mb-4">
           <Heading tag="h3" class="text-lg font-semibold"
@@ -311,7 +314,7 @@
       </div>
     </Card>
 
-    <Card>
+    <Card class="max-w-full">
       <div class="p-4">
         <div class="flex justify-between items-center mb-4">
           <Heading tag="h3" class="text-lg font-semibold"
@@ -327,7 +330,7 @@
   <!-- Performance Tables -->
   <Tabs style="underline">
     <TabItem open title="Agent Performance">
-      <Card>
+      <Card class="max-w-full">
         <Table hoverable={true}>
           <TableHead>
             <TableHeadCell>Agent Name</TableHeadCell>
@@ -370,7 +373,7 @@
     </TabItem>
 
     <TabItem title="Step Performance">
-      <Card>
+      <Card class="max-w-full">
         <Table hoverable={true}>
           <TableHead>
             <TableHeadCell>Step Name</TableHeadCell>

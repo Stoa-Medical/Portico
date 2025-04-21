@@ -9,7 +9,7 @@
     Toggle,
   } from "flowbite-svelte";
   import { EditorState } from "@codemirror/state";
-  import { EditorView, keymap } from "@codemirror/view";
+  import { EditorView, keymap, lineNumbers } from "@codemirror/view";
   import { defaultKeymap } from "@codemirror/commands";
   import { python } from "@codemirror/lang-python";
   import { lintGutter, linter } from "@codemirror/lint";
@@ -125,6 +125,7 @@ def executeScript(source):
         python(),
         syntaxHighlighting(defaultHighlightStyle),
         lintGutter(),
+        lineNumbers(),
         linter(pythonLint),
         keymap.of(defaultKeymap),
         EditorView.lineWrapping,
@@ -154,10 +155,9 @@ def executeScript(source):
             backgroundColor: "rgba(0, 0, 0, 0.05)",
           },
           ".cm-gutters": {
-            backgroundColor: "#f8f9fa",
-            color: "#999",
-            border: "none",
-            borderRight: "1px solid #ddd",
+            backgroundColor: "var(--tw-bg-opacity, 1) #f1f5f9", // Tailwind gray-100
+            color: "white", // Tailwind slate-500
+            borderRight: "1px solid #cbd5e1", // Tailwind slate-300
           },
         }),
       ],
@@ -234,7 +234,7 @@ def executeScript(source):
       {#if step.step_type === "python"}
         <div
           bind:this={editorElement}
-          class="border border-gray-300 rounded-lg min-h-[300px] font-mono"
+          class="border border-gray-300 dark:border-gray-700 rounded-lg min-h-[300px] font-mono"
         ></div>
       {:else}
         <Textarea
@@ -263,7 +263,7 @@ def executeScript(source):
   }
 
   :global(.cm-gutters) {
-    background-color: #f8f9fa;
+    color: white;
     border-right: 1px solid #ddd;
   }
 
@@ -277,6 +277,26 @@ def executeScript(source):
 
   :global(.cm-line) {
     padding: 0 4px;
+  }
+
+  :global(.cm-gutters) {
+    background-color: #f8fafc; /* light: slate-50 */
+    border-right: 1px solid #e2e8f0; /* light: slate-200 */
+    color: white; /* slate-500 */
+  }
+
+  :global(.dark .cm-gutters) {
+    background-color: #1e293b; /* dark: slate-800 */
+    border-right: 1px solid #334155; /* dark: slate-700 */
+    color: #cbd5e1; /* slate-300 */
+  }
+
+  :global(.cm-activeLineGutter) {
+    background-color: rgba(95, 95, 95, 0.03);
+  }
+
+  :global(.dark .cm-activeLineGutter) {
+    background-color: rgba(255, 255, 255, 0.05);
   }
 
   :global(.cm-keyword) {

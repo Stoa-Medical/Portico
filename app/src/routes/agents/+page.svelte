@@ -457,7 +457,7 @@
                   </Table>
                 {:else}
                   <div
-                    class="text-center py-8 border rounded-lg bg-gray-50 dark:bg-gray-800"
+                    class="text-center py-8 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800"
                   >
                     <p class="text-gray-500 dark:text-gray-400 mb-4">
                       No steps found for this agent
