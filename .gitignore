@@ -13,3 +13,5 @@ target/
 .mypy_cache
 
 .specstory
+.cursor
+.windsurfrules
