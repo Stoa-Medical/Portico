@@ -28,8 +28,9 @@
   import PageHeader from "../../lib/components/PageHeader.svelte";
   import StepConfig from "../../lib/components/StepConfig.svelte";
   import {
-    getAgents,
     getSteps,
+    updateStep,
+    getAgents,
     deleteAgent,
     saveAgent,
     getRuntimeSessions,
@@ -62,6 +63,20 @@
     } catch (err) {
       console.error("Failed to load steps", err);
       steps = [];
+    }
+  }
+
+  async function saveStepData() {
+    if (!selectedStep || !selectedAgent) return;
+
+    try {
+      await updateStep(selectedStep);
+      await loadSteps(selectedAgent.id);
+      selectedStep = null;
+      alert("Step saved successfully!");
+    } catch (err) {
+      console.error("Failed to save step", err);
+      alert("Failed to save step.");
     }
   }
 
@@ -400,10 +415,20 @@
                               {#if selectedStep?.id === step.id}
                                 <Button
                                   size="xs"
-                                  color="none"
+                                  color="light"
                                   on:click={() => (selectedStep = null)}
                                 >
                                   Close
+                                </Button>
+                                <Button
+                                  size="xs"
+                                  color="light"
+                                  on:click={async () => {
+                                    await saveStepData();
+                                    selectedStep = null;
+                                  }}
+                                >
+                                  Save
                                 </Button>
                               {:else}
                                 <Button
@@ -469,19 +494,19 @@
                         <TableBodyRow>
                           <TableBodyCell>{session.id}</TableBodyCell>
                           <TableBodyCell>
-                            <Badge color="green"
-                              >{session.runtimeSessionStatus}</Badge
-                            >
+                            <Badge color="green">{session.rts_status}</Badge>
                           </TableBodyCell>
-                          <TableBodyCell>{session.latestStepIdx}</TableBodyCell>
+                          <TableBodyCell
+                            >{session.latest_step_idx}</TableBodyCell
+                          >
                           <TableBodyCell
                             >{new Date(
-                              session.createdTimestamp,
+                              session.created_at,
                             ).toLocaleString()}</TableBodyCell
                           >
                           <TableBodyCell
                             >{new Date(
-                              session.lastUpdatedTimestamp,
+                              session.updated_at,
                             ).toLocaleString()}</TableBodyCell
                           >
                           <TableBodyCell>
@@ -519,53 +544,29 @@
                                 <h3
                                   class="text-lg font-semibold text-gray-800 dark:text-white"
                                 >
-                                  Runtime Session Details
+                                  Runtime Session ID: {session.id}
                                 </h3>
 
-                                <div>
-                                  <strong>Initial Data:</strong>
-                                  <pre
-                                    class="bg-gray-100 dark:bg-gray-900 p-2 rounded overflow-x-auto text-sm">
-{JSON.stringify(session.initialData, null, 2)}
-                      </pre>
-                                </div>
-
-                                <div>
-                                  <strong>Latest Result:</strong>
-                                  <pre
-                                    class="bg-gray-100 dark:bg-gray-900 p-2 rounded overflow-x-auto text-sm">
-{JSON.stringify(session.latestResult, null, 2)}
-                      </pre>
-                                </div>
-
-                                <div class="grid grid-cols-2 gap-4">
+                                {#if session.initial_data}
                                   <div>
-                                    <strong>Session ID:</strong>
-                                    {session.id}
-                                  </div>
-                                  <div>
-                                    <strong>Status:</strong>
-                                    <Badge color="green"
-                                      >{session.runtimeSessionStatus}</Badge
+                                    <Label class="font-bold">Initial Data</Label
                                     >
+                                    <pre
+                                      class="border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-3 rounded-md overflow-x-auto text-sm mt-2">
+{JSON.stringify(session.initial_data, null, 2)}</pre>
                                   </div>
-                                  <div>
-                                    <strong>Step Index:</strong>
-                                    {session.latestStepIdx}
+                                {/if}
+
+                                {#if session.latest_result}
+                                  <div class="mt-6">
+                                    <Label class="font-bold"
+                                      >Latest Result</Label
+                                    >
+                                    <pre
+                                      class="border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-3 rounded-md overflow-x-auto text-sm mt-2">
+{JSON.stringify(session.latest_result, null, 2)}</pre>
                                   </div>
-                                  <div>
-                                    <strong>Created:</strong>
-                                    {new Date(
-                                      session.createdTimestamp,
-                                    ).toLocaleString()}
-                                  </div>
-                                  <div>
-                                    <strong>Last Updated:</strong>
-                                    {new Date(
-                                      session.lastUpdatedTimestamp,
-                                    ).toLocaleString()}
-                                  </div>
-                                </div>
+                                {/if}
                               </div>
                             </td>
                           </tr>

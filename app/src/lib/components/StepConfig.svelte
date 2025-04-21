@@ -179,7 +179,6 @@ def executeScript(source):
   let prevStepType = step.step_type;
 
   $: if (step.step_type === "python") {
-    console.log(step.step_type, prevStepType);
     if (!step.step_content?.trim() && step.step_type !== prevStepType) {
       step.step_content = defaultPythonTemplate;
     }
