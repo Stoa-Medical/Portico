@@ -8,16 +8,17 @@ This is a Python microservice that:
 
 So the flow is:
                         Triggers:
-                        • Signals with "pending" status
-                        • Changes to Agents
+                        • Signals (on CREATE). Either `Command` or `Sync`
+                        - `Command` requests Create/Update/Delete/Run of specific Agent/Step
+                        - `Sync` requests a re-read/serialization of specific Agent/Step (or of all)
 ┌────────┐         ┌──────────┐         ┌────────┐         ┌────────┐
 │  User  │────────▶│`supabase`│────────▶│`bridge`│────────▶│`engine`│
 └────────┘         └──────────┘         └────────┘         └────────┘
                         ▲                                      │
                         └──────────────────────────────────────┘
                                 Returns:
-                                • Updates RuntimeSession
-                                • Changes Signal status
+                                • Writes RuntimeSession
+                                • Changes Signal with runtime data (if applicable)
 
 """
 

@@ -2,21 +2,14 @@ syntax = "proto3";
 
 package portico;
 
-// Import for using google.protobuf.Value to represent JSON
 import "google/protobuf/struct.proto";
 
-// The Bridge service definition
 service BridgeService {
   // Initialize server connection
   rpc InitServer(ServerInitRequest) returns (ServerInitResponse);
 
-  // Handle signal creation
-  rpc CreateSignal(SignalRequest) returns (OperationResponse);
-
-  // Handle agent operations
-  rpc CreateAgent(AgentRequest) returns (OperationResponse);
-  rpc UpdateAgent(AgentRequest) returns (OperationResponse);
-  rpc DeleteAgent(AgentRequest) returns (OperationResponse);
+  // Process signals (handles all signal types)
+  rpc ProcessSignal(SignalRequest) returns (SignalResponse);
 }
 
 // Server initialization
@@ -29,25 +22,75 @@ message ServerInitResponse {
   string message = 2;
 }
 
-// Container for Supabase record data
-message SupabaseData {
-  string table = 1;
-  string type = 2;  // INSERT, UPDATE, DELETE
-  google.protobuf.Struct record = 3;
-}
-
-// Signal request with embedded Supabase data
+// Signal request structure
 message SignalRequest {
-  SupabaseData data = 1;
+  string global_uuid = 1;
+  string user_requested_uuid = 2;
+  SignalType signal_type = 3;
+
+  // Optional payload based on signal type
+  oneof payload {
+    CommandPayload command = 4;
+    SyncPayload sync = 5;
+    google.protobuf.Struct fyi_data = 6;
+  }
 }
 
-// Agent request with embedded Supabase data
-message AgentRequest {
-  SupabaseData data = 1;
+enum SignalType {
+  COMMAND = 0;
+  SYNC = 1;
+  FYI = 2;
 }
 
-// Generic response for operations
-message OperationResponse {
+message CommandPayload {
+  // Type of command operation
+  CommandOperation operation = 1;
+
+  // Target entity type
+  EntityType entity_type = 2;
+
+  // Target entity UUID
+  string entity_uuid = 3;
+
+  // Payload data for create/update/run operations
+  google.protobuf.Struct data = 4;
+
+  // For update operations, specific fields to update
+  repeated string update_fields = 5;
+}
+
+enum CommandOperation {
+  CREATE = 0;
+  UPDATE = 1;
+  DELETE = 2;
+  RUN = 3;
+}
+
+enum EntityType {
+  AGENT = 0;
+  STEP = 1;
+}
+
+message SyncPayload {
+  // Sync scope
+  SyncScope scope = 1;
+
+  // Optional specific entity UUIDs to sync (if not ALL)
+  repeated string entity_uuids = 2;
+
+  // Target entity types to sync
+  repeated EntityType entity_types = 3;
+}
+
+enum SyncScope {
+  ALL = 0;
+  SPECIFIC = 1;
+}
+
+// Response with the result of processing the signal
+message SignalResponse {
   bool success = 1;
   string message = 2;
+  string runtime_session_uuid = 3;
+  google.protobuf.Struct result_data = 4;
 }
