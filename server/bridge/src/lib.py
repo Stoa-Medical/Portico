@@ -1,6 +1,8 @@
 import logging
+import json
+import uuid
 import grpc
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 from google.protobuf.struct_pb2 import Struct
 from google.protobuf.json_format import ParseDict
 
@@ -31,8 +33,8 @@ class BridgeClient:
     def __init__(self, host: str, port: int):
         self.host = host
         self.port = port
-        self.channel = None
-        self.stub = None
+        self.channel: Optional[grpc.aio.Channel] = None
+        self.stub: Optional[pb2_grpc.BridgeServiceStub] = None
 
     async def connect(self) -> bool:
         """Connect to the gRPC server"""
@@ -40,19 +42,9 @@ class BridgeClient:
             # Create an insecure channel
             address = f"{self.host}:{self.port}"
             self.channel = grpc.aio.insecure_channel(address)
-            self.stub = pb2_grpc.BridgeServiceStub(self.channel)  # type: ignore
+            self.stub = pb2_grpc.BridgeServiceStub(self.channel)
             logger.info(f"Created gRPC channel to {address}")
-
-            # Initialize the server
-            response = await self.initialize_server()
-            if response and response.success:
-                logger.info(
-                    f"Successfully initialized gRPC connection: {response.message}"
-                )
-                return True
-            else:
-                logger.error("Failed to initialize gRPC connection")
-                return False
+            return True
         except Exception as e:
             logger.error(f"Failed to connect to gRPC server: {e}")
             return False
@@ -60,70 +52,58 @@ class BridgeClient:
     async def initialize_server(self) -> Optional[Any]:
         """Initialize the server connection"""
         try:
-            request = pb2.ServerInitRequest(server_init=True)  # type: ignore
-            response = await self.stub.InitServer(request)  # type: ignore
+            if not self.stub:
+                logger.error("gRPC stub not initialized")
+                return None
+            # Use pb2 namespace to access the generated classes
+            request = pb2.ServerInitRequest(server_init=True)
+            response = await self.stub.InitServer(request)
             return response
         except Exception as e:
             logger.error(f"Error initializing server: {e}")
             return None
 
-    async def send_signal(self, data: Dict[str, Any], meta: str = "🏹") -> bool:
-        """Send a signal to the engine"""
+    async def process_signal(self, signal_request: Any) -> Optional[Any]:
+        """Send a signal request to the engine"""
         try:
-            # Sanitize the incoming data first
-            data = sanitize_data(data)
+            if not self.stub:
+                logger.error("gRPC stub not initialized")
+                return None
+            response = await self.stub.ProcessSignal(signal_request)
+            return response
+        except Exception as e:
+            logger.error(f"Error processing signal: {sanitize_data(str(e))}")
+            return None
 
-            # Check if 'data' key exists with table and record fields
-            if "data" in data and isinstance(data["data"], dict):
-                supabase_data = data["data"]
-                table = supabase_data.get("table", "")
-                event_type = supabase_data.get("type", "")
-                record = supabase_data.get("record", {})
+    async def send_signal(self, data: Dict[str, Any], meta: str = "signal") -> bool:
+        """Send a signal to the engine using the unified SignalRequest structure"""
+        try:
+            # Handle the server init case separately
+            if "server-init" in data:
+                response = await self.initialize_server()
+                return response is not None and getattr(response, "success", False)
 
-                # Convert sanitized record to Struct
-                record_struct = dict_to_struct(record)
-
-                # Create SupabaseData message
-                supabase_proto = pb2.SupabaseData(  # type: ignore
-                    table=table, type=event_type, record=record_struct
-                )
-
-                if table == "signals":
-                    # Create SignalRequest
-                    request = pb2.SignalRequest(data=supabase_proto)  # type: ignore
-                    response = await self.stub.CreateSignal(request)  # type: ignore
-                elif table == "agents":
-                    # Create AgentRequest
-                    request = pb2.AgentRequest(data=supabase_proto)  # type: ignore
-
-                    if event_type == "INSERT":
-                        response = await self.stub.CreateAgent(request)  # type: ignore
-                    elif event_type == "UPDATE":
-                        response = await self.stub.UpdateAgent(request)  # type: ignore
-                    elif event_type == "DELETE":
-                        response = await self.stub.DeleteAgent(request)  # type: ignore
-                    else:
-                        logger.error(
-                            f"Unsupported event type: {sanitize_data(event_type)}"
-                        )
-                        return False
-                else:
-                    logger.error(f"Unsupported table: {sanitize_data(table)}")
-                    return False
-
-                if response and response.success:
+            # Process the actual signal based on the data
+            signal_request = await create_signal_request(data)
+            if signal_request:
+                response = await self.process_signal(signal_request)
+                if response and getattr(response, "success", False):
                     logger.info(
-                        f"Successfully sent {meta} message: {sanitize_data(response.message)}"
+                        f"Successfully sent {meta} message: {sanitize_data(getattr(response, 'message', ''))}"
                     )
                     return True
                 else:
-                    logger.error(f"Failed to send {meta} message to engine")
+                    error_msg = (
+                        getattr(response, "message", "No response received")
+                        if response
+                        else "No response received"
+                    )
+                    logger.error(f"Failed to send {meta} message: {error_msg}")
                     return False
-            elif "server-init" in data:
-                # This is an initialization message
-                return await self.initialize_server() is not None
             else:
-                logger.error(f"Invalid message format: {sanitize_data(data)}")
+                logger.error(
+                    f"Failed to create signal request from data: {sanitize_data(data)}"
+                )
                 return False
         except Exception as e:
             logger.error(f"Error sending message to engine: {sanitize_data(str(e))}")
@@ -136,6 +116,140 @@ class BridgeClient:
             logger.info("Closed gRPC channel")
 
 
+async def create_signal_request(data: Dict[str, Any]) -> Optional[Any]:
+    """Create a SignalRequest from the Supabase payload"""
+    try:
+        # Extract record data from the Supabase payload
+        supabase_data = data.get("data", {})
+        record = supabase_data.get("record", {})
+
+        if not record:
+            logger.error("No record found in data payload")
+            return None
+
+        # Create the SignalRequest
+        global_uuid = str(record.get("global_uuid", uuid.uuid4()))
+        user_requested_uuid = str(record.get("user_requested_uuid", ""))
+
+        # Determine signal type
+        signal_type_str = record.get("signal_type", "").upper()
+        if not signal_type_str:
+            logger.error("No signal_type found in record")
+            return None
+
+        try:
+            # Access via the pb2 namespace
+            signal_type = pb2.SignalType.Value(signal_type_str)
+        except ValueError:
+            logger.error(f"Invalid signal_type: {signal_type_str}")
+            return None
+
+        # Extract initial_data JSON
+        initial_data = record.get("initial_data", {})
+        if isinstance(initial_data, str):
+            try:
+                initial_data = json.loads(initial_data)
+            except json.JSONDecodeError:
+                logger.error(f"Invalid JSON in initial_data: {initial_data}")
+                initial_data = {}
+
+        # Create the base request via pb2 namespace
+        request = pb2.SignalRequest(
+            global_uuid=global_uuid,
+            user_requested_uuid=user_requested_uuid,
+            signal_type=signal_type,
+        )
+
+        # Handle payload based on signal type - access via pb2 namespace
+        if signal_type == pb2.SignalType.COMMAND:
+            command_payload = create_command_payload(initial_data)
+            request.command.CopyFrom(command_payload)
+        elif signal_type == pb2.SignalType.SYNC:
+            sync_payload = create_sync_payload(initial_data)
+            request.sync.CopyFrom(sync_payload)
+        elif signal_type == pb2.SignalType.FYI:
+            request.fyi_data.CopyFrom(dict_to_struct(initial_data))
+
+        return request
+    except Exception as e:
+        logger.error(f"Error creating signal request: {str(e)}")
+        return None
+
+
+def create_command_payload(data: Dict[str, Any]) -> Any:
+    """Create a CommandPayload from the initial_data"""
+    # Get operation type
+    operation_str = data.get("operation", "").upper()
+    try:
+        # Access via pb2 namespace
+        operation = pb2.CommandOperation.Value(operation_str)
+    except ValueError:
+        logger.error(f"Invalid operation: {operation_str}")
+        # Default via pb2 namespace
+        operation = pb2.CommandOperation.CREATE
+
+    # Get entity type
+    entity_type_str = data.get("entity_type", "").upper()
+    try:
+        # Access via pb2 namespace
+        entity_type = pb2.EntityType.Value(entity_type_str)
+    except ValueError:
+        logger.error(f"Invalid entity_type: {entity_type_str}")
+        # Default via pb2 namespace
+        entity_type = pb2.EntityType.AGENT
+
+    # Get entity UUID
+    entity_uuid = str(data.get("entity_uuid", ""))
+
+    # Get payload data
+    payload_data = data.get("data", {})
+
+    # Get update fields
+    update_fields = data.get("update_fields", [])
+
+    # Create and return via pb2 namespace
+    return pb2.CommandPayload(
+        operation=operation,
+        entity_type=entity_type,
+        entity_uuid=entity_uuid,
+        data=dict_to_struct(payload_data),
+        update_fields=update_fields,
+    )
+
+
+def create_sync_payload(data: Dict[str, Any]) -> Any:
+    """Create a SyncPayload from the initial_data"""
+    # Get sync scope
+    scope_str = data.get("scope", "ALL").upper()
+    try:
+        # Access via pb2 namespace
+        scope = pb2.SyncScope.Value(scope_str)
+    except ValueError:
+        logger.error(f"Invalid scope: {scope_str}")
+        # Default via pb2 namespace
+        scope = pb2.SyncScope.ALL
+
+    # Get entity UUIDs
+    entity_uuids = [str(uuid_val) for uuid_val in data.get("entity_uuids", [])]
+
+    # Get entity types
+    entity_types_str = data.get("entity_types", [])
+    entity_types = []
+    for et_str in entity_types_str:
+        try:
+            # Access via pb2 namespace
+            et = pb2.EntityType.Value(et_str.upper())
+            entity_types.append(et)
+        except ValueError:
+            logger.error(f"Invalid entity_type: {et_str}")
+
+    # Create and return via pb2 namespace
+    return pb2.SyncPayload(
+        scope=scope, entity_uuids=entity_uuids, entity_types=entity_types
+    )
+
+
+# Sanitize data by removing null characters that Postgres can't handle
 def sanitize_data(data: Any) -> Any:
     """Sanitize data by removing null characters that Postgres can't handle."""
     if isinstance(data, str):
@@ -151,24 +265,13 @@ def sanitize_data(data: Any) -> Any:
 async def handle_new_signal(payload: Dict[str, Any], client: BridgeClient) -> None:
     """Handle a new signal inserted into the signals table"""
     # Sanitize the payload before any processing
-    payload = sanitize_data(payload)
-    logger.info(f"🔔 New signal detected: {payload}")
+    safe_payload = sanitize_data(payload)
+    logger.info(f"🔔 New signal detected: {safe_payload}")
 
     try:
         # Send sanitized signal to engine
-        await client.send_signal(payload, "handle_new_signal")
+        success = await client.send_signal(safe_payload, "signal")
+        if not success:
+            logger.error("Failed to process signal in engine service")
     except Exception as e:
         logger.error(f"Error handling new signal: {str(e)}")
-
-
-async def handle_general_update(payload: Dict[str, Any], client: BridgeClient) -> None:
-    """Handle changes to agents"""
-    # Sanitize the payload before any processing
-    payload = sanitize_data(payload)
-    data = payload.get("data", {})
-    logger.info(
-        f"🔃 General Update detected: {payload.get('ids')} | {data.get('table')} | {data.get('type')}"
-    )
-
-    # Send sanitized data to engine
-    await client.send_signal(payload, "handle_general_update")

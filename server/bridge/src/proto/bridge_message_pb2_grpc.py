@@ -29,7 +29,7 @@ if _version_not_supported:
 
 
 class BridgeServiceStub(object):
-    """The Bridge service definition"""
+    """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
         """Constructor.
@@ -43,34 +43,16 @@ class BridgeServiceStub(object):
             response_deserializer=bridge__message__pb2.ServerInitResponse.FromString,
             _registered_method=True,
         )
-        self.CreateSignal = channel.unary_unary(
-            "/portico.BridgeService/CreateSignal",
+        self.ProcessSignal = channel.unary_unary(
+            "/portico.BridgeService/ProcessSignal",
             request_serializer=bridge__message__pb2.SignalRequest.SerializeToString,
-            response_deserializer=bridge__message__pb2.OperationResponse.FromString,
-            _registered_method=True,
-        )
-        self.CreateAgent = channel.unary_unary(
-            "/portico.BridgeService/CreateAgent",
-            request_serializer=bridge__message__pb2.AgentRequest.SerializeToString,
-            response_deserializer=bridge__message__pb2.OperationResponse.FromString,
-            _registered_method=True,
-        )
-        self.UpdateAgent = channel.unary_unary(
-            "/portico.BridgeService/UpdateAgent",
-            request_serializer=bridge__message__pb2.AgentRequest.SerializeToString,
-            response_deserializer=bridge__message__pb2.OperationResponse.FromString,
-            _registered_method=True,
-        )
-        self.DeleteAgent = channel.unary_unary(
-            "/portico.BridgeService/DeleteAgent",
-            request_serializer=bridge__message__pb2.AgentRequest.SerializeToString,
-            response_deserializer=bridge__message__pb2.OperationResponse.FromString,
+            response_deserializer=bridge__message__pb2.SignalResponse.FromString,
             _registered_method=True,
         )
 
 
 class BridgeServiceServicer(object):
-    """The Bridge service definition"""
+    """Missing associated documentation comment in .proto file."""
 
     def InitServer(self, request, context):
         """Initialize server connection"""
@@ -78,26 +60,8 @@ class BridgeServiceServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
-    def CreateSignal(self, request, context):
-        """Handle signal creation"""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details("Method not implemented!")
-        raise NotImplementedError("Method not implemented!")
-
-    def CreateAgent(self, request, context):
-        """Handle agent operations"""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details("Method not implemented!")
-        raise NotImplementedError("Method not implemented!")
-
-    def UpdateAgent(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details("Method not implemented!")
-        raise NotImplementedError("Method not implemented!")
-
-    def DeleteAgent(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+    def ProcessSignal(self, request, context):
+        """Process signals (handles all signal types)"""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
@@ -110,25 +74,10 @@ def add_BridgeServiceServicer_to_server(servicer, server):
             request_deserializer=bridge__message__pb2.ServerInitRequest.FromString,
             response_serializer=bridge__message__pb2.ServerInitResponse.SerializeToString,
         ),
-        "CreateSignal": grpc.unary_unary_rpc_method_handler(
-            servicer.CreateSignal,
+        "ProcessSignal": grpc.unary_unary_rpc_method_handler(
+            servicer.ProcessSignal,
             request_deserializer=bridge__message__pb2.SignalRequest.FromString,
-            response_serializer=bridge__message__pb2.OperationResponse.SerializeToString,
-        ),
-        "CreateAgent": grpc.unary_unary_rpc_method_handler(
-            servicer.CreateAgent,
-            request_deserializer=bridge__message__pb2.AgentRequest.FromString,
-            response_serializer=bridge__message__pb2.OperationResponse.SerializeToString,
-        ),
-        "UpdateAgent": grpc.unary_unary_rpc_method_handler(
-            servicer.UpdateAgent,
-            request_deserializer=bridge__message__pb2.AgentRequest.FromString,
-            response_serializer=bridge__message__pb2.OperationResponse.SerializeToString,
-        ),
-        "DeleteAgent": grpc.unary_unary_rpc_method_handler(
-            servicer.DeleteAgent,
-            request_deserializer=bridge__message__pb2.AgentRequest.FromString,
-            response_serializer=bridge__message__pb2.OperationResponse.SerializeToString,
+            response_serializer=bridge__message__pb2.SignalResponse.SerializeToString,
         ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -140,7 +89,7 @@ def add_BridgeServiceServicer_to_server(servicer, server):
 
 # This class is part of an EXPERIMENTAL API.
 class BridgeService(object):
-    """The Bridge service definition"""
+    """Missing associated documentation comment in .proto file."""
 
     @staticmethod
     def InitServer(
@@ -173,7 +122,7 @@ class BridgeService(object):
         )
 
     @staticmethod
-    def CreateSignal(
+    def ProcessSignal(
         request,
         target,
         options=(),
@@ -188,99 +137,9 @@ class BridgeService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            "/portico.BridgeService/CreateSignal",
+            "/portico.BridgeService/ProcessSignal",
             bridge__message__pb2.SignalRequest.SerializeToString,
-            bridge__message__pb2.OperationResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True,
-        )
-
-    @staticmethod
-    def CreateAgent(
-        request,
-        target,
-        options=(),
-        channel_credentials=None,
-        call_credentials=None,
-        insecure=False,
-        compression=None,
-        wait_for_ready=None,
-        timeout=None,
-        metadata=None,
-    ):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            "/portico.BridgeService/CreateAgent",
-            bridge__message__pb2.AgentRequest.SerializeToString,
-            bridge__message__pb2.OperationResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True,
-        )
-
-    @staticmethod
-    def UpdateAgent(
-        request,
-        target,
-        options=(),
-        channel_credentials=None,
-        call_credentials=None,
-        insecure=False,
-        compression=None,
-        wait_for_ready=None,
-        timeout=None,
-        metadata=None,
-    ):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            "/portico.BridgeService/UpdateAgent",
-            bridge__message__pb2.AgentRequest.SerializeToString,
-            bridge__message__pb2.OperationResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True,
-        )
-
-    @staticmethod
-    def DeleteAgent(
-        request,
-        target,
-        options=(),
-        channel_credentials=None,
-        call_credentials=None,
-        insecure=False,
-        compression=None,
-        wait_for_ready=None,
-        timeout=None,
-        metadata=None,
-    ):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            "/portico.BridgeService/DeleteAgent",
-            bridge__message__pb2.AgentRequest.SerializeToString,
-            bridge__message__pb2.OperationResponse.FromString,
+            bridge__message__pb2.SignalResponse.FromString,
             options,
             channel_credentials,
             insecure,

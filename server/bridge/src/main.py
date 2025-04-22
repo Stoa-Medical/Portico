@@ -31,7 +31,7 @@ from supabase import create_async_client
 from dotenv import load_dotenv
 
 from src.lib import logger
-from src.lib import BridgeClient, handle_new_signal, handle_general_update
+from src.lib import BridgeClient, handle_new_signal
 
 # Ensure proto files are generated
 from src.proto import build_proto
@@ -88,14 +88,15 @@ async def main():
         return
 
     # Initialize engine with server-init message
-    success = await grpc_client.send_signal({"server-init": True}, "msg_init")
-    if not success:
+    response = await grpc_client.initialize_server()
+    if not response or not response.success:
         logger.error("Failed to initialize engine service")
         return
 
+    logger.info(f"Successfully initialized engine service: {response.message}")
+
     # Set up Supabase realtime subscriptions
     channel_signals = client.channel("signal-inserts")
-    channel_agents = client.channel("agent-changes")
 
     # Subscribe to changes on the `signals` table (only when added)
     channel_signals.on_postgres_changes(
@@ -106,21 +107,8 @@ async def main():
         table="signals",
         schema="public",
     )
+    channel_signals.subscribe()
 
-    # Subscribe to Agent changes
-    channel_agents.on_postgres_changes(
-        event="*",
-        callback=lambda payload, handler=handle_general_update: asyncio.create_task(
-            handler(payload, grpc_client)
-        ),
-        table="agents",
-        schema="public",
-    )
-
-    # Subscribe to all the channels
-    channel_list = [channel_signals, channel_agents]
-    for c in channel_list:
-        await c.subscribe()
     logger.info("Subscribed to Supabase realtime channels")
 
     # Use asyncio.Event for cleaner termination
@@ -131,7 +119,7 @@ async def main():
         asyncio.get_event_loop().add_signal_handler(
             sig,
             lambda: asyncio.create_task(
-                shutdown(channel_list, stop_event, grpc_client)
+                shutdown([channel_signals], stop_event, grpc_client)
             ),
         )
 

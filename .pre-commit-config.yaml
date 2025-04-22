@@ -13,16 +13,20 @@ repos:
   hooks:
     - id: black
 
-- repo: https://github.com/pre-commit/mirrors-mypy
-  rev: v1.3.0
-  hooks:
-    - id: mypy
-      args: [--ignore-missing-imports]
-      exclude: ".*_pb2\\.py$"
-      additional_dependencies: ['types-protobuf']
-
 - repo: local
   hooks:
+    - id: mypy
+      name: mypy
+      entry: mypy
+      language: python
+      types: [python]
+      args: [
+        "--config-file=server/bridge/pyproject.toml",
+        "--ignore-missing-imports",
+        "--follow-imports=silent",
+      ]
+      exclude: ".*_pb2\\.py$"
+      additional_dependencies: ['mypy>=1.8.0', 'mypy-protobuf>=3.6.0', 'types-protobuf>=5.29.1']
     - id: prettier
       name: Prettier
       entry: bash -c 'cd app && npx prettier --write $(echo "$@" | sed "s|app/||g")' --

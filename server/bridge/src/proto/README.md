@@ -5,14 +5,7 @@ The code is generated from the proto files in the `server/proto` directory.
 
 ## Generating gRPC Code
 
-To (re)generate the gRPC code, run:
-
-```bash
-# From the project root
-python -m server.bridge.src.proto.build_proto
-```
-
-Or from within the bridge directory:
+To (re)generate the gRPC code, run from within the bridge directory:
 
 ```bash
 python -m src.proto.build_proto
