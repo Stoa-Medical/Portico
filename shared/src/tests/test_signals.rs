@@ -1,5 +1,5 @@
 use crate::{
-    models::{Agent, Signal},
+    models::{Agent, Signal, SignalType},
     IdFields, TimestampFields,
 };
 use serde_json::json;
@@ -25,7 +25,7 @@ fn create_test_signal() -> Signal {
         id_fields,
         user_uuid,
         Some(agent),
-        "Test Signal".to_string(),
+        SignalType::Fyi,
         initial_data,
     )
 }
@@ -57,7 +57,7 @@ fn test_signal_without_data() {
         id_fields,
         user_uuid,
         Some(agent),
-        "Test Signal".to_string(),
+        SignalType::Fyi,
         None, // No data
     );
 

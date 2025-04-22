@@ -4,11 +4,97 @@ use crate::RunningStatus;
 use crate::{DatabaseItem, IdFields, JsonLike, TimestampFields};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sqlx::{PgPool, Row};
+use sqlx::{PgPool, Row, FromRow};
 use std::str::FromStr;
 use std::sync::Mutex;
 use uuid::Uuid;
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub enum SignalType {
+    Command,
+    Sync,
+    Fyi,
+}
+
+impl SignalType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SignalType::Command => "command",
+            SignalType::Sync => "sync",
+            SignalType::Fyi => "fyi",
+        }
+    }
+}
+
+impl FromStr for SignalType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "command" => Ok(SignalType::Command),
+            "sync" => Ok(SignalType::Sync),
+            "fyi" => Ok(SignalType::Fyi),
+            _ => Err(format!("Invalid signal type: {}", s)),
+        }
+    }
+}
+
+impl sqlx::Type<sqlx::Postgres> for SignalType {
+    fn type_info() -> sqlx::postgres::PgTypeInfo {
+        sqlx::postgres::PgTypeInfo::with_name("signal_type")
+    }
+}
+
+impl<'r> sqlx::Decode<'r, sqlx::Postgres> for SignalType {
+    fn decode(
+        value: sqlx::postgres::PgValueRef<'r>,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        match value.as_str()? {
+            "command" => Ok(SignalType::Command),
+            "sync" => Ok(SignalType::Sync),
+            "fyi" => Ok(SignalType::Fyi),
+            _ => Err("Invalid signal type".into()),
+        }
+    }
+}
+
+impl<'q> sqlx::Encode<'q, sqlx::Postgres> for SignalType {
+    fn encode_by_ref(
+        &self,
+        buf: &mut sqlx::postgres::PgArgumentBuffer,
+    ) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Send + Sync>> {
+        let s = self.as_str();
+        buf.extend_from_slice(s.as_bytes());
+        Ok(sqlx::encode::IsNull::No)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CommandPayload {
+    pub command: String,
+    pub payload: CommandDataPayload,
+    pub options: Option<CommandOptions>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CommandDataPayload {
+    pub id: String,
+    pub properties: Value,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CommandOptions {
+    pub wait_for_completion: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SyncPayload {
+    pub scope: String,
+    pub mode: String,
+    pub targets: Option<Vec<String>>,
+}
 
 #[derive(Debug)]
 pub struct Signal {
@@ -16,8 +102,8 @@ pub struct Signal {
     pub timestamps: TimestampFields,
     pub user_requested_uuid: String,
     pub agent: Option<Agent>,
-    pub status: RunningStatus, // TODO: Should this just link to a `RuntimeSession`?
-    pub signal_type: String,
+    pub linked_rts: Option<RuntimeSession>,
+    pub signal_type: SignalType,
     pub initial_data: Option<Value>,
     pub result_data: Option<Value>,
     pub error_message: Option<String>,
@@ -44,6 +130,13 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Signal {
             None
         };
 
+        let signal_type_str: String = row.try_get("signal_type")?;
+        let signal_type = SignalType::from_str(&signal_type_str)
+            .map_err(|_| sqlx::Error::ColumnDecode {
+                index: "signal_type".to_string(),
+                source: Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid signal type")),
+            })?;
+
         Ok(Self {
             identifiers: IdFields {
                 local_id: row.try_get("id")?,
@@ -53,9 +146,9 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Signal {
                 created: row.try_get("created_at")?,
                 updated: row.try_get("updated_at")?,
             },
-            user_requested_uuid: row.try_get("user_requested_uuid")?,
-            signal_type: row.try_get("signal_type")?,
-            status: row.try_get("signal_status")?,
+            user_requested_uuid: row.try_get::<Uuid, _>("user_requested_uuid")?.to_string(),
+            signal_type,
+            linked_rts: None, // This will be populated after if needed
             agent,
             initial_data: row.try_get("initial_data")?,
             result_data: row.try_get("response_data")?,
@@ -69,7 +162,7 @@ impl Signal {
         identifiers: IdFields,
         user_requested_uuid: String,
         agent: Option<Agent>,
-        signal_type: String,
+        signal_type: SignalType,
         initial_data: Option<Value>,
     ) -> Self {
         Self {
@@ -77,7 +170,7 @@ impl Signal {
             timestamps: TimestampFields::new(),
             user_requested_uuid,
             agent,
-            status: RunningStatus::Waiting,
+            linked_rts: None,
             signal_type,
             initial_data,
             result_data: None,
@@ -85,23 +178,113 @@ impl Signal {
         }
     }
 
-    pub async fn process(&mut self) -> Result<RuntimeSession> {
-        // Check if there is data
+    pub fn new_command(
+        identifiers: IdFields,
+        user_requested_uuid: String,
+        agent: Option<Agent>,
+        command_payload: CommandPayload,
+    ) -> Self {
+        Self::new(
+            identifiers,
+            user_requested_uuid,
+            agent,
+            SignalType::Command,
+            Some(serde_json::to_value(command_payload).unwrap_or(Value::Null)),
+        )
+    }
+
+    pub fn new_sync(
+        identifiers: IdFields,
+        user_requested_uuid: String,
+        agent: Option<Agent>,
+        sync_payload: SyncPayload,
+    ) -> Self {
+        Self::new(
+            identifiers,
+            user_requested_uuid,
+            agent,
+            SignalType::Sync,
+            Some(serde_json::to_value(sync_payload).unwrap_or(Value::Null)),
+        )
+    }
+
+    pub fn new_fyi(
+        identifiers: IdFields,
+        user_requested_uuid: String,
+        agent: Option<Agent>,
+        data: Value,
+    ) -> Self {
+        Self::new(
+            identifiers,
+            user_requested_uuid,
+            agent,
+            SignalType::Fyi,
+            Some(data),
+        )
+    }
+
+    pub fn parse_command_payload(&self) -> Result<CommandPayload> {
         match &self.initial_data {
-            Some(data) => {
-                // Execute the requested Agent
-                self.status = RunningStatus::Running;
-
-                // Run the `Agent`
-                let res = match &mut self.agent {
-                    Some(agent) => agent.run(data.clone()).await,
-                    None => Err(anyhow!("Cannot process signal with no associated agent")),
-                }?;
-                self.status = RunningStatus::Completed;
-
-                Ok(res)
+            Some(data) if self.signal_type == SignalType::Command => {
+                serde_json::from_value(data.clone()).map_err(|e| anyhow!("Invalid command payload: {}", e))
             }
-            None => Err(anyhow!("Cannot process signal with no associated data")),
+            _ => Err(anyhow!("Not a command signal or missing data")),
+        }
+    }
+
+    pub fn parse_sync_payload(&self) -> Result<SyncPayload> {
+        match &self.initial_data {
+            Some(data) if self.signal_type == SignalType::Sync => {
+                serde_json::from_value(data.clone()).map_err(|e| anyhow!("Invalid sync payload: {}", e))
+            }
+            _ => Err(anyhow!("Not a sync signal or missing data")),
+        }
+    }
+
+    pub async fn process(&mut self) -> Result<()> {
+        let runtime_session = match self.signal_type {
+            SignalType::Command => self.process_command().await?,
+            SignalType::Sync => self.process_sync().await?,
+            SignalType::Fyi => self.process_fyi().await?,
+        };
+
+        self.linked_rts = Some(runtime_session);
+        Ok(())
+    }
+
+    async fn process_command(&mut self) -> Result<RuntimeSession> {
+        // Execute the command based on the entity and operation
+        match &self.agent {
+            Some(agent) => {
+                let result = agent.run(self.initial_data.clone().unwrap_or(Value::Null)).await?;
+                Ok(result)
+            }
+            None => Err(anyhow!("Cannot process command signal with no associated agent")),
+        }
+    }
+
+    async fn process_sync(&mut self) -> Result<RuntimeSession> {
+        // Create a runtime session for the sync operation
+        match &self.agent {
+            Some(agent) => {
+                let result = agent.run(self.initial_data.clone().unwrap_or(Value::Null)).await?;
+                Ok(result)
+            }
+            None => Err(anyhow!("Cannot process sync signal with no associated agent")),
+        }
+    }
+
+    async fn process_fyi(&mut self) -> Result<RuntimeSession> {
+        // FYI signals just store data and don't require processing
+        // They can still create a runtime session for tracking
+        match &self.agent {
+            Some(agent) => {
+                let result = agent.run(self.initial_data.clone().unwrap_or(Value::Null)).await?;
+                Ok(result)
+            }
+            None => {
+                Err(anyhow!("FYI signal processed but no agent to run"))
+            }
         }
     }
 }
@@ -115,8 +298,8 @@ impl JsonLike for Signal {
             "updated_at": self.timestamps.updated.format("%Y-%m-%d %H:%M:%S").to_string(),
             "user_requested_uuid": self.user_requested_uuid,
             "agent": self.agent.as_ref().map(|a| a.to_json()),
-            "status": self.status,
-            "signal_type": self.signal_type,
+            "linked_rts_id": self.linked_rts.as_ref().and_then(|rts| rts.identifiers.local_id),
+            "signal_type": self.signal_type.as_str(),
             "initial_data": self.initial_data,
             "result_data": self.result_data,
             "error_message": self.error_message
@@ -165,26 +348,31 @@ impl JsonLike for Signal {
                             }
                         }
                     }
-                    "status" => {
-                        if let Some(status_str) = value.as_str() {
-                            match RunningStatus::from_str(status_str) {
-                                Ok(new_status) => {
-                                    if self.status != new_status {
-                                        self.status = new_status;
+                    "linked_rts_id" => {
+                        // We can't directly update RuntimeSession from just an ID here
+                        // This would require a database lookup, so we'll just note that
+                        // it was requested but will need to be loaded separately
+                        if value.is_null() {
+                            if self.linked_rts.is_some() {
+                                self.linked_rts = None;
+                                updated_fields.push(key.to_string());
+                            }
+                        }
+                        // Note: Setting linked_rts from just an ID is not possible here
+                        // without additional DB queries - would need to be handled separately
+                    }
+                    "signal_type" => {
+                        if let Some(new_type) = value.as_str() {
+                            match SignalType::from_str(new_type) {
+                                Ok(new_signal_type) => {
+                                    if self.signal_type != new_signal_type {
+                                        self.signal_type = new_signal_type;
                                         updated_fields.push(key.to_string());
                                     }
                                 }
                                 Err(e) => {
-                                    return Err(anyhow!("Invalid status '{}': {}", status_str, e))
+                                    return Err(anyhow!("Invalid signal type '{}': {}", new_type, e))
                                 }
-                            }
-                        }
-                    }
-                    "signal_type" => {
-                        if let Some(new_type) = value.as_str() {
-                            if self.signal_type != new_type {
-                                self.signal_type = new_type.to_string();
-                                updated_fields.push(key.to_string());
                             }
                         }
                     }
@@ -250,76 +438,74 @@ impl JsonLike for Signal {
                     }
                 }
             }
-
-            // If any fields were updated, update the timestamp
-            if !updated_fields.is_empty() {
-                self.timestamps.update();
-                updated_fields.push("updated_at".to_string());
-            }
-
-            Ok(updated_fields)
-        } else {
-            Err(anyhow!("Expected JSON object"))
         }
+
+        self.timestamps.update();
+        updated_fields.push("updated_at".to_string());
+
+        Ok(updated_fields)
     }
 
     fn from_json(obj: Value) -> Result<Self> {
-        if let Some(obj) = obj.as_object() {
-            Ok(Self {
-                identifiers: IdFields {
-                    local_id: obj.get("id").and_then(|v| v.as_i64()).map(|v| v as i32),
-                    global_uuid: obj
-                        .get("global_uuid")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or_default()
-                        .to_string(),
-                },
-                timestamps: TimestampFields {
-                    created: chrono::DateTime::parse_from_str(
-                        &obj.get("created_at")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or_default(),
-                        "%Y-%m-%d %H:%M:%S %z",
-                    )
-                    .unwrap_or_default()
-                    .with_timezone(&chrono::Utc),
-                    updated: chrono::DateTime::parse_from_str(
-                        &obj.get("updated_at")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or_default(),
-                        "%Y-%m-%d %H:%M:%S %z",
-                    )
-                    .unwrap_or_default()
-                    .with_timezone(&chrono::Utc),
-                },
-                user_requested_uuid: obj
-                    .get("user_requested_uuid")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default()
-                    .to_string(),
-                agent: obj
-                    .get("agent")
-                    .and_then(|v| Agent::from_json(v.clone()).ok()),
-                status: obj
-                    .get("status")
-                    .and_then(|v| v.as_str())
-                    .and_then(|s| RunningStatus::from_str(s).ok())
-                    .unwrap_or_default(),
-                signal_type: obj
-                    .get("signal_type")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default()
-                    .to_string(),
-                initial_data: obj.get("initial_data").cloned(),
-                result_data: obj.get("result_data").cloned(),
-                error_message: obj
-                    .get("error_message")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
-            })
+        // Required fields
+        let global_uuid = obj
+            .get("global_uuid")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow!("Missing or invalid global_uuid"))?
+            .to_string();
+
+        let user_requested_uuid = obj
+            .get("user_requested_uuid")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow!("Missing or invalid user_requested_uuid"))?
+            .to_string();
+
+        let signal_type_str = obj
+            .get("signal_type")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow!("Missing or invalid signal_type"))?;
+
+        let signal_type = SignalType::from_str(signal_type_str)
+            .map_err(|e| anyhow!("Invalid signal type: {}", e))?;
+
+        // Optional fields
+        let local_id = obj.get("id").and_then(|v| v.as_i64()).map(|id| id as i32);
+
+        let agent = if let Some(agent_obj) = obj.get("agent") {
+            if agent_obj.is_null() {
+                None
+            } else {
+                Some(Agent::from_json(agent_obj.clone())?)
+            }
         } else {
-            Err(anyhow!("Expected JSON object"))
-        }
+            None
+        };
+
+        let initial_data = obj.get("initial_data").cloned();
+        let result_data = obj.get("result_data").cloned();
+        let error_message = obj
+            .get("error_message")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        // Note: linked_rts can't be fully constructed from JSON alone
+        // as it would require database queries
+
+        // Build the Signal
+        Ok(Signal {
+            identifiers: IdFields {
+                local_id,
+                global_uuid,
+            },
+            timestamps: TimestampFields::new(),
+            user_requested_uuid,
+            agent,
+            linked_rts: None, // This would need to be loaded separately
+            signal_type,
+            initial_data,
+            result_data,
+            error_message,
+        })
     }
 }
 
@@ -330,111 +516,119 @@ impl DatabaseItem for Signal {
     }
 
     async fn try_db_create(&self, pool: &PgPool) -> Result<()> {
-        // Check if a signal with the same UUID already exists
+        // First, check if a record with this UUID already exists
         if crate::check_exists_by_uuid(pool, "signals", &self.identifiers.global_uuid).await? {
-            return Ok(());  // Signal already exists, no need to create it again
+            return Err(anyhow!(
+                "Signal with UUID {} already exists",
+                self.identifiers.global_uuid
+            ));
         }
 
-        let agent_id = self.agent.as_ref().and_then(|a| a.identifiers.local_id);
-        let agent_uuid = self
-            .agent
-            .as_ref()
-            .map(|a| a.identifiers.global_uuid.clone());
+        // First ensure the linked RuntimeSession is saved if it exists
+        if let Some(rts) = &self.linked_rts {
+            rts.try_db_create(pool).await?;
+        }
 
         sqlx::query(
             r#"
             INSERT INTO signals (
-                global_uuid, user_requested_uuid, agent_id, agent_uuid,
-                signal_type, signal_status, initial_data, response_data,
-                error_message, created_at, updated_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                global_uuid, user_requested_uuid, agent_id, rts_id, signal_type, initial_data, response_data, error_message
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             "#,
         )
-        .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
+        .bind(&self.identifiers.global_uuid)
         .bind(&self.user_requested_uuid)
-        .bind(agent_id)
-        .bind(agent_uuid.as_deref().map(Uuid::parse_str).transpose()?)
-        .bind(&self.signal_type)
-        .bind(&self.status)
+        .bind(self.agent.as_ref().and_then(|a| a.identifiers.local_id))
+        .bind(self.linked_rts.as_ref().and_then(|rts| rts.identifiers.local_id))
+        .bind(&self.signal_type.as_str())
         .bind(&self.initial_data)
         .bind(&self.result_data)
         .bind(&self.error_message)
-        .bind(&self.timestamps.created)
-        .bind(&self.timestamps.updated)
         .execute(pool)
-        .await?;
+        .await
+        .map_err(|e| anyhow!("Failed to create signal: {}", e))?;
 
         Ok(())
     }
 
     async fn try_db_update(&self, pool: &PgPool) -> Result<()> {
-        let agent_id = self.agent.as_ref().and_then(|a| a.identifiers.local_id);
-        let agent_uuid = self
-            .agent
-            .as_ref()
-            .map(|a| a.identifiers.global_uuid.clone());
+        let id = self
+            .identifiers
+            .local_id
+            .ok_or_else(|| anyhow!("Cannot update signal without a local ID"))?;
+
+        // Update the linked RuntimeSession if it exists
+        if let Some(rts) = &self.linked_rts {
+            rts.try_db_update(pool).await?;
+        }
 
         sqlx::query(
             r#"
-            UPDATE signals
-            SET user_requested_uuid = $1,
+            UPDATE signals SET
+                user_requested_uuid = $1,
                 agent_id = $2,
-                agent_uuid = $3,
+                rts_id = $3,
                 signal_type = $4,
-                signal_status = $5,
-                initial_data = $6,
-                response_data = $7,
-                error_message = $8,
-                updated_at = $9
-            WHERE global_uuid = $10
+                initial_data = $5,
+                response_data = $6,
+                error_message = $7,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $8
             "#,
         )
         .bind(&self.user_requested_uuid)
-        .bind(agent_id)
-        .bind(agent_uuid.as_deref().map(Uuid::parse_str).transpose()?)
-        .bind(&self.signal_type)
-        .bind(&self.status)
+        .bind(self.agent.as_ref().and_then(|a| a.identifiers.local_id))
+        .bind(self.linked_rts.as_ref().and_then(|rts| rts.identifiers.local_id))
+        .bind(&self.signal_type.as_str())
         .bind(&self.initial_data)
         .bind(&self.result_data)
         .bind(&self.error_message)
-        .bind(&self.timestamps.updated)
-        .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
+        .bind(id)
         .execute(pool)
-        .await?;
+        .await
+        .map_err(|e| anyhow!("Failed to update signal: {}", e))?;
 
         Ok(())
     }
 
     async fn try_db_delete(&self, pool: &PgPool) -> Result<()> {
-        sqlx::query("DELETE FROM signals WHERE global_uuid = $1")
-            .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
+        let id = self
+            .identifiers
+            .local_id
+            .ok_or_else(|| anyhow!("Cannot delete signal without a local ID"))?;
+
+        sqlx::query("DELETE FROM signals WHERE id = $1")
+            .bind(id)
             .execute(pool)
-            .await?;
+            .await
+            .map_err(|e| anyhow!("Failed to delete signal: {}", e))?;
 
         Ok(())
     }
 
     async fn try_db_select_all(pool: &PgPool) -> Result<Vec<Self>> {
-        // Fetch signals with agent info using a JOIN
-        let query = crate::signal_with_agent_sql("");
-
-        let rows = sqlx::query_as::<_, Signal>(&query)
+        let rows = sqlx::query(&crate::signal_with_agent_sql(""))
             .fetch_all(pool)
-            .await?;
+            .await
+            .map_err(|e| anyhow!("Failed to fetch signals: {}", e))?;
 
-        // For each signal that has an agent, we need to load its steps
         let mut signals = Vec::with_capacity(rows.len());
+        for row in rows {
+            let mut signal = Self::from_row(&row)?;
 
-        for mut signal in rows {
-            if let Some(agent) = &mut signal.agent {
-                // Use the helper function for loading steps
-                if let Some(agent_id) = agent.identifiers.local_id {
-                    if let Ok(Some(steps_json)) = crate::load_agent_steps(pool, agent_id).await {
-                        agent.steps = crate::Step::from_json_array(&steps_json);
-                    }
+            // Load the RuntimeSession if there's an rts_id
+            if let Some(rts_id) = row.try_get::<Option<i32>, _>("rts_id")? {
+                // Create ID fields with just the local_id and fetch the full RuntimeSession
+                let rts_id_fields = IdFields {
+                    local_id: Some(rts_id),
+                    global_uuid: String::new(), // Will be ignored since we're querying by local_id
+                };
+
+                if let Ok(Some(rts)) = RuntimeSession::try_db_select_by_id(pool, &rts_id_fields).await {
+                    signal.linked_rts = Some(rts);
                 }
             }
+
             signals.push(signal);
         }
 
@@ -442,32 +636,38 @@ impl DatabaseItem for Signal {
     }
 
     async fn try_db_select_by_id(pool: &PgPool, id: &IdFields) -> Result<Option<Self>> {
-        let query = crate::signal_with_agent_sql("WHERE s.global_uuid = $1");
-
-        let result = if let Some(local_id) = id.local_id {
-            sqlx::query_as::<_, Signal>(&query)
-                .bind(local_id)
-                .fetch_optional(pool)
-                .await?
+        let where_clause = if let Some(local_id) = id.local_id {
+            format!("WHERE s.id = {}", local_id)
         } else {
-            sqlx::query_as::<_, Signal>(&query)
-                .bind(Uuid::parse_str(&id.global_uuid)?)
-                .fetch_optional(pool)
-                .await?
+            format!("WHERE s.global_uuid = '{}'", id.global_uuid)
         };
 
-        if let Some(mut signal) = result {
-            // If the signal has an agent, load its steps
-            if let Some(agent) = &mut signal.agent {
-                if let Some(agent_id) = agent.identifiers.local_id {
-                    if let Ok(Some(steps_json)) = crate::load_agent_steps(pool, agent_id).await {
-                        agent.steps = crate::Step::from_json_array(&steps_json);
+        let query = crate::signal_with_agent_sql(&where_clause);
+        let result = sqlx::query(&query)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| anyhow!("Failed to fetch signal: {}", e))?;
+
+        match result {
+            Some(row) => {
+                let mut signal = Self::from_row(&row)?;
+
+                // Load the RuntimeSession if there's an rts_id
+                if let Some(rts_id) = row.try_get::<Option<i32>, _>("rts_id")? {
+                    // Create ID fields with just the local_id and fetch the full RuntimeSession
+                    let rts_id_fields = IdFields {
+                        local_id: Some(rts_id),
+                        global_uuid: String::new(), // Will be ignored since we're querying by local_id
+                    };
+
+                    if let Ok(Some(rts)) = RuntimeSession::try_db_select_by_id(pool, &rts_id_fields).await {
+                        signal.linked_rts = Some(rts);
                     }
                 }
-            }
-            return Ok(Some(signal));
-        }
 
-        Ok(None)
+                Ok(Some(signal))
+            },
+            None => Ok(None),
+        }
     }
 }

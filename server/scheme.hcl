@@ -103,11 +103,10 @@ table "signals" {
         null = false
     }
 
-    // NOTE: This should match the regex below, please design accordingly
-    //   regex: ^[a-z]+_[a-z-]+$
     column "signal_type" {
-        type = sql("text")
+        type = enum.signal_type
         null = false
+        default = "fyi"
     }
 
     column "signal_status" {
@@ -354,6 +353,15 @@ table "runtime_sessions" {
 
 
 # ============ enum ============
+
+enum "signal_type" {
+    schema = schema.public
+    values = [
+        "command",
+        "sync",
+        "fyi"
+    ]
+}
 
 enum "agent_state" {
     schema = schema.public
