@@ -28,11 +28,14 @@
   import PageHeader from "../../lib/components/PageHeader.svelte";
   import StepConfig from "../../lib/components/StepConfig.svelte";
   import {
-    getAgents,
     getSteps,
+    updateStep,
+    getAgents,
     deleteAgent,
     saveAgent,
+    updateAgent,
     getRuntimeSessions,
+    deleteStep,
   } from "./api";
   import { onMount } from "svelte";
 
@@ -62,6 +65,20 @@
     } catch (err) {
       console.error("Failed to load steps", err);
       steps = [];
+    }
+  }
+
+  async function saveStepData() {
+    if (!selectedStep || !selectedAgent) return;
+
+    try {
+      await updateStep(selectedStep);
+      await loadSteps(selectedAgent.id);
+      selectedStep = null;
+      alert("Step saved successfully!");
+    } catch (err) {
+      console.error("Failed to save step", err);
+      alert("Failed to save step.");
     }
   }
 
@@ -96,7 +113,6 @@
     name: "",
     type: "Assistant",
     description: "",
-    isActive: true,
   };
 
   const agentTypes = [
@@ -171,8 +187,9 @@
     }
   }
 
-  function saveChanges() {
-    agents = agents.map((a) => (a.id === selectedAgent.id ? selectedAgent : a));
+  async function saveChanges() {
+    await updateAgent(selectedAgent);
+    await loadAgents();
     alert("Agent settings saved!");
   }
 
@@ -339,10 +356,10 @@
                   />
                 </div>
 
-                <div class="flex items-center gap-2">
+                <!-- <div class="flex items-center gap-2">
                   <Toggle bind:checked={selectedAgent.isActive} />
                   <Label>Active Status</Label>
-                </div>
+                </div> -->
 
                 <div>
                   <Label class="mb-2">Created On</Label>
@@ -400,10 +417,31 @@
                               {#if selectedStep?.id === step.id}
                                 <Button
                                   size="xs"
-                                  color="none"
+                                  color="light"
                                   on:click={() => (selectedStep = null)}
                                 >
                                   Close
+                                </Button>
+                                <Button
+                                  size="xs"
+                                  color="light"
+                                  on:click={async () => {
+                                    await saveStepData();
+                                    selectedStep = null;
+                                  }}
+                                >
+                                  Save
+                                </Button>
+                                <Button
+                                  size="xs"
+                                  class="bg-[#CE5A5A]"
+                                  on:click={async () => {
+                                    await deleteStep(selectedStep.id);
+                                    await loadSteps(selectedAgent.id);
+                                    selectedStep = null;
+                                  }}
+                                >
+                                  Delete
                                 </Button>
                               {:else}
                                 <Button
@@ -432,7 +470,7 @@
                   </Table>
                 {:else}
                   <div
-                    class="text-center py-8 border rounded-lg bg-gray-50 dark:bg-gray-800"
+                    class="text-center py-8 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800"
                   >
                     <p class="text-gray-500 dark:text-gray-400 mb-4">
                       No steps found for this agent
@@ -469,19 +507,19 @@
                         <TableBodyRow>
                           <TableBodyCell>{session.id}</TableBodyCell>
                           <TableBodyCell>
-                            <Badge color="green"
-                              >{session.runtimeSessionStatus}</Badge
-                            >
+                            <Badge color="green">{session.rts_status}</Badge>
                           </TableBodyCell>
-                          <TableBodyCell>{session.latestStepIdx}</TableBodyCell>
+                          <TableBodyCell
+                            >{session.latest_step_idx}</TableBodyCell
+                          >
                           <TableBodyCell
                             >{new Date(
-                              session.createdTimestamp,
+                              session.created_at,
                             ).toLocaleString()}</TableBodyCell
                           >
                           <TableBodyCell
                             >{new Date(
-                              session.lastUpdatedTimestamp,
+                              session.updated_at,
                             ).toLocaleString()}</TableBodyCell
                           >
                           <TableBodyCell>
@@ -519,53 +557,29 @@
                                 <h3
                                   class="text-lg font-semibold text-gray-800 dark:text-white"
                                 >
-                                  Runtime Session Details
+                                  Runtime Session ID: {session.id}
                                 </h3>
 
-                                <div>
-                                  <strong>Initial Data:</strong>
-                                  <pre
-                                    class="bg-gray-100 dark:bg-gray-900 p-2 rounded overflow-x-auto text-sm">
-{JSON.stringify(session.initialData, null, 2)}
-                      </pre>
-                                </div>
-
-                                <div>
-                                  <strong>Latest Result:</strong>
-                                  <pre
-                                    class="bg-gray-100 dark:bg-gray-900 p-2 rounded overflow-x-auto text-sm">
-{JSON.stringify(session.latestResult, null, 2)}
-                      </pre>
-                                </div>
-
-                                <div class="grid grid-cols-2 gap-4">
+                                {#if session.initial_data}
                                   <div>
-                                    <strong>Session ID:</strong>
-                                    {session.id}
-                                  </div>
-                                  <div>
-                                    <strong>Status:</strong>
-                                    <Badge color="green"
-                                      >{session.runtimeSessionStatus}</Badge
+                                    <Label class="font-bold">Initial Data</Label
                                     >
+                                    <pre
+                                      class="border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-3 rounded-md overflow-x-auto text-sm mt-2">
+{JSON.stringify(session.initial_data, null, 2)}</pre>
                                   </div>
-                                  <div>
-                                    <strong>Step Index:</strong>
-                                    {session.latestStepIdx}
+                                {/if}
+
+                                {#if session.latest_result}
+                                  <div class="mt-6">
+                                    <Label class="font-bold"
+                                      >Latest Result</Label
+                                    >
+                                    <pre
+                                      class="border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-3 rounded-md overflow-x-auto text-sm mt-2">
+{JSON.stringify(session.latest_result, null, 2)}</pre>
                                   </div>
-                                  <div>
-                                    <strong>Created:</strong>
-                                    {new Date(
-                                      session.createdTimestamp,
-                                    ).toLocaleString()}
-                                  </div>
-                                  <div>
-                                    <strong>Last Updated:</strong>
-                                    {new Date(
-                                      session.lastUpdatedTimestamp,
-                                    ).toLocaleString()}
-                                  </div>
-                                </div>
+                                {/if}
                               </div>
                             </td>
                           </tr>
@@ -614,10 +628,10 @@
         />
       </div>
 
-      <div class="flex items-center gap-2">
+      <!-- <div class="flex items-center gap-2">
         <Checkbox id="isActive" bind:checked={agentFormData.isActive} />
         <Label for="isActive">Active</Label>
-      </div>
+      </div> -->
 
       <div class="flex justify-end gap-4">
         <Button

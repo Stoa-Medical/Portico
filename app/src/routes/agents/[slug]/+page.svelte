@@ -123,15 +123,6 @@
     window.location.href = "/agents";
   }
 
-  // Toggle capability selection
-  function toggleCapability(capability) {
-    if (agent.capabilities.includes(capability)) {
-      agent.capabilities = agent.capabilities.filter((c) => c !== capability);
-    } else {
-      agent.capabilities = [...agent.capabilities, capability];
-    }
-  }
-
   // Navigate to step details
   function navigateToStep(id) {
     window.location.href = `/steps/${id}`;

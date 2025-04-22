@@ -43,14 +43,12 @@ function getMockRuntimeSessions() {
   return [
     {
       id: 201,
-      globalUuid: "uuid-1",
-      requestedByAgentId: 1,
-      createdTimestamp: new Date("2025-04-08T10:00:00Z").toISOString(),
-      lastUpdatedTimestamp: new Date("2025-04-08T10:15:00Z").toISOString(),
-      runtimeSessionStatus: "completed",
-      initialData: { input: "Example input" },
-      latestStepIdx: 3,
-      latestResult: { output: "Final result" },
+      created_at: new Date("2025-04-08T10:00:00Z").toISOString(),
+      updated_at: new Date("2025-04-08T10:15:00Z").toISOString(),
+      rts_status: "completed",
+      initial_data: { input: "Example input" },
+      latest_step_idx: 3,
+      latest_result: { output: "Final result" },
     },
   ];
 }
@@ -58,7 +56,12 @@ function getMockRuntimeSessions() {
 export const deleteEqMock = vi.fn(() => ({ data: null, error: null }));
 export const deleteMock = vi.fn(() => ({ eq: deleteEqMock }));
 export const insertAgentMock = vi.fn(() => ({ data: null, error: null }));
-export const updateAgentMock = vi.fn(() => ({ data: null, error: null }));
+export const updateEqMock = vi.fn(() => ({ data: null, error: null }));
+export const updateAgentMock = vi.fn(() => ({
+  eq: updateEqMock,
+  data: null,
+  error: null,
+}));
 
 vi.mock("$lib/supabase", () => {
   return {
@@ -70,7 +73,10 @@ vi.mock("$lib/supabase", () => {
         delete: deleteMock,
       })),
       auth: {
-        getUser: vi.fn(() => ({ data: { user: null }, error: null })),
+        getUser: vi.fn(() => ({
+          data: { user: { id: "test-user-id", email: "test@example.com" } },
+          error: null,
+        })),
       },
     },
   };
@@ -84,6 +90,7 @@ vi.mock("./api", async () => {
     getRuntimeSessions: vi.fn(() => Promise.resolve(getMockRuntimeSessions())),
     deleteAgent: originalModule.deleteAgent,
     saveAgent: originalModule.saveAgent,
+    updateAgent: originalModule.updateAgent,
   };
 });
 
@@ -160,16 +167,19 @@ describe("agents.test.ts - Agents Page", () => {
 
     // Then submit the modal form
     const submitButton = await screen.findByText("Create");
-    fireEvent.click(submitButton);
+    await fireEvent.click(submitButton);
 
     // Then the create agent API is called
     expect(insertAgentMock).toHaveBeenCalled();
     expect(insertAgentMock.mock.calls[0][0]).toMatchObject([
       {
-        agent_state: "stable",
-        description: "",
-        name: "New Agent Test",
-        type: "Assistant",
+        agent: {
+          agent_state: "inactive",
+          description: "",
+          name: "New Agent Test",
+          type: "Assistant",
+        },
+        owner_id: "test-user-id",
       },
     ]);
   });
@@ -217,11 +227,15 @@ describe("agents.test.ts - Agents Page", () => {
     const saveButton = screen.getByText("Save Changes");
     fireEvent.click(saveButton);
 
-    // Then the updated name will appear in the table
-    const updatedAgentInTable = await t.findInTable({
-      text: "Test Updated Agent Name",
-    });
-    expect(updatedAgentInTable).toBeInTheDocument();
+    // Then the update agent api should be called with the new agent name
+    expect(updateAgentMock).toHaveBeenCalled();
+    const updateArgs = updateAgentMock.mock.calls[0];
+
+    expect(updateArgs).toMatchObject([
+      expect.objectContaining({
+        name: "Test Updated Agent Name",
+      }),
+    ]);
   });
 
   it("allows a user to view an existing agents step configurations", async () => {
@@ -294,23 +308,19 @@ describe("agents.test.ts - Agents Page", () => {
 
     // Then you should see the details for that session
     expect(
-      await screen.findByText("Runtime Session Details"),
-    ).toBeInTheDocument();
-    expect(
       await screen.findByText((text) => text.includes("Example input")),
     ).toBeInTheDocument();
 
-    expect(
-      await screen.findByText((text) => text.includes("Final result")),
-    ).toBeInTheDocument();
+    const latestResultEl = await screen.findByText((text) =>
+      text.includes("Final result"),
+    );
+    expect(latestResultEl).toBeInTheDocument();
 
     // When you click close
     const closeButton = await screen.findByText("Close");
     fireEvent.click(closeButton);
 
     // Them the detail view should disappear
-    await waitForElementToBeRemoved(() =>
-      screen.queryByText("Runtime Session Details"),
-    );
+    await waitForElementToBeRemoved(latestResultEl);
   });
 });

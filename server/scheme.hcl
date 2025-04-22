@@ -170,6 +170,14 @@ table "agents" {
     }
 
     # === Custom (table-specific) ===
+    column "name" {
+        type = sql("varchar(255)")
+        null = true
+    }
+    column "type" {
+        type = sql("varchar(255)")
+        null = true
+    }
     column "description" {
         type = sql("text")
         null = false
@@ -247,6 +255,10 @@ table "steps" {
     }
 
     # === Custom (table-specific) ===
+    column "name" {
+        type = sql("varchar(255)")
+        null = true
+    }
     column "description" {
         type = sql("varchar(255)")
         null = false
