@@ -33,7 +33,9 @@
     getAgents,
     deleteAgent,
     saveAgent,
+    updateAgent,
     getRuntimeSessions,
+    deleteStep,
   } from "./api";
   import { onMount } from "svelte";
 
@@ -111,7 +113,6 @@
     name: "",
     type: "Assistant",
     description: "",
-    isActive: true,
   };
 
   const agentTypes = [
@@ -186,8 +187,9 @@
     }
   }
 
-  function saveChanges() {
-    agents = agents.map((a) => (a.id === selectedAgent.id ? selectedAgent : a));
+  async function saveChanges() {
+    await updateAgent(selectedAgent);
+    await loadAgents();
     alert("Agent settings saved!");
   }
 
@@ -354,10 +356,10 @@
                   />
                 </div>
 
-                <div class="flex items-center gap-2">
+                <!-- <div class="flex items-center gap-2">
                   <Toggle bind:checked={selectedAgent.isActive} />
                   <Label>Active Status</Label>
-                </div>
+                </div> -->
 
                 <div>
                   <Label class="mb-2">Created On</Label>
@@ -429,6 +431,17 @@
                                   }}
                                 >
                                   Save
+                                </Button>
+                                <Button
+                                  size="xs"
+                                  class="bg-[#CE5A5A]"
+                                  on:click={async () => {
+                                    await deleteStep(selectedStep.id);
+                                    await loadSteps(selectedAgent.id);
+                                    selectedStep = null;
+                                  }}
+                                >
+                                  Delete
                                 </Button>
                               {:else}
                                 <Button
@@ -615,10 +628,10 @@
         />
       </div>
 
-      <div class="flex items-center gap-2">
+      <!-- <div class="flex items-center gap-2">
         <Checkbox id="isActive" bind:checked={agentFormData.isActive} />
         <Label for="isActive">Active</Label>
-      </div>
+      </div> -->
 
       <div class="flex justify-end gap-4">
         <Button

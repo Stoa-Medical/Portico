@@ -72,11 +72,9 @@ export const saveAgent = async (
   if (authError) throw authError;
   if (!user) throw new Error("User must be logged in to create an agent");
 
-  const { name, type, ...usedFields } = agent;
-
   const { error } = await supabase
     .from("agents")
-    .insert([{ ...usedFields, owner_id: user.id }]);
+    .insert([{ agent, owner_id: user.id }]);
 
   if (error) throw error;
   return getAgents();
@@ -85,9 +83,10 @@ export const saveAgent = async (
 export const updateAgent = async (
   updatedAgent: UpdateAgentPayload,
 ): Promise<Agent[]> => {
+  const { id, ...rest } = updatedAgent;
   const { error } = await supabase
     .from("agents")
-    .update(updatedAgent)
+    .update(rest)
     .eq("id", updatedAgent.id);
   if (error) throw error;
   return getAgents();
