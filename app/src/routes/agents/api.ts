@@ -35,14 +35,14 @@ export type Step = {
 
 export type RuntimeSession = {
   id: number;
-  globalUuid: string;
-  requestedByAgentId: number;
-  createdTimestamp: string;
-  lastUpdatedTimestamp: string;
-  runtimeSessionStatus: "queued" | "running" | "completed" | "failed";
-  initialData: any; // JSON blob
-  latestStepIdx: number;
-  latestResult: any | null; // nullable JSON
+  global_uuid: string;
+  requested_by_agent_id: number;
+  created_at: string;
+  updated_at: string;
+  rts_status: "queued" | "running" | "completed" | "failed";
+  initial_data: any; // JSON blob
+  latest_step_idx: number;
+  latest_result: any | null; // nullable JSON
 };
 
 // Omit both "id" and "owner_id" fields for creation:
@@ -74,7 +74,7 @@ export const saveAgent = async (
 
   const { error } = await supabase
     .from("agents")
-    .insert([{ agent, owner_id: user.id }]);
+    .insert([{ ...agent, owner_id: user.id }]);
 
   if (error) throw error;
   return getAgents();
@@ -152,7 +152,7 @@ export const saveStep = async (step: Step): Promise<Step[]> => {
           ...rest,
           sequence_number: nextSequenceNumber,
         }
-      : { step, sequence_number: nextSequenceNumber };
+      : { ...step, sequence_number: nextSequenceNumber };
 
   const { error: insertError } = await supabase
     .from("steps")
