@@ -1,5 +1,5 @@
 pub mod signals;
-pub use signals::{Signal, SignalType, CommandPayload, CommandDataPayload, CommandOptions, SyncPayload};
+pub use signals::{Signal, SignalType, CommandPayload, CommandDataPayload, SyncPayload};
 
 pub mod agents;
 pub use agents::Agent;

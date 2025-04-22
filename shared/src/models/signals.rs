@@ -1,6 +1,5 @@
 use crate::models::agents::Agent;
 use crate::models::runtime_sessions::RuntimeSession;
-use crate::RunningStatus;
 use crate::{DatabaseItem, IdFields, JsonLike, TimestampFields};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -75,18 +74,12 @@ impl<'q> sqlx::Encode<'q, sqlx::Postgres> for SignalType {
 pub struct CommandPayload {
     pub command: String,
     pub payload: CommandDataPayload,
-    pub options: Option<CommandOptions>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CommandDataPayload {
     pub id: String,
     pub properties: Value,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CommandOptions {
-    pub wait_for_completion: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -241,49 +234,41 @@ impl Signal {
         }
     }
 
+    pub fn parse_fyi_data(&self) -> Result<Value> {
+        match &self.initial_data {
+            Some(data) if self.signal_type == SignalType::Fyi => {
+                Ok(data.clone())
+            }
+            _ => Err(anyhow!("Not an FYI signal or missing data")),
+        }
+    }
+
     pub async fn process(&mut self) -> Result<()> {
-        let runtime_session = match self.signal_type {
-            SignalType::Command => self.process_command().await?,
-            SignalType::Sync => self.process_sync().await?,
-            SignalType::Fyi => self.process_fyi().await?,
-        };
-
-        self.linked_rts = Some(runtime_session);
-        Ok(())
-    }
-
-    async fn process_command(&mut self) -> Result<RuntimeSession> {
-        // Execute the command based on the entity and operation
-        match &self.agent {
-            Some(agent) => {
-                let result = agent.run(self.initial_data.clone().unwrap_or(Value::Null)).await?;
-                Ok(result)
+        match self.execute_signal().await {
+            Ok(runtime_session) => {
+                self.linked_rts = Some(runtime_session);
+                Ok(())
             }
-            None => Err(anyhow!("Cannot process command signal with no associated agent")),
+            Err(e) => {
+                self.error_message = Some(e.to_string());
+                Err(e)
+            }
         }
     }
 
-    async fn process_sync(&mut self) -> Result<RuntimeSession> {
-        // Create a runtime session for the sync operation
-        match &self.agent {
-            Some(agent) => {
-                let result = agent.run(self.initial_data.clone().unwrap_or(Value::Null)).await?;
-                Ok(result)
-            }
-            None => Err(anyhow!("Cannot process sync signal with no associated agent")),
-        }
-    }
-
-    async fn process_fyi(&mut self) -> Result<RuntimeSession> {
-        // FYI signals just store data and don't require processing
-        // They can still create a runtime session for tracking
+    async fn execute_signal(&self) -> Result<RuntimeSession> {
         match &self.agent {
             Some(agent) => {
                 let result = agent.run(self.initial_data.clone().unwrap_or(Value::Null)).await?;
                 Ok(result)
             }
             None => {
-                Err(anyhow!("FYI signal processed but no agent to run"))
+                let error_msg = match self.signal_type {
+                    SignalType::Command => "Cannot process command signal with no associated agent",
+                    SignalType::Sync => "Cannot process sync signal with no associated agent",
+                    SignalType::Fyi => "FYI signal requires an agent to process",
+                };
+                Err(anyhow!(error_msg))
             }
         }
     }
