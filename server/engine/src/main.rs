@@ -39,7 +39,7 @@ async fn main() -> Result<()> {
         .await
         .expect("Failed to fetch agents from database");
 
-    println!("Fetched agents successfully, {:?}", agents);
+    println!("Fetched agents successfully, count: {}", agents.len());
 
     // Create a thread-safe agent map
     let agent_map: Arc<RwLock<HashMap<String, Agent>>> = Arc::new(RwLock::new(
