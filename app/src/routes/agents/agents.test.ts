@@ -171,14 +171,16 @@ describe("agents.test.ts - Agents Page", () => {
 
     // Then the create agent API is called
     expect(insertAgentMock).toHaveBeenCalled();
-    expect(insertAgentMock.mock.calls[0][0]).toMatchObject([
-      {
-        agent_state: "inactive",
-        description: "",
-        name: "New Agent Test",
-        type: "Assistant",
-        owner_id: "test-user-id",
-      },
+    expect(insertAgentMock.mock.calls[0]).toMatchObject([
+      [
+        {
+          agent_state: "inactive",
+          description: "",
+          name: "New Agent Test",
+          type: "Assistant",
+          owner_id: "test-user-id",
+        },
+      ],
     ]);
   });
 
@@ -245,7 +247,7 @@ describe("agents.test.ts - Agents Page", () => {
         agent_id: 1,
         step_content: "Step content here",
       },
-    ]);
+    ] as any);
 
     t.render();
 

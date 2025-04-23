@@ -26,8 +26,9 @@
 
   <form on:submit|preventDefault={login} class="space-y-4">
     <div>
-      <label>Email</label>
+      <label for="email">Email</label>
       <input
+        name="email"
         type="email"
         bind:value={email}
         class="border w-full p-2 rounded text-black"
@@ -36,8 +37,9 @@
     </div>
 
     <div>
-      <label>Password</label>
+      <label for="password">Password</label>
       <input
+        name="password"
         type="password"
         bind:value={password}
         class="border w-full p-2 rounded text-black"

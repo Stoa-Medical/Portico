@@ -16,7 +16,7 @@
   ];
 
   let checkingAuth = true;
-  let user = undefined;
+  let user;
 
   onMount(async () => {
     document.documentElement.classList.add("dark");

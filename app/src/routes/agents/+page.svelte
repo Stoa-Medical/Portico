@@ -146,7 +146,7 @@
   }
 
   function updateUrl(agentId, tab) {
-    const url = new URL(window.location);
+    const url = new URL(window.location.href);
     if (agentId) {
       url.searchParams.set("agentId", agentId);
     } else {

@@ -26,12 +26,15 @@
 
   let newStep = {
     name: "",
-    step_type: "Prompt",
+    step_type: "prompt",
     agent_id: "",
     step_content: "",
   };
 
-  const stepTypes = ["Prompt", "Python"];
+  const stepTypes = [
+    { value: "prompt", name: "Prompt" },
+    { value: "python", name: "Python" },
+  ];
 
   // Fetch actual data on load
   const loadData = async () => {
@@ -64,9 +67,9 @@
   function resetForm() {
     newStep = {
       name: "",
-      type: "Prompt",
+      step_type: "prompt",
       agent_id: "",
-      content: "",
+      step_content: "",
     };
   }
 

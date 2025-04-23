@@ -47,6 +47,9 @@ export type RuntimeSession = {
 };
 
 // Omit both "id" and "owner_id" fields for creation:
+export type CreateStepPayload = Omit<Step, "id" | "global_uuid">;
+
+// Omit both "id" and "owner_id" fields for creation:
 export type CreateAgentPayload = Omit<Agent, "id" | "owner_id">;
 
 // Allow partial Step and Agent updates:
@@ -131,18 +134,9 @@ export const getSteps = async (agentId: number): Promise<Step[]> => {
   return data;
 };
 
-export const saveStep = async (step: Step): Promise<Step[]> => {
-  const { id, ...rest } = step;
-
-  // Insert step without sequence_number as we no longer use it for ordering
-  const stepToInsert = id === "new" ? rest : step;
-
-  const { error: insertError } = await supabase
-    .from("steps")
-    .insert([stepToInsert]);
-
+export const saveStep = async (step: CreateStepPayload): Promise<Step[]> => {
+  const { error: insertError } = await supabase.from("steps").insert([step]);
   if (insertError) throw insertError;
-
   return getStep(step.agent_id);
 };
 
