@@ -1,4 +1,5 @@
 <script>
+  import SuccessChart from "./../../lib/components/SuccessChart.svelte";
   import {
     Card,
     Heading,
@@ -10,7 +11,6 @@
     TableBodyRow,
     TableHead,
     TableHeadCell,
-    Badge,
     Tabs,
     TabItem,
     Select,
@@ -27,7 +27,9 @@
     getStepPerformance,
     getErrorDistribution,
   } from "./api";
+
   import { onMount } from "svelte";
+  import ResponseTimeChart from "$lib/components/ResponseTimeChart.svelte";
 
   // Time period options
   const timePeriods = [
@@ -52,73 +54,6 @@
   };
 
   // Chart rendering functions
-  function renderSuccessRateChart() {
-    const chartElement = document.getElementById("success-rate-chart");
-    if (!chartElement || agentPerformance.length === 0) return;
-
-    chartElement.innerHTML = `
-    <div class="flex justify-around items-end h-48 w-full">
-      ${agentPerformance
-        .map((a) => {
-          const percent = a.successRate;
-          const color =
-            percent >= 90
-              ? "bg-green-500"
-              : percent >= 70
-                ? "bg-yellow-500"
-                : "bg-red-500";
-
-          return `
-        <div class="flex flex-col items-center w-1/4">
-          <div class="relative h-full flex items-end">
-            <div class="${color} w-10 rounded-t-md transition-all duration-300"
-                 style="height: ${percent}%; min-height: 2rem;">
-              <span class="absolute -top-5 left-1/2 -translate-x-1/2 text-xs text-white">${percent}%</span>
-            </div>
-          </div>
-          <div class="text-xs mt-2 text-center text-gray-400">${a.name ?? `Agent ${a.agentId}`}</div>
-        </div>`;
-        })
-        .join("")}
-    </div>
-  `;
-  }
-
-  function renderExecutionTimeChart() {
-    const chartElement = document.getElementById("execution-time-chart");
-    if (!chartElement || agentPerformance.length === 0) return;
-
-    // Find the max time to scale chart bars
-    const maxTime = Math.max(
-      ...agentPerformance.map((a) =>
-        parseFloat(a.avgResponseTime.replace("s", "")),
-      ),
-    );
-
-    chartElement.innerHTML = `
-    <div class="flex justify-around items-end h-48 w-full">
-      ${agentPerformance
-        .map((a) => {
-          const height =
-            maxTime > 0
-              ? (parseFloat(a.avgResponseTime.replace("s", "")) / maxTime) * 100
-              : 0;
-          return `
-        <div class="flex flex-col items-center w-1/4">
-          <div class="relative h-full flex items-end">
-            <div class="bg-blue-500 w-10 rounded-t-md transition-all duration-300"
-                 style="height: ${height}%; min-height: 2rem;">
-              <span class="absolute -top-5 left-1/2 -translate-x-1/2 text-xs text-white">${a.avgResponseTime}</span>
-            </div>
-          </div>
-          <div class="text-xs mt-2 text-center text-gray-400">${a.name ?? `Agent ${a.agentId}`}</div>
-        </div>`;
-        })
-        .join("")}
-    </div>
-  `;
-  }
-
   function renderUsageChart() {
     const chartElement = document.getElementById("usage-chart");
     if (chartElement) {
@@ -172,12 +107,16 @@
       runtimeSessionCount = analytics.runtimeSessionCount;
       stepCount = analytics.stepCount;
 
-      agentPerformance = await getAgentPerformance();
-      stepPerformance = await getStepPerformance();
-      errorDistribution = await getErrorDistribution();
+      const [agentPerf, stepPerf, errorDist] = await Promise.all([
+        getAgentPerformance(),
+        getStepPerformance(),
+        getErrorDistribution(),
+      ]);
 
-      renderSuccessRateChart();
-      renderExecutionTimeChart();
+      agentPerformance = agentPerf;
+      stepPerformance = stepPerf;
+      errorDistribution = errorDist;
+
       renderUsageChart();
       renderErrorDistributionChart();
     } catch (e) {
@@ -189,8 +128,6 @@
   $: if (selectedTimePeriod) {
     // In a real app, this would fetch new data based on the time period
     setTimeout(() => {
-      renderSuccessRateChart();
-      renderExecutionTimeChart();
       renderUsageChart();
       renderErrorDistributionChart();
     }, 0);
@@ -272,12 +209,12 @@
     <Card class="max-w-full">
       <div class="p-4">
         <div class="flex justify-between items-center mb-4">
-          <Heading tag="h3" class="text-lg font-semibold"
-            >Success Rate by Agent</Heading
-          >
+          <Heading tag="h3" class="text-lg font-semibold">Success Rate</Heading>
           <ChartBars3FromLeftOutline class="h-5 w-5 text-gray-500" />
         </div>
-        <div id="success-rate-chart" class="w-full"></div>
+        <div id="success-rate-chart" class="w-full">
+          <SuccessChart {agentPerformance} />
+        </div>
       </div>
     </Card>
 
@@ -289,7 +226,9 @@
           >
           <ChartLineUpOutline class="h-5 w-5 text-gray-500" />
         </div>
-        <div id="execution-time-chart" class="w-full"></div>
+        <div id="execution-time-chart" class="w-full">
+          <ResponseTimeChart {agentPerformance} />
+        </div>
       </div>
     </Card>
 
@@ -308,9 +247,7 @@
     <Card class="max-w-full">
       <div class="p-4">
         <div class="flex justify-between items-center mb-4">
-          <Heading tag="h3" class="text-lg font-semibold"
-            >Error Distribution</Heading
-          >
+          <Heading tag="h3" class="text-lg font-semibold">Run Status</Heading>
           <ChartBars3FromLeftOutline class="h-5 w-5 text-gray-500" />
         </div>
         <div id="error-distribution-chart" class="w-full"></div>
@@ -328,7 +265,6 @@
             <TableHeadCell>Success Rate</TableHeadCell>
             <TableHeadCell>Total Runs</TableHeadCell>
             <TableHeadCell>Avg. Response Time</TableHeadCell>
-            <TableHeadCell>Trend</TableHeadCell>
           </TableHead>
           <TableBody>
             {#each agentPerformance as agent}
@@ -351,11 +287,6 @@
                 </TableBodyCell>
                 <TableBodyCell>{agent.totalRuns}</TableBodyCell>
                 <TableBodyCell>{agent.avgResponseTime}</TableBodyCell>
-                <TableBodyCell>
-                  <Badge color={agent.trend === "up" ? "green" : "red"}>
-                    {agent.trend === "up" ? "↑" : "↓"}
-                  </Badge>
-                </TableBodyCell>
               </TableBodyRow>
             {/each}
           </TableBody>
