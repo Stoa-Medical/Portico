@@ -85,7 +85,7 @@
 
     <!-- Main content -->
     <div class="flex-1 overflow-auto">
-      <main class="p-6 max-w-container">
+      <main class="p-6">
         <slot />
       </main>
     </div>
