@@ -254,6 +254,7 @@
       <Card class="max-w-full">
         <Table hoverable={true} data-testid="agents-table">
           <TableHead>
+            <TableHeadCell>Id</TableHeadCell>
             <TableHeadCell>Name</TableHeadCell>
             <TableHeadCell>Type</TableHeadCell>
             <TableHeadCell>Status</TableHeadCell>
@@ -268,6 +269,7 @@
                   ? 'bg-blue-50 dark:bg-blue-900/20'
                   : ''}"
               >
+                <TableBodyCell>{agent.id}</TableBodyCell>
                 <TableBodyCell>{agent.name}</TableBodyCell>
                 <TableBodyCell>{agent.type}</TableBodyCell>
                 <TableBodyCell>
@@ -391,6 +393,7 @@
                 {#if steps && steps.length > 0}
                   <Table hoverable={true} data-testid="steps-table">
                     <TableHead>
+                      <TableHeadCell>Id</TableHeadCell>
                       <TableHeadCell>Name</TableHeadCell>
                       <TableHeadCell>Type</TableHeadCell>
                       <!-- <TableHeadCell>Last Edited</TableHeadCell> -->
@@ -399,6 +402,7 @@
                     <TableBody>
                       {#each steps as step}
                         <TableBodyRow>
+                          <TableBodyCell>{step.id}</TableBodyCell>
                           <TableBodyCell>{step.name}</TableBodyCell>
                           <TableBodyCell>
                             <Badge

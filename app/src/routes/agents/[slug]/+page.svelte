@@ -220,6 +220,7 @@
           {#if steps.length > 0}
             <Table hoverable={true}>
               <TableHead>
+                <TableHeadCell>Id</TableHeadCell>
                 <TableHeadCell>Name</TableHeadCell>
                 <TableHeadCell>Type</TableHeadCell>
                 <TableHeadCell>Last Edited</TableHeadCell>
@@ -228,6 +229,7 @@
               <TableBody>
                 {#each steps as step}
                   <TableBodyRow>
+                    <TableBodyCell>{step.id}</TableBodyCell>
                     <TableBodyCell>{step.name}</TableBodyCell>
                     <TableBodyCell>
                       <Badge
