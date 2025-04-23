@@ -80,7 +80,7 @@
   ];
   const actionBar = [
     {
-      label: "New Step",
+      label: "Add Step Template",
       icon: PlusOutline,
       color: "blue",
       onClick: () => (showModal = true),
@@ -121,7 +121,7 @@
         {#if steps.length === 0}
           <TableBodyRow>
             <TableBodyCell colspan="4" class="text-center py-4 text-gray-500">
-              No steps found. Click "Add Step" to create one.
+              No step templates found. Click "Add Step Template" to create one.
             </TableBodyCell>
           </TableBodyRow>
         {/if}
@@ -130,7 +130,7 @@
   </Card>
 
   <!-- Add Step Modal -->
-  <Modal title="Add New Step" bind:open={showModal} autoclose>
+  <Modal title="Add New Step Template" bind:open={showModal} autoclose>
     <form on:submit|preventDefault={handleSubmit} class="space-y-4">
       <div>
         <Label for="name" class="mb-2">Step Name</Label>
@@ -177,7 +177,7 @@
             resetForm();
           }}>Cancel</Button
         >
-        <Button type="submit" color="blue">Add Step</Button>
+        <Button type="submit" color="blue">Add Step Template</Button>
       </div>
     </form>
   </Modal>
