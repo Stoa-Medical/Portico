@@ -14,3 +14,19 @@ Object.defineProperty(window, "matchMedia", {
     dispatchEvent: () => false,
   }),
 });
+
+Object.defineProperty(window, "alert", {
+  value: () => {},
+});
+
+// Mock ResizeObserver used in ApexCharts (via Flowbite-Svelte)
+class ResizeObserverMock {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+global.ResizeObserver = ResizeObserverMock;
+
+// Mock request/cancelAnimationFrame
+global.requestAnimationFrame = (cb) => setTimeout(cb, 0);
+global.cancelAnimationFrame = (id) => clearTimeout(id);
