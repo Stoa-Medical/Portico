@@ -77,26 +77,68 @@
 
   function renderErrorDistributionChart() {
     const chartElement = document.getElementById("error-distribution-chart");
-    if (chartElement) {
+    if (!chartElement || !errorDistribution) return;
+
+    const total =
+      errorDistribution.completed +
+      errorDistribution.cancelled +
+      errorDistribution.running +
+      errorDistribution.waiting;
+
+    if (total === 0) {
       chartElement.innerHTML = `
-        <div class="h-40 w-full">
-          <div class="flex h-full">
-            <div class="bg-red-500 w-[25%] h-full relative flex items-center justify-center">
-              <span class="text-white text-xs">API Errors</span>
-            </div>
-            <div class="bg-orange-500 w-[15%] h-full relative flex items-center justify-center">
-              <span class="text-white text-xs">Timeout</span>
-            </div>
-            <div class="bg-yellow-500 w-[35%] h-full relative flex items-center justify-center">
-              <span class="text-white text-xs">Input Errors</span>
-            </div>
-            <div class="bg-red-300 w-[25%] h-full relative flex items-center justify-center">
-              <span class="text-white text-xs">Other</span>
-            </div>
-          </div>
+      <div class="h-40 flex items-center justify-center text-sm text-gray-400">
+        No data available
+      </div>
+    `;
+      return;
+    }
+
+    // Calculate relative widths
+    const segments = [
+      {
+        label: "Completed",
+        value: errorDistribution.completed,
+        color: "bg-green-500",
+      },
+      {
+        label: "Cancelled",
+        value: errorDistribution.cancelled,
+        color: "bg-red-500",
+      },
+      {
+        label: "Running",
+        value: errorDistribution.running,
+        color: "bg-yellow-500",
+      },
+      {
+        label: "Waiting",
+        value: errorDistribution.waiting,
+        color: "bg-gray-400",
+      },
+    ];
+
+    const bars = segments
+      .map((segment) => {
+        const percent = ((segment.value / total) * 100).toFixed(2);
+        if (+percent > 0) {
+          return `
+        <div class="${segment.color} h-full relative flex items-center justify-center"
+             style="width: ${percent}%;">
+          <span class="text-white text-xs">${segment.label} (${segment.value})</span>
         </div>
       `;
-    }
+        }
+      })
+      .join("");
+
+    chartElement.innerHTML = `
+    <div class="h-40 w-full">
+      <div class="flex h-full overflow-hidden rounded-md shadow-sm">
+        ${bars}
+      </div>
+    </div>
+  `;
   }
 
   // Initialize charts on mount
