@@ -36,7 +36,6 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
     //         ))
     //         FROM steps s
     //         WHERE s.runtime_session_id = rs.id
-    //         ORDER BY s.sequence_number
     //     ),
     //     '[]'::json
     // ) as steps
@@ -152,7 +151,7 @@ impl DatabaseItem for RuntimeSession {
         let session_id: i64 = record.get("id");
 
         // Then create step records if any exist
-        for (idx, step) in self.steps.iter().enumerate() {
+        for step in self.steps.iter() {
             sqlx::query(
                 r#"
                 INSERT INTO steps (
@@ -164,7 +163,7 @@ impl DatabaseItem for RuntimeSession {
             )
             .bind(&step.identifiers.global_uuid)
             .bind(session_id)
-            .bind(idx as i32)
+            .bind(0)  // Default sequence_number (not used for ordering anymore)
             .bind(&step.description)
             .bind(&step.step_type)
             .bind(&step.step_content)

@@ -133,26 +133,8 @@ export const getSteps = async (agentId: number): Promise<Step[]> => {
 export const saveStep = async (step: Step): Promise<Step[]> => {
   const { id, ...rest } = step;
 
-  // Get next sequence_number for this agent:
-  const { data: existingSteps, error: fetchError } = await supabase
-    .from("steps")
-    .select("sequence_number")
-    .eq("agent_id", step.agent_id)
-    .order("sequence_number", { ascending: false })
-    .limit(1);
-
-  if (fetchError) throw fetchError;
-
-  const nextSequenceNumber = (existingSteps?.[0]?.sequence_number ?? 0) + 1;
-
-  // Insert step with metadata:
-  const stepToInsert =
-    id === "new"
-      ? {
-          ...rest,
-          sequence_number: nextSequenceNumber,
-        }
-      : { ...step, sequence_number: nextSequenceNumber };
+  // Insert step without sequence_number as we no longer use it for ordering
+  const stepToInsert = id === "new" ? rest : step;
 
   const { error: insertError } = await supabase
     .from("steps")

@@ -152,8 +152,12 @@ table "agents" {
     }
 
     # === Relationships ===
-    # An Agent is assigned to a Mission (a Mission points to an Agent)
     # An Agent can have many Steps (a Step points to an Agent)
+    column "step_ids" {
+        type = sql("int[]")
+        null = true
+        comment = "Array of step IDs in execution order"
+    }
 
     # === Timestamps ===
     column "created_at" {
@@ -233,17 +237,6 @@ table "steps" {
         ]
         ref_columns = [
             table.agents.column.id
-        ]
-    }
-    column "sequence_number" {
-        type = int
-        null = false
-    }
-
-    unique "agent_step_order" {
-        columns = [
-            column.agent_id,
-            column.sequence_number
         ]
     }
 

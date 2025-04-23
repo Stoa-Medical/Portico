@@ -141,7 +141,7 @@ impl Agent {
             return Err(anyhow!("Cannot run agent in Inactive state"));
         }
 
-        // Create a new RuntimeSession
+        // Create a new RuntimeSession with the agent's steps
         let mut session = RuntimeSession::new(source, self.steps.clone());
 
         // Start the RuntimeSession and handle the result
@@ -188,7 +188,6 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
     //         ))
     //         FROM steps s
     //         WHERE s.agent_id = a.id
-    //         ORDER BY s.sequence_number
     //     ),
     //     '[]'::json
     // ) as steps
@@ -417,7 +416,7 @@ impl DatabaseItem for Agent {
         let agent_id: i64 = record.get("id");
 
         // Then create step records if any exist
-        for (idx, step) in self.steps.iter().enumerate() {
+        for step in self.steps.iter() {
             // Create a modified step with agent_id
             sqlx::query(
                 r#"
@@ -430,7 +429,7 @@ impl DatabaseItem for Agent {
             )
             .bind(&step.identifiers.global_uuid)
             .bind(agent_id)
-            .bind(idx as i32)
+            .bind(0)  // Default sequence_number (not used for ordering anymore)
             .bind(&step.description)
             .bind(&step.step_type)
             .bind(&step.step_content)
