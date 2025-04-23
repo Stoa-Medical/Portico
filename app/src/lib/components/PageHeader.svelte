@@ -16,7 +16,7 @@
 
   <div class="flex justify-between items-center min-h-[70px]">
     <div class="flex items-center h-full">
-      <h1 class="font-bold flex items-center">
+      <h1 class="flex items-center">
         {title}
       </h1>
     </div>

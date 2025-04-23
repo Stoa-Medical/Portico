@@ -187,7 +187,7 @@
     <div
       class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4"
     >
-      <h1 class="font-bold">Analytics</h1>
+      <h1>Analytics</h1>
 
       <div class="flex items-center gap-2">
         <CalendarMonthOutline class="h-5 w-5 text-gray-500" />

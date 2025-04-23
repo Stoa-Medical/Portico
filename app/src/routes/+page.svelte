@@ -13,8 +13,9 @@
   <div class="grid grid-cols-1 gap-6">
     <Card class="overflow-x-auto max-w-full bg-card">
       <div class="p-4">
-        <Heading tag="h2" class="mb-4">Hi there, Howard!</Heading>
-        <Heading tag="h2" class="mb-4">Let's create a new project!</Heading>
+        <h2 class="mb-4 text-4xl">Hi there, Howard!</h2>
+        <br />
+        <h2 class="mb-4 text-4xl">Let's create a new project!</h2>
 
         <p class="mt-2 mb-6">
           Create a project from scratch or start from a template
