@@ -1,5 +1,5 @@
 <script>
-  import SuccessChart from "./../../lib/components/SuccessChart.svelte";
+  import SuccessChart from "$lib/components/SuccessChart.svelte";
   import {
     Card,
     Heading,

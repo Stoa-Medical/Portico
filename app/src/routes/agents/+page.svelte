@@ -14,8 +14,6 @@
     Input,
     Textarea,
     Select,
-    Checkbox,
-    Toggle,
     Badge,
     Tabs,
     TabItem,
@@ -25,8 +23,8 @@
     ArrowLeftOutline,
     TrashBinOutline,
   } from "flowbite-svelte-icons";
-  import PageHeader from "../../lib/components/PageHeader.svelte";
-  import StepConfig from "../../lib/components/StepConfig.svelte";
+  import PageHeader from "$lib/components/PageHeader.svelte";
+  import StepConfig from "$lib/components/StepConfig.svelte";
   import {
     getSteps,
     updateStep,

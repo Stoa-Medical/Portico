@@ -1,8 +1,6 @@
-<!-- TODO: Below is AI boilerplate code, think through actual design -->
-
 <script>
-  import PageHeader from "../lib/components/PageHeader.svelte";
-  import { Card, Button, Heading } from "flowbite-svelte";
+  import PageHeader from "$lib/components/PageHeader.svelte";
+  import { Card, Button } from "flowbite-svelte";
 </script>
 
 <main class="container mx-auto p-4">

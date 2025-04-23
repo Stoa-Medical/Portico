@@ -39,6 +39,15 @@
 
     checkingAuth = false;
   });
+
+  // Watch route changes and redirect if not logged in
+  page.subscribe(($page) => {
+    const isLoginPage = $page.url.pathname.startsWith("/login");
+
+    if (!user && !isLoginPage) {
+      goto("/login");
+    }
+  });
 </script>
 
 {#if checkingAuth}
