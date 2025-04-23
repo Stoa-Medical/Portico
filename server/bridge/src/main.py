@@ -107,7 +107,7 @@ async def main():
         table="signals",
         schema="public",
     )
-    channel_signals.subscribe()
+    await channel_signals.subscribe()
 
     logger.info("Subscribed to Supabase realtime channels")
 

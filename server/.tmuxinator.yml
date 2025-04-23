@@ -1,0 +1,19 @@
+# ~/.tmuxinator/portico.yml
+
+name: portico-server
+root: ~/GitHub/Portico/server
+
+windows:
+  - portico:
+      # Simple 3-pane layout: main-vertical with even splits
+      layout: main-vertical
+      panes:
+        - supabase:
+          - supabase start
+        - engine:
+          - cd engine
+          - sleep 5 && cargo run
+        - bridge:
+          - cd bridge
+          - source .venv/bin/activate
+          - sleep 10 && python -m src.main
