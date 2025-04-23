@@ -21,6 +21,7 @@
     ChartLineUpOutline,
     CalendarMonthOutline,
   } from "flowbite-svelte-icons";
+  import { getAnalyticsCounts } from "./api";
   import { onMount } from "svelte";
 
   // Time period options
@@ -31,6 +32,8 @@
   ];
 
   let selectedTimePeriod = "30d";
+  let agentCount = 0;
+  let runtimeSessionCount = 0;
 
   // Mock data for agent performance
   const agentPerformance = [
@@ -198,11 +201,19 @@
   }
 
   // Initialize charts on mount
-  onMount(() => {
+  onMount(async () => {
     renderSuccessRateChart();
     renderExecutionTimeChart();
     renderUsageChart();
     renderErrorDistributionChart();
+
+    try {
+      const counts = await getAnalyticsCounts();
+      agentCount = counts.agentCount;
+      runtimeSessionCount = counts.runtimeSessionCount;
+    } catch (err) {
+      console.error("Failed to load analytics counts:", err);
+    }
   });
 
   // Update charts when time period changes
@@ -246,8 +257,7 @@
     <Card padding="sm">
       <div class="flex flex-col p-4">
         <div class="text-gray-500 text-sm mb-1">Total Agents</div>
-        <div class="text-2xl font-bold">3</div>
-        <div class="text-green-500 text-sm mt-2">+1 this month</div>
+        <div class="text-2xl font-bold">{agentCount}</div>
       </div>
     </Card>
 
@@ -255,7 +265,6 @@
       <div class="flex flex-col p-4">
         <div class="text-gray-500 text-sm mb-1">Total Steps</div>
         <div class="text-2xl font-bold">8</div>
-        <div class="text-green-500 text-sm mt-2">+3 this month</div>
       </div>
     </Card>
 
@@ -263,15 +272,13 @@
       <div class="flex flex-col p-4">
         <div class="text-gray-500 text-sm mb-1">Avg. Success Rate</div>
         <div class="text-2xl font-bold">88%</div>
-        <div class="text-green-500 text-sm mt-2">+5% from last month</div>
       </div>
     </Card>
 
     <Card padding="sm">
       <div class="flex flex-col p-4">
         <div class="text-gray-500 text-sm mb-1">Total Executions</div>
-        <div class="text-2xl font-bold">713</div>
-        <div class="text-green-500 text-sm mt-2">+142 this month</div>
+        <div class="text-2xl font-bold">{runtimeSessionCount}</div>
       </div>
     </Card>
   </div>

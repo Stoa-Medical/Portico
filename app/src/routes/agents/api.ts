@@ -26,6 +26,7 @@ export type Agent = {
 
 export type Step = {
   id: number | string;
+  global_uuid: string;
   agent_id: number;
   name: string;
   description?: string;
