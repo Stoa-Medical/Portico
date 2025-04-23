@@ -21,7 +21,12 @@
     ChartLineUpOutline,
     CalendarMonthOutline,
   } from "flowbite-svelte-icons";
-  import { getAnalyticsCounts } from "./api";
+  import {
+    getAnalyticsCounts,
+    getAgentPerformance,
+    getStepPerformance,
+    getErrorDistribution,
+  } from "./api";
   import { onMount } from "svelte";
 
   // Time period options
@@ -34,92 +39,46 @@
   let selectedTimePeriod = "30d";
   let agentCount = 0;
   let runtimeSessionCount = 0;
+  let stepCount = 0;
 
-  // Mock data for agent performance
-  const agentPerformance = [
-    {
-      id: 1,
-      name: "Agent Smith",
-      successRate: 92,
-      totalRuns: 245,
-      avgResponseTime: "1.2s",
-      trend: "up",
-    },
-    {
-      id: 2,
-      name: "Agent Johnson",
-      successRate: 78,
-      totalRuns: 156,
-      avgResponseTime: "2.5s",
-      trend: "down",
-    },
-    {
-      id: 3,
-      name: "Agent Brown",
-      successRate: 95,
-      totalRuns: 312,
-      avgResponseTime: "0.8s",
-      trend: "up",
-    },
-  ];
+  let agentPerformance = [];
+  let stepPerformance = [];
 
-  // Mock data for step performance
-  const stepPerformance = [
-    {
-      id: 1,
-      name: "Data Collection",
-      type: "Python",
-      successRate: 98,
-      totalRuns: 412,
-      avgExecutionTime: "0.5s",
-      agentName: "Agent Smith",
-    },
-    {
-      id: 2,
-      name: "Text Analysis",
-      type: "Prompt",
-      successRate: 85,
-      totalRuns: 245,
-      avgExecutionTime: "2.1s",
-      agentName: "Agent Smith",
-    },
-    {
-      id: 3,
-      name: "Data Visualization",
-      type: "Python",
-      successRate: 92,
-      totalRuns: 178,
-      avgExecutionTime: "1.3s",
-      agentName: "Agent Brown",
-    },
-  ];
+  let errorDistribution = {
+    completed: 0,
+    cancelled: 0,
+    running: 0,
+    waiting: 0,
+  };
 
   // Chart rendering functions
   function renderSuccessRateChart() {
     const chartElement = document.getElementById("success-rate-chart");
-    if (!chartElement) return;
-
-    const agents = [
-      { name: "Agent Smith", percent: 92, color: "bg-green-500" },
-      { name: "Agent Johnson", percent: 78, color: "bg-yellow-500" },
-      { name: "Agent Brown", percent: 95, color: "bg-green-600" },
-    ];
+    if (!chartElement || agentPerformance.length === 0) return;
 
     chartElement.innerHTML = `
     <div class="flex justify-around items-end h-48 w-full">
-      ${agents
-        .map(
-          (a) => `
+      ${agentPerformance
+        .map((a) => {
+          const percent = a.successRate;
+          const color =
+            percent >= 90
+              ? "bg-green-500"
+              : percent >= 70
+                ? "bg-yellow-500"
+                : "bg-red-500";
+
+          return `
         <div class="flex flex-col items-center w-1/4">
           <div class="relative h-full flex items-end">
-            <div class="${a.color} w-10 rounded-t-md transition-all duration-300"
-                 style="height: ${a.percent}%; min-height: 2rem;">
-              <span class="absolute -top-5 left-1/2 -translate-x-1/2 text-xs text-white">${a.percent}%</span>
+            <div class="${color} w-10 rounded-t-md transition-all duration-300"
+                 style="height: ${percent}%; min-height: 2rem;">
+              <span class="absolute -top-5 left-1/2 -translate-x-1/2 text-xs text-white">${percent}%</span>
             </div>
           </div>
-          <div class="text-xs mt-2 text-center text-gray-400">${a.name}</div>
-        </div>`,
-        )
+          <div class="text-xs mt-2 text-center text-gray-400">${a.name ?? `Agent ${a.agentId}`}</div>
+        </div>`;
+        })
         .join("")}
     </div>
   `;
@@ -127,29 +86,34 @@
 
   function renderExecutionTimeChart() {
     const chartElement = document.getElementById("execution-time-chart");
-    if (!chartElement) return;
+    if (!chartElement || agentPerformance.length === 0) return;
 
-    const agents = [
-      { name: "Agent Smith", value: "1.2s", height: 60 },
-      { name: "Agent Johnson", value: "2.5s", height: 80 },
-      { name: "Agent Brown", value: "0.8s", height: 40 },
-    ];
+    // Find the max time to scale chart bars
+    const maxTime = Math.max(
+      ...agentPerformance.map((a) =>
+        parseFloat(a.avgResponseTime.replace("s", "")),
+      ),
+    );
 
     chartElement.innerHTML = `
     <div class="flex justify-around items-end h-48 w-full">
-      ${agents
-        .map(
-          (a) => `
+      ${agentPerformance
+        .map((a) => {
+          const height =
+            maxTime > 0
+              ? (parseFloat(a.avgResponseTime.replace("s", "")) / maxTime) * 100
+              : 0;
+          return `
         <div class="flex flex-col items-center w-1/4">
           <div class="relative h-full flex items-end">
             <div class="bg-blue-500 w-10 rounded-t-md transition-all duration-300"
-                 style="height: ${a.height}%; min-height: 2rem;">
-              <span class="absolute -top-5 left-1/2 -translate-x-1/2 text-xs text-white">${a.value}</span>
+                 style="height: ${height}%; min-height: 2rem;">
+              <span class="absolute -top-5 left-1/2 -translate-x-1/2 text-xs text-white">${a.avgResponseTime}</span>
             </div>
           </div>
-          <div class="text-xs mt-2 text-center text-gray-400">${a.name}</div>
-        </div>`,
-        )
+          <div class="text-xs mt-2 text-center text-gray-400">${a.name ?? `Agent ${a.agentId}`}</div>
+        </div>`;
+        })
         .join("")}
     </div>
   `;
@@ -162,15 +126,15 @@
         <div class="h-40 w-full relative">
           <div class="absolute inset-0 flex items-center justify-center">
             <div class="text-center">
-              <div class="text-3xl font-bold">713</div>
-              <div class="text-sm text-gray-500">Total Runs</div>
+              <div class="text-3xl font-bold">${agentPerformance.reduce(
+                (acc, agent) => {
+                  return acc + agent.totalRuns;
+                },
+                0,
+              )}</div>
+              <div class="text-sm text-gray-500">Total Agent Runs</div>
             </div>
           </div>
-          <svg viewBox="0 0 100 100" class="h-full w-full">
-            <circle cx="50" cy="50" r="40" fill="none" stroke="#e5e7eb" stroke-width="10" />
-            <circle cx="50" cy="50" r="40" fill="none" stroke="#3b82f6" stroke-width="10" 
-              stroke-dasharray="251.2" stroke-dashoffset="50.24" transform="rotate(-90 50 50)" />
-          </svg>
         </div>
       `;
     }
@@ -202,17 +166,22 @@
 
   // Initialize charts on mount
   onMount(async () => {
-    renderSuccessRateChart();
-    renderExecutionTimeChart();
-    renderUsageChart();
-    renderErrorDistributionChart();
-
     try {
-      const counts = await getAnalyticsCounts();
-      agentCount = counts.agentCount;
-      runtimeSessionCount = counts.runtimeSessionCount;
-    } catch (err) {
-      console.error("Failed to load analytics counts:", err);
+      const analytics = await getAnalyticsCounts();
+      agentCount = analytics.agentCount;
+      runtimeSessionCount = analytics.runtimeSessionCount;
+      stepCount = analytics.stepCount;
+
+      agentPerformance = await getAgentPerformance();
+      stepPerformance = await getStepPerformance();
+      errorDistribution = await getErrorDistribution();
+
+      renderSuccessRateChart();
+      renderExecutionTimeChart();
+      renderUsageChart();
+      renderErrorDistributionChart();
+    } catch (e) {
+      console.error("Error loading analytics data", e);
     }
   });
 
@@ -257,28 +226,43 @@
     <Card padding="sm">
       <div class="flex flex-col p-4">
         <div class="text-gray-500 text-sm mb-1">Total Agents</div>
-        <div class="text-2xl font-bold">{agentCount}</div>
+        <div class="text-2xl font-bold" data-testid="total-agents">
+          {agentCount}
+        </div>
       </div>
     </Card>
 
     <Card padding="sm">
       <div class="flex flex-col p-4">
         <div class="text-gray-500 text-sm mb-1">Total Steps</div>
-        <div class="text-2xl font-bold">8</div>
+        <div class="text-2xl font-bold" data-testid="total-steps">
+          {stepCount}
+        </div>
       </div>
     </Card>
 
     <Card padding="sm">
       <div class="flex flex-col p-4">
         <div class="text-gray-500 text-sm mb-1">Avg. Success Rate</div>
-        <div class="text-2xl font-bold">88%</div>
+        <div class="text-2xl font-bold" data-testid="avg-success-rate">
+          {agentPerformance.length > 0
+            ? Math.round(
+                agentPerformance.reduce(
+                  (acc, cur) => acc + cur.successRate,
+                  0,
+                ) / agentPerformance.length,
+              )
+            : 0}%
+        </div>
       </div>
     </Card>
 
     <Card padding="sm">
       <div class="flex flex-col p-4">
         <div class="text-gray-500 text-sm mb-1">Total Executions</div>
-        <div class="text-2xl font-bold">{runtimeSessionCount}</div>
+        <div class="text-2xl font-bold" data-testid="total-executions">
+          {runtimeSessionCount}
+        </div>
       </div>
     </Card>
   </div>
@@ -340,7 +324,7 @@
       <Card class="max-w-full">
         <Table hoverable={true}>
           <TableHead>
-            <TableHeadCell>Agent Name</TableHeadCell>
+            <TableHeadCell>Agent</TableHeadCell>
             <TableHeadCell>Success Rate</TableHeadCell>
             <TableHeadCell>Total Runs</TableHeadCell>
             <TableHeadCell>Avg. Response Time</TableHeadCell>
@@ -349,7 +333,7 @@
           <TableBody>
             {#each agentPerformance as agent}
               <TableBodyRow>
-                <TableBodyCell>{agent.name}</TableBodyCell>
+                <TableBodyCell>Agent {agent.agentId}</TableBodyCell>
                 <TableBodyCell>
                   <div class="flex items-center">
                     <div class="w-16 bg-gray-200 rounded-full h-2.5 mr-2">
@@ -379,16 +363,14 @@
       </Card>
     </TabItem>
 
-    <TabItem title="Step Performance">
+    <!-- TODO: Add step performance view back once available via schema -->
+    <!-- <TabItem title="Step Performance">
       <Card class="max-w-full">
         <Table hoverable={true}>
           <TableHead>
             <TableHeadCell>Step Name</TableHeadCell>
             <TableHeadCell>Type</TableHeadCell>
             <TableHeadCell>Agent</TableHeadCell>
-            <TableHeadCell>Success Rate</TableHeadCell>
-            <TableHeadCell>Total Runs</TableHeadCell>
-            <TableHeadCell>Avg. Execution Time</TableHeadCell>
           </TableHead>
           <TableBody>
             {#each stepPerformance as step}
@@ -400,28 +382,11 @@
                   </Badge>
                 </TableBodyCell>
                 <TableBodyCell>{step.agentName}</TableBodyCell>
-                <TableBodyCell>
-                  <div class="flex items-center">
-                    <div class="w-16 bg-gray-200 rounded-full h-2.5 mr-2">
-                      <div
-                        class="bg-{step.successRate >= 90
-                          ? 'green'
-                          : step.successRate >= 70
-                            ? 'yellow'
-                            : 'red'}-500 h-2.5 rounded-full"
-                        style="width: {step.successRate}%"
-                      ></div>
-                    </div>
-                    <span>{step.successRate}%</span>
-                  </div>
-                </TableBodyCell>
-                <TableBodyCell>{step.totalRuns}</TableBodyCell>
-                <TableBodyCell>{step.avgExecutionTime}</TableBodyCell>
               </TableBodyRow>
             {/each}
           </TableBody>
         </Table>
       </Card>
-    </TabItem>
+    </TabItem> -->
   </Tabs>
 </main>
