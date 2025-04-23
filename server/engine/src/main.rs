@@ -50,10 +50,10 @@ async fn main() -> Result<()> {
     ));
 
     // Create an instance of our gRPC service
-    let bridge_service = BridgeServiceImpl::new(agent_map, Some(db_conn_pool));
+    let bridge_service = BridgeServiceImpl::new(agent_map, db_conn_pool);
 
     // Start the gRPC server
-    println!("Starting gRPC server...");
+    println!("Starting gRPC server with agent queuing support...");
     Server::builder()
         .add_service(bridge_service.with_server())
         .serve(addr)
