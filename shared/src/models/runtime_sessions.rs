@@ -4,6 +4,7 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde_json::Value;
 use sqlx::{PgPool, Row};
+use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 #[derive(Debug)]
@@ -15,6 +16,8 @@ pub struct RuntimeSession {
     pub source_data: Value,
     pub last_step_idx: Option<i32>,
     pub last_successful_result: Option<Value>,
+    pub step_execution_times: Vec<Duration>,  // Stores duration for each step
+    pub total_execution_time: Duration,       // Stores total runtime
 }
 
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
@@ -47,6 +50,32 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
         // Convert the JSON array into Vec<Step> using the shared function
         let steps = Step::from_json_array(&steps_json);
 
+        // Get execution times as array of numeric values
+        let step_execution_times = match row.try_get::<Option<Vec<f64>>, _>("step_execution_times") {
+            Ok(Some(times)) => {
+                times.into_iter()
+                    .map(|seconds| {
+                        // Convert seconds to Duration
+                        let secs = seconds.trunc() as u64;
+                        let nanos = ((seconds.fract() * 1_000_000_000.0) as u32).min(999_999_999);
+                        Duration::new(secs, nanos)
+                    })
+                    .collect()
+            },
+            _ => Vec::new(),
+        };
+
+        // Get total execution time if available (stored as seconds in numeric type)
+        let total_execution_time = match row.try_get::<Option<f64>, _>("total_execution_time") {
+            Ok(Some(seconds)) => {
+                // Convert seconds to Duration
+                let secs = seconds.trunc() as u64;
+                let nanos = ((seconds.fract() * 1_000_000_000.0) as u32).min(999_999_999);
+                Duration::new(secs, nanos)
+            },
+            _ => Duration::ZERO,
+        };
+
         Ok(Self {
             identifiers: IdFields {
                 local_id: row.try_get("id")?,
@@ -61,6 +90,8 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
             source_data: row.try_get("initial_data")?,
             last_step_idx: Some(row.try_get("latest_step_idx")?),
             last_successful_result: row.try_get("latest_result")?,
+            step_execution_times,
+            total_execution_time,
         })
     }
 }
@@ -75,12 +106,19 @@ impl RuntimeSession {
             source_data,
             last_step_idx: None,
             last_successful_result: None,
+            step_execution_times: Vec::new(),
+            total_execution_time: Duration::ZERO,
         }
     }
 
     pub async fn start(&mut self) -> Result<Value> {
         // Set status to Running
         self.status = RunningStatus::Running;
+
+        // Initialize timing fields
+        self.step_execution_times = Vec::with_capacity(self.steps.len());
+        self.total_execution_time = Duration::ZERO;
+        let start_time = Instant::now();
 
         // Execute each step in order, passing the result of each step to the next
         let mut current_value = self.source_data.clone();
@@ -90,8 +128,15 @@ impl RuntimeSession {
             // Update latest step index before execution
             self.last_step_idx = Some(idx as i32);
 
+            // Track this step's execution time
+            let step_start = Instant::now();
+
             match step.run(current_value, idx).await {
                 Ok(value) => {
+                    // Record execution time for this step
+                    let step_duration = step_start.elapsed();
+                    self.step_execution_times.push(step_duration);
+
                     // Update current value for next step
                     current_value = value.clone();
 
@@ -99,6 +144,13 @@ impl RuntimeSession {
                     self.last_successful_result = Some(value);
                 }
                 Err(e) => {
+                    // Still record execution time for the failed step
+                    let step_duration = step_start.elapsed();
+                    self.step_execution_times.push(step_duration);
+
+                    // Calculate total time before returning
+                    self.total_execution_time = start_time.elapsed();
+
                     // Update status to cancelled
                     self.status = RunningStatus::Cancelled;
                     return Err(anyhow!("Step execution failed: {}", e));
@@ -108,6 +160,9 @@ impl RuntimeSession {
 
         // All steps completed successfully
         self.status = RunningStatus::Completed;
+
+        // Record total execution time
+        self.total_execution_time = start_time.elapsed();
 
         // Store the final result and return it
         self.last_successful_result = Some(current_value.clone());
@@ -127,14 +182,30 @@ impl DatabaseItem for RuntimeSession {
             return Ok(());  // Session already exists, no need to create it again
         }
 
+        // Convert execution times to array of seconds
+        let step_times_secs: Vec<f64> = self.step_execution_times
+            .iter()
+            .map(|duration| duration.as_secs_f64())
+            .collect();
+
+        // Collect step IDs from the steps vector
+        let step_ids: Vec<i32> = self.steps
+            .iter()
+            .filter_map(|step| step.identifiers.local_id)
+            .collect();
+
+        // Convert Duration to seconds with microsecond precision
+        let total_time_secs = self.total_execution_time.as_secs_f64();
+
         // First create the session record
         let record = sqlx::query(
             r#"
             INSERT INTO runtime_sessions (
                 global_uuid, rts_status, initial_data,
-                latest_step_idx, latest_result, created_at, updated_at
+                latest_step_idx, latest_result, created_at, updated_at,
+                step_execution_times, step_ids, total_execution_time
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING id
             "#,
         )
@@ -145,6 +216,9 @@ impl DatabaseItem for RuntimeSession {
         .bind(&self.last_successful_result)
         .bind(&self.timestamps.created)
         .bind(&self.timestamps.updated)
+        .bind(&step_times_secs)
+        .bind(&step_ids)
+        .bind(total_time_secs)
         .fetch_one(pool)
         .await?;
 
@@ -177,6 +251,21 @@ impl DatabaseItem for RuntimeSession {
     }
 
     async fn try_db_update(&self, pool: &PgPool) -> Result<()> {
+        // Convert execution times to array of seconds
+        let step_times_secs: Vec<f64> = self.step_execution_times
+            .iter()
+            .map(|duration| duration.as_secs_f64())
+            .collect();
+
+        // Collect step IDs from the steps vector
+        let step_ids: Vec<i32> = self.steps
+            .iter()
+            .filter_map(|step| step.identifiers.local_id)
+            .collect();
+
+        // Convert Duration to seconds with microsecond precision
+        let total_time_secs = self.total_execution_time.as_secs_f64();
+
         // Update the session record
         sqlx::query(
             r#"
@@ -185,8 +274,11 @@ impl DatabaseItem for RuntimeSession {
                 initial_data = $2,
                 latest_step_idx = $3,
                 latest_result = $4,
-                updated_at = $5
-            WHERE global_uuid = $6
+                updated_at = $5,
+                step_execution_times = $6,
+                step_ids = $7,
+                total_execution_time = $8
+            WHERE global_uuid = $9
             "#,
         )
         .bind(&self.status)
@@ -194,6 +286,9 @@ impl DatabaseItem for RuntimeSession {
         .bind(&self.last_step_idx)
         .bind(&self.last_successful_result)
         .bind(&self.timestamps.updated)
+        .bind(&step_times_secs)
+        .bind(&step_ids)
+        .bind(total_time_secs)
         .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
         .execute(pool)
         .await?;

@@ -342,6 +342,21 @@ table "runtime_sessions" {
         type = sql("json")
         null = true
     }
+    column "step_execution_times" {
+        type = sql("numeric(20,6)[]")
+        null = true
+        comment = "Array of execution times in seconds with microsecond precision"
+    }
+    column "step_ids" {
+        type = sql("int[]")
+        null = true
+        comment = "Array of step IDs that were executed in this session"
+    }
+    column "total_execution_time" {
+        type = sql("numeric(20,6)")
+        null = true
+        comment = "Total execution time in seconds with microsecond precision"
+    }
 }
 
 
