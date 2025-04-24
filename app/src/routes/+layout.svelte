@@ -42,14 +42,14 @@
       }
     });
 
-    checkingAuth = false;
-  });
+    // Watch route changes and redirect if not logged in
+    page.subscribe(() => {
+      if (!user && !isOnAllowedPage()) {
+        goto("/login");
+      }
+    });
 
-  // Watch route changes and redirect if not logged in
-  page.subscribe(() => {
-    if (!user && !isOnAllowedPage()) {
-      goto("/login");
-    }
+    checkingAuth = false;
   });
 </script>
 

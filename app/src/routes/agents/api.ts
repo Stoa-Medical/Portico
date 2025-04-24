@@ -134,8 +134,9 @@ export const getSteps = async (agentId: number): Promise<Step[]> => {
   return data;
 };
 
-export const saveStep = async (step: CreateStepPayload): Promise<Step[]> => {
-  const { error: insertError } = await supabase.from("steps").insert([step]);
+export const saveStep = async (step: Step): Promise<Step[]> => {
+  const { id, ...rest } = step;
+  const { error: insertError } = await supabase.from("steps").insert([rest]);
   if (insertError) throw insertError;
   return getStep(step.agent_id);
 };
