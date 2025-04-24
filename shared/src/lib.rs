@@ -23,7 +23,7 @@ use serde_json::Value;
 use sqlx::postgres::{PgArgumentBuffer, PgPool};
 use sqlx::{Postgres, Row};
 use std::env;
-use uuid;
+use uuid::Uuid;
 
 // === Shared Enum definitions ===
 #[derive(Debug, PartialEq, Deserialize, Serialize, Clone, Default)]
@@ -176,9 +176,10 @@ pub trait JsonLike {
 
 /// Checks if a record with the given UUID already exists in the specified table
 pub async fn check_exists_by_uuid(pool: &PgPool, table: &str, uuid: &str) -> Result<bool> {
+    let uuid_parsed = Uuid::parse_str(uuid)?;
     let query = format!("SELECT EXISTS(SELECT 1 FROM {} WHERE global_uuid = $1)", table);
     sqlx::query_scalar::<_, bool>(&query)
-        .bind(uuid)
+        .bind(uuid_parsed)
         .fetch_one(pool)
         .await
         .map_err(|e| anyhow!("Failed to check if record exists: {}", e))
