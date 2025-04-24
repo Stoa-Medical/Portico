@@ -1,5 +1,6 @@
 -- Supabase seed script for development data
--- Run with: psql postgresql://postgres:postgres@localhost:54322/postgres -f seed.sql
+-- Load with: psql postgresql://postgres:postgres@localhost:54322/postgres -f seed.sql
+-- Reset ENTIRE database with `supabase db reset` (be careful! Meant for development only)
 
 -- Clear existing data first
 TRUNCATE TABLE runtime_sessions, steps, signals, agents RESTART IDENTITY CASCADE;
@@ -15,18 +16,18 @@ VALUES
 INSERT INTO steps (agent_id, name, description, step_type, step_content)
 VALUES
   -- File Processor steps
-  (1, 'Read File', 'Reads the content of the input file', 'python', 'def read_file(file_path):\n    with open(file_path, "r") as f:\n        return f.read()'),
-  (1, 'Parse Content', 'Parses the file content into structured data', 'python', 'def parse_content(content):\n    # Parsing logic here\n    return {"parsed": content}'),
+  (1, 'Read File', 'Reads the content of the input file', 'python', 'file_path = source.get("file_path", "")\nif file_path:\n    with open(file_path, "r") as f:\n        content = f.read()\n    result = {"content": content}\nelse:\n    result = {"error": "No file path provided"}'),
+  (1, 'Parse Content', 'Parses the file content into structured data', 'python', 'content = source.get("content", "")\n# Parsing logic here\nresult = {"parsed": content}'),
   (1, 'Generate Report', 'Creates a summary report of the file', 'prompt', 'Create a summary report of the parsed data (attached)'),
 
   -- Email Notifier steps
   (2, 'Format Message', 'Formats the notification message', 'prompt', 'Create an email message for {{recipient}} about {{subject}}'),
-  (2, 'Send Email', 'Sends the formatted email', 'python', 'def send_email(recipient, subject, body):\n    # Email sending logic\n    return {"status": "sent"}'),
+  (2, 'Send Email', 'Sends the formatted email', 'python', 'recipient = source.get("recipient", "")\nsubject = source.get("subject", "")\nbody = source.get("body", "")\n# Email sending logic would go here\nresult = {"status": "sent", "to": recipient, "subject": subject}'),
 
   -- Data Analyzer steps
-  (3, 'Load Dataset', 'Loads the dataset from the specified source', 'python', 'def load_dataset(source):\n    # Loading logic\n    return {"data": [1, 2, 3, 4, 5]}'),
-  (3, 'Run Analysis', 'Performs statistical analysis on the dataset', 'python', 'def analyze(dataset):\n    # Analysis logic\n    return {"mean": sum(dataset["data"]) / len(dataset["data"])}'),
-  (3, 'Visualize Results', 'Creates visualizations of the analysis results', 'python', 'def visualize(results):\n    # Visualization logic\n    return {"chart_data": results}');
+  (3, 'Load Dataset', 'Loads the dataset from the specified source', 'python', 'dataset_source = source.get("source", "")\n# In a real scenario, we would load from the source\n# For this example, we will create mock data\nresult = {"data": [1, 2, 3, 4, 5]}'),
+  (3, 'Run Analysis', 'Performs statistical analysis on the dataset', 'python', 'dataset = source.get("data", [])\nif dataset:\n    mean_value = sum(dataset) / len(dataset)\n    result = {"mean": mean_value}\nelse:\n    result = {"error": "No dataset provided"}'),
+  (3, 'Visualize Results', 'Creates visualizations of the analysis results', 'python', 'analysis_results = source\n# Visualization logic would go here\n# In a real scenario, we might generate chart data\nresult = {"chart_data": analysis_results, "visualization_type": "bar_chart"}');
 
 -- Update agent step_ids array
 UPDATE agents
