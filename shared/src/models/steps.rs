@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgArgumentBuffer, PgPool, Postgres, Row};
 use uuid::Uuid;
+use crate::python_runtime::PythonRuntime;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum StepType {
@@ -104,7 +105,10 @@ impl Step {
         matches!(self.step_type, StepType::Python)
     }
 
-    /// Generates a Python function with the standardized signature for a step
+    /// Generates a Python function with the standardized signature for execution in a PythonRuntime
+    ///
+    /// This method generates the Python function code that will be loaded into the PythonRuntime
+    /// for execution. The function follows a standardized signature expected by the runtime.
     pub fn to_python_function(&self) -> String {
         let func_name = self.python_function_name();
         let docstring = format!(
@@ -138,27 +142,21 @@ impl Step {
         format!("step_{}", self.identifiers.global_uuid.replace("-", "_"))
     }
 
-    /// Deprecated: Use to_python_function() instead
-    #[deprecated(since = "0.2.0", note = "Use to_python_function() instead")]
-    pub fn generate_python_template(&self) -> String {
-        self.to_python_function()
-    }
-
     /// Runs the step with fresh context
-    /// This method is deprecated and will be removed in the future
-    /// Use PythonRuntime for executing Python steps
-    #[deprecated(since = "0.2.0", note = "Use PythonRuntime for executing Python steps")]
-    pub async fn run(&self, source_data: Value, step_idx: usize) -> Result<Value> {
+    /// For Python steps, a runtime must be provided.
+    /// For Prompt steps, the runtime is optional.
+    pub async fn run(&self, source_data: Value, step_idx: usize, runtime: Option<&PythonRuntime>) -> Result<Value> {
         match &self.step_type {
             StepType::Prompt => match crate::call_llm(&self.step_content, source_data).await {
                 Ok(res_str) => Ok(Value::String(res_str)),
                 Err(err) => Err(anyhow!("Step {} failed: {}", step_idx, err)),
             },
             StepType::Python => {
-                #[allow(deprecated)]
-                match crate::exec_python(source_data, &self.to_python_function()) {
-                    Ok(result) => Ok(result),
-                    Err(err) => Err(anyhow!("Step {} failed: {}", step_idx, err)),
+                // For Python steps, require a runtime
+                if let Some(rt) = runtime {
+                    rt.execute_step(&self.identifiers.global_uuid, source_data)
+                } else {
+                    Err(anyhow!("Python step {} requires a runtime to execute", step_idx))
                 }
             }
         }

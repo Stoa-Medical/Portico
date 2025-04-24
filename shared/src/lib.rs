@@ -17,15 +17,12 @@ pub use python_runtime::PythonRuntime;
 // === Imports ===
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use pyo3::prelude::*;
-use pyo3::types::PyDict;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::postgres::{PgArgumentBuffer, PgPool};
 use sqlx::{Postgres, Row};
 use std::env;
-use std::ffi::CString;
 use uuid;
 
 // === Shared Enum definitions ===
@@ -273,42 +270,6 @@ pub async fn call_llm(prompt: &str, context: Value) -> Result<String> {
         .as_str()
         .map(String::from)
         .ok_or_else(|| anyhow::anyhow!("No completion found"))
-}
-
-/// Executes provided python code - DEPRECATED: Use PythonRuntime instead
-#[deprecated(since = "0.2.0", note = "Use PythonRuntime instead")]
-pub fn exec_python(source: Value, the_code: &str) -> Result<Value> {
-    // Preps python interpreter (needs to run at least once, and repeat calls are negligible)
-    pyo3::prepare_freethreaded_python();
-    // Run code with independent context
-    Python::with_gil(|py| {
-        // Have clean state at each start
-        let locals = PyDict::new(py);
-
-        // Convert serde_json::Value to PyObject directly
-        let py_json = py.import("json")?;
-        let incoming_data = serde_json::to_string(&source)?;
-        let py_source = py_json.getattr("loads")?.call1((incoming_data,))?;
-        locals.set_item("source", py_source)?;
-
-        // Convert String to CString for py.run
-        let code_cstring = CString::new(the_code.as_bytes())?;
-        py.run(code_cstring.as_c_str(), None, Some(&locals))?;
-
-        // Get result and convert back to serde_json::Value
-        match locals.get_item("result") {
-            Ok(Some(res)) => {
-                let py_json_str = py_json.getattr("dumps")?.call1((res,))?;
-                let json_str: String = py_json_str.extract()?;
-                let json_value: Value = serde_json::from_str(&json_str)?;
-                Ok(json_value)
-            }
-            Ok(None) => Err(anyhow!(
-                "Runtime error: unable to find return value (`result`)"
-            )),
-            Err(err) => Err(anyhow!("Python error: {}", err)),
-        }
-    })
 }
 
 /// Loads steps for an agent by ID
