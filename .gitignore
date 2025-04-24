@@ -15,3 +15,5 @@ target/
 .specstory
 .cursor
 .windsurfrules
+
+server/test.sql
