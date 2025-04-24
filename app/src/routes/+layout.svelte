@@ -18,18 +18,23 @@
   let checkingAuth = true;
   let user;
 
+  const allowedPages = ["/login", "/register"];
+
+  const isOnAllowedPage = () =>
+    allowedPages.some((path) => window.location.pathname.startsWith(path));
+
   onMount(async () => {
     document.documentElement.classList.add("dark");
 
     const { data } = await supabase.auth.getSession();
     user = data.session?.user;
 
-    if (!user && !window.location.pathname.startsWith("/login")) {
+    if (!user && !isOnAllowedPage()) {
       goto("/login");
     }
 
     supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (!session && !window.location.pathname.startsWith("/login")) {
+      if (!session && !isOnAllowedPage()) {
         user = null;
         goto("/login");
       } else {
@@ -41,10 +46,8 @@
   });
 
   // Watch route changes and redirect if not logged in
-  page.subscribe(($page) => {
-    const isLoginPage = $page.url.pathname.startsWith("/login");
-
-    if (!user && !isLoginPage) {
+  page.subscribe(() => {
+    if (!user && !isOnAllowedPage()) {
       goto("/login");
     }
   });

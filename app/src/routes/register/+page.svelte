@@ -5,10 +5,13 @@
   let email = "";
   let password = "";
   let error = "";
+  let success = "";
 
-  async function login() {
+  async function register() {
     error = "";
-    const { error: authError } = await supabase.auth.signInWithPassword({
+    success = "";
+
+    const { error: authError } = await supabase.auth.signUp({
       email,
       password,
     });
@@ -16,15 +19,15 @@
     if (authError) {
       error = authError.message;
     } else {
-      goto("/");
+      success = "Registration successful! Please check your email to confirm.";
     }
   }
 </script>
 
 <main class="p-6 max-w-md mx-auto">
-  <h1 class="text-2xl font-bold mb-4">Login</h1>
+  <h1 class="text-2xl font-bold mb-4">Register</h1>
 
-  <form on:submit|preventDefault={login} class="space-y-4">
+  <form on:submit|preventDefault={register} class="space-y-4">
     <div>
       <label for="email">Email</label>
       <input
@@ -51,14 +54,17 @@
       <p class="text-red-500">{error}</p>
     {/if}
 
-    <div class="flex items-center justify-between">
-      <button type="submit" class="bg-sea text-black px-4 py-2 rounded">
-        Login
-      </button>
+    {#if success}
+      <p class="text-green-500">{success}</p>
+    {/if}
 
-      <a href="/register" class="text-blue-500 underline text-sm ml-4">
-        Register
-      </a>
-    </div>
+    <button type="submit" class="bg-sea text-black px-4 py-2 rounded">
+      Register
+    </button>
   </form>
+
+  <p class="mt-4">
+    Already have an account?
+    <a href="/login" class="text-blue-500 underline">Login</a>
+  </p>
 </main>
