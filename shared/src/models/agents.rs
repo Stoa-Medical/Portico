@@ -10,7 +10,8 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sqlx::{postgres::PgArgumentBuffer, PgPool, Postgres, Row};
+use sqlx::{PgPool, Row};
+use sqlx::types::JsonValue;
 use std::str::FromStr;
 use std::sync::Mutex;
 use uuid::Uuid;
@@ -34,7 +35,8 @@ pub struct Agent {
 ///      │   (stop)     │          │
 ///      └──────────────┘◄─────────┘
 /// ```
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Default, sqlx::Type)]
+#[sqlx(type_name = "agent_state", rename_all = "lowercase")]
 pub enum AgentState {
     #[default]
     Inactive,
@@ -42,21 +44,8 @@ pub enum AgentState {
     Unstable,
 }
 
-impl std::str::FromStr for AgentState {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "inactive" => Ok(AgentState::Inactive),
-            "stable" => Ok(AgentState::Stable),
-            "unstable" => Ok(AgentState::Unstable),
-            _ => Err(format!("Invalid agent state: {}", s)),
-        }
-    }
-}
-
 impl AgentState {
-    pub fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &str {
         match self {
             AgentState::Inactive => "inactive",
             AgentState::Stable => "stable",
@@ -65,33 +54,27 @@ impl AgentState {
     }
 }
 
-impl sqlx::Type<Postgres> for AgentState {
-    fn type_info() -> sqlx::postgres::PgTypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("agent_state")
+impl std::fmt::Display for AgentState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            AgentState::Inactive => "inactive",
+            AgentState::Stable => "stable",
+            AgentState::Unstable => "unstable",
+        };
+        write!(f, "{}", s)
     }
 }
 
-impl<'r> sqlx::Decode<'r, Postgres> for AgentState {
-    fn decode(
-        value: sqlx::postgres::PgValueRef<'r>,
-    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        match value.as_str()? {
+impl FromStr for AgentState {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
             "inactive" => Ok(AgentState::Inactive),
             "stable" => Ok(AgentState::Stable),
             "unstable" => Ok(AgentState::Unstable),
-            _ => Err("Invalid agent state".into()),
+            _ => Err(format!("Unknown agent state: {}", s))
         }
-    }
-}
-
-impl<'q> sqlx::Encode<'q, Postgres> for AgentState {
-    fn encode_by_ref(
-        &self,
-        buf: &mut PgArgumentBuffer,
-    ) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Send + Sync>> {
-        let s = self.as_str();
-        buf.extend_from_slice(s.as_bytes());
-        Ok(sqlx::encode::IsNull::No)
     }
 }
 
@@ -410,49 +393,54 @@ impl DatabaseItem for Agent {
     async fn try_db_create(&self, pool: &PgPool) -> Result<()> {
         // Check if an agent with the same UUID already exists
         if crate::check_exists_by_uuid(pool, "agents", &self.identifiers.global_uuid).await? {
-            return Ok(());  // Agent already exists, no need to create it again
+            return Ok(()); // Agent already exists, no need to create it again
         }
 
-        // First create the agent record
-        let record = sqlx::query(
+        let uuid_parsed = Uuid::parse_str(&self.identifiers.global_uuid)?;
+        let agent_state = self.state(); // Get the current state
+
+        // Use query_scalar! for inserting the agent and returning the ID
+        // Note: Direct binding of AgentState requires it to derive sqlx::Type
+        let agent_id = sqlx::query_scalar!(
             r#"
             INSERT INTO agents (
                 global_uuid, description, agent_state, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5)
+            VALUES ($1, $2, $3::agent_state, $4, $5)
             RETURNING id
             "#,
+            uuid_parsed,
+            &self.description,
+            agent_state as AgentState, // Cast enum for type checking
+            &self.timestamps.created,
+            &self.timestamps.updated
         )
-        .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
-        .bind(&self.description)
-        .bind(&self.state())
-        .bind(&self.timestamps.created)
-        .bind(&self.timestamps.updated)
         .fetch_one(pool)
         .await?;
 
-        let agent_id: i64 = record.get("id");
-
         // Then create step records if any exist
         for step in self.steps.iter() {
-            // Create a modified step with agent_id
-            sqlx::query(
+            let step_uuid = Uuid::parse_str(&step.identifiers.global_uuid)?;
+            let step_type_str = step.step_type.as_str(); // Assuming StepType has as_str()
+
+            // Use query! for inserting steps
+            // Note: Binding step_type requires casting if it doesn't derive sqlx::Type directly
+            sqlx::query!(
                 r#"
                 INSERT INTO steps (
-                    global_uuid, agent_id, sequence_number, description,
+                    global_uuid, agent_id, description,
                     step_type, step_content, created_at, updated_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                VALUES ($1, $2, $3, ($4::text)::step_type, $5, $6, $7)
                 "#,
+                step_uuid,
+                agent_id, // Use the returned agent_id
+                step.description.as_deref().unwrap_or(""),
+                step_type_str, // Bind as string, cast in SQL
+                &step.step_content,
+                &step.timestamps.created,
+                &step.timestamps.updated
             )
-            .bind(&step.identifiers.global_uuid)
-            .bind(agent_id)
-            .bind(0)  // Default sequence_number (not used for ordering anymore)
-            .bind(&step.description)
-            .bind(&step.step_type)
-            .bind(&step.step_content)
-            .bind(&step.timestamps.created)
-            .bind(&step.timestamps.updated)
             .execute(pool)
             .await?;
         }
@@ -462,19 +450,23 @@ impl DatabaseItem for Agent {
 
     async fn try_db_update(&self, pool: &PgPool) -> Result<()> {
         // Update the agent record
-        sqlx::query(
+        let uuid_parsed = Uuid::parse_str(&self.identifiers.global_uuid)?;
+        let agent_state = self.state(); // Get the current state
+
+        // Use query! for updating the agent
+        sqlx::query!(
             r#"
             UPDATE agents
             SET description = $1,
-                agent_state = $2,
+                agent_state = $2::agent_state,
                 updated_at = $3
             WHERE global_uuid = $4
             "#,
+            &self.description,
+            agent_state as AgentState, // Cast enum for type checking
+            &self.timestamps.updated,
+            uuid_parsed
         )
-        .bind(&self.description)
-        .bind(&self.state())
-        .bind(&self.timestamps.updated)
-        .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
         .execute(pool)
         .await?;
 
@@ -485,17 +477,18 @@ impl DatabaseItem for Agent {
     }
 
     async fn try_db_delete(&self, pool: &PgPool) -> Result<()> {
+        // This already uses query! macros, no changes needed here.
+
         // First delete associated steps
         if let Some(id) = self.identifiers.local_id {
-            sqlx::query("DELETE FROM steps WHERE agent_id = $1")
-                .bind(id)
+            sqlx::query!("DELETE FROM steps WHERE agent_id = $1", id)
                 .execute(pool)
                 .await?;
         }
 
         // Then delete the agent
-        sqlx::query("DELETE FROM agents WHERE global_uuid = $1")
-            .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
+        let uuid_parsed = Uuid::parse_str(&self.identifiers.global_uuid)?;
+        sqlx::query!("DELETE FROM agents WHERE global_uuid = $1", uuid_parsed)
             .execute(pool)
             .await?;
 
@@ -503,58 +496,172 @@ impl DatabaseItem for Agent {
     }
 
     async fn try_db_select_all(pool: &PgPool) -> Result<Vec<Self>> {
-        let query = format!(
+        // Define struct compatible with query_as! output
+        // Ensure AgentState derives sqlx::Type
+        struct AgentRow {
+            id: i32,
+            global_uuid: uuid::Uuid,
+            description: Option<String>,
+            agent_state: AgentState, // Direct enum type
+            created_at: chrono::DateTime<chrono::Utc>,
+            updated_at: chrono::DateTime<chrono::Utc>,
+            steps: serde_json::Value, // Keep as JSON for aggregation
+        }
+
+        // Use query_as! with inlined steps aggregation
+        let rows = sqlx::query_as!(
+            AgentRow,
             r#"
             SELECT
-                a.*,
-                {}
+                a.id, a.global_uuid, a.description,
+                a.agent_state as "agent_state: _", -- Tell sqlx to use AgentState type
+                a.created_at, a.updated_at,
+                COALESCE(
+                    (
+                        SELECT json_agg(json_build_object(
+                            'id', s.id,
+                            'global_uuid', s.global_uuid,
+                            'created_at', s.created_at,
+                            'updated_at', s.updated_at,
+                            'agent_id', s.agent_id,
+                            'description', s.description,
+                            'step_type', s.step_type::text, -- Cast enum to text for JSON
+                            'step_content', s.step_content
+                        ))
+                        FROM steps s
+                        WHERE s.agent_id = a.id
+                    ),
+                    '[]'::json
+                ) as "steps: JsonValue" -- Tell sqlx to use Value type
             FROM agents a
-            "#,
-            crate::steps_json_agg_sql("a", "agent_id")
-        );
+            "#
+        )
+        .fetch_all(pool)
+        .await?;
 
-        let rows = sqlx::query_as::<_, Self>(&query)
-            .fetch_all(pool)
-            .await?;
+        // Convert rows to Agent objects
+        let agents = rows
+            .into_iter()
+            .map(|row| {
+                let steps = Step::from_json_array(&row.steps); // Use existing parser
 
-        Ok(rows)
+                Agent {
+                    identifiers: IdFields {
+                        local_id: Some(row.id),
+                        global_uuid: row.global_uuid.to_string(),
+                    },
+                    timestamps: TimestampFields {
+                        created: row.created_at,
+                        updated: row.updated_at,
+                    },
+                    description: row.description.unwrap_or_default(),
+                    agent_state: Mutex::new(row.agent_state), // Directly use the enum
+                    steps,
+                }
+            })
+            .collect();
+
+        Ok(agents)
     }
 
     async fn try_db_select_by_id(pool: &PgPool, id: &IdFields) -> Result<Option<Self>> {
-        let result = if let Some(local_id) = id.local_id {
-            let query = format!(
+        // Define struct compatible with query_as! output
+        struct AgentRow {
+            id: i32,
+            global_uuid: uuid::Uuid,
+            description: Option<String>,
+            agent_state: AgentState, // Direct enum type
+            created_at: chrono::DateTime<chrono::Utc>,
+            updated_at: chrono::DateTime<chrono::Utc>,
+            steps: serde_json::Value, // Keep as JSON for aggregation
+        }
+
+        let row_opt = if let Some(local_id) = id.local_id {
+            // Use query_as! by local ID with inlined steps aggregation
+            sqlx::query_as!(
+                AgentRow,
                 r#"
                 SELECT
-                    a.*,
-                    {}
+                    a.id, a.global_uuid, a.description,
+                    a.agent_state as "agent_state: _", -- Use AgentState type
+                    a.created_at, a.updated_at,
+                    COALESCE(
+                        (
+                            SELECT json_agg(json_build_object(
+                                'id', s.id,
+                                'global_uuid', s.global_uuid,
+                                'created_at', s.created_at,
+                                'updated_at', s.updated_at,
+                                'agent_id', s.agent_id,
+                                'description', s.description,
+                                'step_type', s.step_type::text, -- Cast enum to text for JSON
+                                'step_content', s.step_content
+                            ))
+                            FROM steps s
+                            WHERE s.agent_id = a.id
+                        ),
+                        '[]'::json
+                    ) as "steps: JsonValue" -- Use Value type
                 FROM agents a
                 WHERE a.id = $1
                 "#,
-                crate::steps_json_agg_sql("a", "agent_id")
-            );
-
-            sqlx::query_as::<_, Self>(&query)
-                .bind(local_id)
-                .fetch_optional(pool)
-                .await?
+                local_id
+            )
+            .fetch_optional(pool)
+            .await?
         } else {
-            let query = format!(
+            // Use query_as! by global UUID with inlined steps aggregation
+            let uuid_parsed = Uuid::parse_str(&id.global_uuid)?;
+            sqlx::query_as!(
+                AgentRow,
                 r#"
                 SELECT
-                    a.*,
-                    {}
+                    a.id, a.global_uuid, a.description,
+                    a.agent_state as "agent_state: _", -- Use AgentState type
+                    a.created_at, a.updated_at,
+                    COALESCE(
+                        (
+                            SELECT json_agg(json_build_object(
+                                'id', s.id,
+                                'global_uuid', s.global_uuid,
+                                'created_at', s.created_at,
+                                'updated_at', s.updated_at,
+                                'agent_id', s.agent_id,
+                                'description', s.description,
+                                'step_type', s.step_type::text, -- Cast enum to text for JSON
+                                'step_content', s.step_content
+                            ))
+                            FROM steps s
+                            WHERE s.agent_id = a.id
+                        ),
+                        '[]'::json
+                    ) as "steps: JsonValue" -- Use Value type
                 FROM agents a
                 WHERE a.global_uuid = $1
                 "#,
-                crate::steps_json_agg_sql("a", "agent_id")
-            );
-
-            sqlx::query_as::<_, Self>(&query)
-                .bind(Uuid::parse_str(&id.global_uuid)?)
-                .fetch_optional(pool)
-                .await?
+                uuid_parsed
+            )
+            .fetch_optional(pool)
+            .await?
         };
 
-        Ok(result)
+        // Convert row to Agent if found
+        Ok(row_opt.map(|row| {
+            let steps = Step::from_json_array(&row.steps); // Use existing parser
+
+            Agent {
+                identifiers: IdFields {
+                    local_id: Some(row.id),
+                    global_uuid: row.global_uuid.to_string(),
+                },
+                timestamps: TimestampFields {
+                    created: row.created_at,
+                    updated: row.updated_at,
+                },
+                description: row.description.unwrap_or_default(),
+                agent_state: Mutex::new(row.agent_state), // Directly use the enum
+                steps,
+            }
+        }))
     }
 }

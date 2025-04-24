@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM steps WHERE agent_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4fd8786c5bdc5c6bce608efcdf1283236ec932aa4eb239bf8cc227d7d371a90e"
+}

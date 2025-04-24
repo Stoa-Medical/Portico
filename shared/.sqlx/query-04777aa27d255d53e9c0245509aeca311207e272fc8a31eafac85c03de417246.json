@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO steps (\n                    global_uuid, agent_id, description,\n                    step_type, step_content, created_at, updated_at\n                )\n                VALUES ($1, $2, $3, ($4::text)::step_type, $5, $6, $7)\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Text",
+        "Text",
+        "Text",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "04777aa27d255d53e9c0245509aeca311207e272fc8a31eafac85c03de417246"
+}
