@@ -4,9 +4,11 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde_json::Value;
 use sqlx::{PgPool, Row};
+use sqlx::types::BigDecimal;
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 use crate::python_runtime::PythonRuntime;
+use std::str::FromStr;
 
 #[derive(Debug)]
 pub struct RuntimeSession {
@@ -200,6 +202,21 @@ impl RuntimeSession {
     }
 }
 
+#[derive(Debug, sqlx::FromRow)]
+struct RuntimeSessionRow {
+    id: i32,
+    global_uuid: Uuid,
+    rts_status: RunningStatus,
+    initial_data: Value,
+    latest_step_idx: Option<i32>,
+    latest_result: Option<Value>,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+    step_execution_times: Option<Vec<f64>>,
+    total_execution_time: Option<f64>,
+    steps: Value,  // JSON aggregation result
+}
+
 #[async_trait]
 impl DatabaseItem for RuntimeSession {
     fn id(&self) -> &IdFields {
@@ -212,10 +229,10 @@ impl DatabaseItem for RuntimeSession {
             return Ok(());  // Session already exists, no need to create it again
         }
 
-        // Convert execution times to array of seconds
-        let step_times_secs: Vec<f64> = self.step_execution_times
+        // Convert execution times to BigDecimal array
+        let step_times_secs: Vec<BigDecimal> = self.step_execution_times
             .iter()
-            .map(|duration| duration.as_secs_f64())
+            .map(|duration| BigDecimal::from_str(&duration.as_secs_f64().to_string()).unwrap())
             .collect();
 
         // Collect step IDs from the steps vector
@@ -224,67 +241,44 @@ impl DatabaseItem for RuntimeSession {
             .filter_map(|step| step.identifiers.local_id)
             .collect();
 
-        // Convert Duration to seconds with microsecond precision
-        let total_time_secs = self.total_execution_time.as_secs_f64();
+        // Convert Duration to BigDecimal seconds
+        let total_time_secs = BigDecimal::from_str(&self.total_execution_time.as_secs_f64().to_string()).unwrap();
 
-        // First create the session record
-        let record = sqlx::query(
+        // Parse UUID once for all operations
+        let parsed_uuid = Uuid::parse_str(&self.identifiers.global_uuid)?;
+
+        // Create the session record using query! macro
+        sqlx::query!(
             r#"
             INSERT INTO runtime_sessions (
                 global_uuid, rts_status, initial_data,
                 latest_step_idx, latest_result, created_at, updated_at,
                 step_execution_times, step_ids, total_execution_time
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            RETURNING id
+            VALUES ($1, $2::running_status, $3, $4, $5, $6, $7, $8, $9, $10)
             "#,
+            parsed_uuid,
+            &self.status as &RunningStatus,
+            &self.source_data,
+            self.last_step_idx,
+            self.last_successful_result.as_ref().unwrap_or(&Value::Null),
+            &self.timestamps.created,
+            &self.timestamps.updated,
+            &step_times_secs as &[BigDecimal],
+            &step_ids,
+            total_time_secs,
         )
-        .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
-        .bind(&self.status)
-        .bind(&self.source_data)
-        .bind(&self.last_step_idx)
-        .bind(&self.last_successful_result)
-        .bind(&self.timestamps.created)
-        .bind(&self.timestamps.updated)
-        .bind(&step_times_secs)
-        .bind(&step_ids)
-        .bind(total_time_secs)
-        .fetch_one(pool)
+        .execute(pool)
         .await?;
-
-        let session_id: i64 = record.get("id");
-
-        // Then create step records if any exist
-        for step in self.steps.iter() {
-            sqlx::query(
-                r#"
-                INSERT INTO steps (
-                    global_uuid, runtime_session_id, sequence_number, description,
-                    step_type, step_content, created_at, updated_at
-                )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                "#,
-            )
-            .bind(&step.identifiers.global_uuid)
-            .bind(session_id)
-            .bind(0)  // Default sequence_number (not used for ordering anymore)
-            .bind(&step.description)
-            .bind(&step.step_type)
-            .bind(&step.step_content)
-            .bind(&step.timestamps.created)
-            .bind(&step.timestamps.updated)
-            .execute(pool)
-            .await?;
-        }
 
         Ok(())
     }
 
     async fn try_db_update(&self, pool: &PgPool) -> Result<()> {
-        // Convert execution times to array of seconds
-        let step_times_secs: Vec<f64> = self.step_execution_times
+        // Convert execution times to BigDecimal array
+        let step_times_secs: Vec<BigDecimal> = self.step_execution_times
             .iter()
-            .map(|duration| duration.as_secs_f64())
+            .map(|duration| BigDecimal::from_str(&duration.as_secs_f64().to_string()).unwrap())
             .collect();
 
         // Collect step IDs from the steps vector
@@ -293,14 +287,16 @@ impl DatabaseItem for RuntimeSession {
             .filter_map(|step| step.identifiers.local_id)
             .collect();
 
-        // Convert Duration to seconds with microsecond precision
-        let total_time_secs = self.total_execution_time.as_secs_f64();
+        // Convert Duration to BigDecimal seconds
+        let total_time_secs = BigDecimal::from_str(&self.total_execution_time.as_secs_f64().to_string()).unwrap();
 
-        // Update the session record
-        sqlx::query(
+        // Parse UUID once
+        let parsed_uuid = Uuid::parse_str(&self.identifiers.global_uuid)?;
+
+        sqlx::query!(
             r#"
             UPDATE runtime_sessions
-            SET rts_status = $1,
+            SET rts_status = $1::running_status,
                 initial_data = $2,
                 latest_step_idx = $3,
                 latest_result = $4,
@@ -310,96 +306,191 @@ impl DatabaseItem for RuntimeSession {
                 total_execution_time = $8
             WHERE global_uuid = $9
             "#,
+            &self.status as &RunningStatus,
+            &self.source_data,
+            self.last_step_idx,
+            self.last_successful_result.as_ref().unwrap_or(&Value::Null),
+            &self.timestamps.updated,
+            &step_times_secs as &[BigDecimal],
+            &step_ids,
+            total_time_secs,
+            parsed_uuid
         )
-        .bind(&self.status)
-        .bind(&self.source_data)
-        .bind(&self.last_step_idx)
-        .bind(&self.last_successful_result)
-        .bind(&self.timestamps.updated)
-        .bind(&step_times_secs)
-        .bind(&step_ids)
-        .bind(total_time_secs)
-        .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
         .execute(pool)
         .await?;
-
-        // Steps should be updated through their own DatabaseItem implementation
-        // since they have their own identifiers and lifecycle
 
         Ok(())
     }
 
     async fn try_db_delete(&self, pool: &PgPool) -> Result<()> {
-        // First delete associated steps
-        if let Some(id) = self.identifiers.local_id {
-            sqlx::query("DELETE FROM steps WHERE runtime_session_id = $1")
-                .bind(id)
-                .execute(pool)
-                .await?;
-        }
+        // Delete the session record
+        let parsed_uuid = Uuid::parse_str(&self.identifiers.global_uuid)?;
 
-        // Then delete the session
-        sqlx::query("DELETE FROM runtime_sessions WHERE global_uuid = $1")
-            .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
-            .execute(pool)
-            .await?;
+        sqlx::query!(
+            "DELETE FROM runtime_sessions WHERE global_uuid = $1",
+            parsed_uuid
+        )
+        .execute(pool)
+        .await?;
 
         Ok(())
     }
 
     async fn try_db_select_all(pool: &PgPool) -> Result<Vec<Self>> {
+        let steps_json_agg = crate::steps_json_agg_sql("rs", "agent_id");
+
+        // Use query_as! with our RuntimeSessionRow struct
         let query = format!(
             r#"
             SELECT
-                rs.*,
-                {}
+                rs.id as "id!",
+                rs.global_uuid as "global_uuid!",
+                rs.rts_status as "rts_status!: RunningStatus",
+                rs.initial_data as "initial_data!",
+                rs.latest_step_idx,
+                rs.latest_result,
+                rs.created_at as "created_at!",
+                rs.updated_at as "updated_at!",
+                rs.step_execution_times,
+                rs.step_ids,
+                rs.total_execution_time,
+                {} as "steps!: Value"
             FROM runtime_sessions rs
             "#,
-            crate::steps_json_agg_sql("rs", "runtime_session_id")
+            steps_json_agg
         );
 
-        let rows = sqlx::query_as::<_, Self>(&query)
+        let rows = sqlx::query_as::<_, RuntimeSessionRow>(&query)
             .fetch_all(pool)
             .await?;
 
-        Ok(rows)
+        // Convert RuntimeSessionRow to RuntimeSession
+        let sessions = rows.into_iter()
+            .map(|row| RuntimeSession {
+                identifiers: IdFields {
+                    local_id: Some(row.id),
+                    global_uuid: row.global_uuid.to_string(),
+                },
+                timestamps: TimestampFields {
+                    created: row.created_at,
+                    updated: row.updated_at,
+                },
+                steps: Step::from_json_array(&row.steps),
+                status: row.rts_status,
+                source_data: row.initial_data,
+                last_step_idx: row.latest_step_idx,
+                last_successful_result: row.latest_result,
+                step_execution_times: row.step_execution_times
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|secs| {
+                        let secs_int = secs.trunc() as u64;
+                        let nanos = ((secs.fract() * 1_000_000_000.0) as u32).min(999_999_999);
+                        Duration::new(secs_int, nanos)
+                    })
+                    .collect(),
+                total_execution_time: row.total_execution_time
+                    .map(|secs| {
+                        let secs_int = secs.trunc() as u64;
+                        let nanos = ((secs.fract() * 1_000_000_000.0) as u32).min(999_999_999);
+                        Duration::new(secs_int, nanos)
+                    })
+                    .unwrap_or_default(),
+            })
+            .collect();
+
+        Ok(sessions)
     }
 
     async fn try_db_select_by_id(pool: &PgPool, id: &IdFields) -> Result<Option<Self>> {
-        let result = if let Some(local_id) = id.local_id {
+        let steps_json_agg = crate::steps_json_agg_sql("rs", "agent_id");
+
+        let row = if let Some(local_id) = id.local_id {
             let query = format!(
                 r#"
                 SELECT
-                    rs.*,
-                    {}
+                    rs.id as "id!",
+                    rs.global_uuid as "global_uuid!",
+                    rs.rts_status as "rts_status!: RunningStatus",
+                    rs.initial_data as "initial_data!",
+                    rs.latest_step_idx,
+                    rs.latest_result,
+                    rs.created_at as "created_at!",
+                    rs.updated_at as "updated_at!",
+                    rs.step_execution_times,
+                    rs.step_ids,
+                    rs.total_execution_time,
+                    {} as "steps!: Value"
                 FROM runtime_sessions rs
                 WHERE rs.id = $1
                 "#,
-                crate::steps_json_agg_sql("rs", "runtime_session_id")
+                steps_json_agg
             );
 
-            sqlx::query_as::<_, Self>(&query)
+            sqlx::query_as::<_, RuntimeSessionRow>(&query)
                 .bind(local_id)
                 .fetch_optional(pool)
                 .await?
         } else {
+            let parsed_uuid = Uuid::parse_str(&id.global_uuid)?;
+
             let query = format!(
                 r#"
                 SELECT
-                    rs.*,
-                    {}
+                    rs.id as "id!",
+                    rs.global_uuid as "global_uuid!",
+                    rs.rts_status as "rts_status!: RunningStatus",
+                    rs.initial_data as "initial_data!",
+                    rs.latest_step_idx,
+                    rs.latest_result,
+                    rs.created_at as "created_at!",
+                    rs.updated_at as "updated_at!",
+                    rs.step_execution_times,
+                    rs.step_ids,
+                    rs.total_execution_time,
+                    {} as "steps!: Value"
                 FROM runtime_sessions rs
                 WHERE rs.global_uuid = $1
                 "#,
-                crate::steps_json_agg_sql("rs", "runtime_session_id")
+                steps_json_agg
             );
 
-            sqlx::query_as::<_, Self>(&query)
-                .bind(Uuid::parse_str(&id.global_uuid)?)
+            sqlx::query_as::<_, RuntimeSessionRow>(&query)
+                .bind(parsed_uuid)
                 .fetch_optional(pool)
                 .await?
         };
 
-        Ok(result)
+        Ok(row.map(|row| RuntimeSession {
+            identifiers: IdFields {
+                local_id: Some(row.id),
+                global_uuid: row.global_uuid.to_string(),
+            },
+            timestamps: TimestampFields {
+                created: row.created_at,
+                updated: row.updated_at,
+            },
+            steps: Step::from_json_array(&row.steps),
+            status: row.rts_status,
+            source_data: row.initial_data,
+            last_step_idx: row.latest_step_idx,
+            last_successful_result: row.latest_result,
+            step_execution_times: row.step_execution_times
+                .unwrap_or_default()
+                .into_iter()
+                .map(|secs| {
+                    let secs_int = secs.trunc() as u64;
+                    let nanos = ((secs.fract() * 1_000_000_000.0) as u32).min(999_999_999);
+                    Duration::new(secs_int, nanos)
+                })
+                .collect(),
+            total_execution_time: row.total_execution_time
+                .map(|secs| {
+                    let secs_int = secs.trunc() as u64;
+                    let nanos = ((secs.fract() * 1_000_000_000.0) as u32).min(999_999_999);
+                    Duration::new(secs_int, nanos)
+                })
+                .unwrap_or_default(),
+        }))
     }
 }

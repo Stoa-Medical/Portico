@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT \n                    id, global_uuid, description,\n                    step_type as \"step_type: _\", -- Tell sqlx to use StepType\n                    step_content, created_at, updated_at\n                FROM steps \n                WHERE global_uuid = $1\n                ",
+  "query": "\n                SELECT\n                    id, global_uuid, description,\n                    step_type as \"step_type: _\", -- Tell sqlx to use StepType\n                    step_content, created_at, updated_at\n                FROM steps\n                WHERE global_uuid = $1\n                ",
   "describe": {
     "columns": [
       {
@@ -64,5 +64,5 @@
       false
     ]
   },
-  "hash": "d2c50c9dbb521f1b6af92a50fe834fe9be522996e3c9ac599f8772f553e01a53"
+  "hash": "71f8e64955fe7b0da5c2ff569fb30672a4aa6f37abc93d24316fd992c413782c"
 }
