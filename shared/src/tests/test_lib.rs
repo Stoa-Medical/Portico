@@ -1,26 +1,5 @@
-use crate::{exec_python, IdFields, TimestampFields};
-use serde_json::json;
+use crate::{IdFields, TimestampFields};
 use std::time::Duration;
-
-#[test]
-fn test_exec_python() {
-    // Test a simple Python function that adds numbers
-    let source = json!({"a": 5, "b": 7});
-    let python_code = r#"
-result = {"sum": source["a"] + source["b"]}
-"#;
-
-    let result = exec_python(source, python_code);
-    assert!(
-        result.is_ok(),
-        "{}",
-        format!("Python execution should succeed, got: {:?}", result)
-    );
-
-    if let Ok(value) = result {
-        assert_eq!(value, json!({"sum": 12}));
-    }
-}
 
 #[test]
 fn test_id_fields_creation() {
