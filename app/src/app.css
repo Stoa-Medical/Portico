@@ -76,6 +76,10 @@
     display: inline-block;
   }
 
+  .text-sea {
+    color: #a7e7df;
+  }
+
   h1,
   h2,
   h3 {

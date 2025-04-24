@@ -25,6 +25,7 @@
   } from "flowbite-svelte-icons";
   import PageHeader from "$lib/components/PageHeader.svelte";
   import StepConfig from "$lib/components/StepConfig.svelte";
+  import { formatRelativeDate, readableDate } from "$lib/date";
   import {
     getSteps,
     updateStep,
@@ -36,6 +37,7 @@
     deleteStep,
   } from "./api";
   import { onMount } from "svelte";
+  import { readable } from "svelte/store";
 
   // Selected resources for detail views
   let selectedAgent = null;
@@ -248,7 +250,7 @@
   <PageHeader title="Agents" {breadcrumbs} actionBar={getActions()} />
 
   <!-- Master-Detail View -->
-  <div class="grid grid-cols-1 mt-6">
+  <div class="grid grid-cols-2 gap-6 mt-6">
     <!-- Agents List (Master View) -->
     <div class={selectedAgent ? "hidden lg:block" : "block"}>
       <Card class="max-w-full">
@@ -258,7 +260,7 @@
             <TableHeadCell>Name</TableHeadCell>
             <TableHeadCell>Type</TableHeadCell>
             <TableHeadCell>Status</TableHeadCell>
-            <TableHeadCell>Last Active</TableHeadCell>
+            <TableHeadCell>Last Updated</TableHeadCell>
           </TableHead>
           <TableBody>
             {#each agents as agent}
@@ -281,7 +283,11 @@
                     {agent.agent_state}
                   </span>
                 </TableBodyCell>
-                <TableBodyCell>{agent.lastActive || "Just now"}</TableBodyCell>
+                <TableBodyCell
+                  >{agent.updated_at
+                    ? formatRelativeDate(agent.updated_at)
+                    : "Just now"}</TableBodyCell
+                >
               </TableBodyRow>
             {/each}
 
@@ -302,7 +308,7 @@
 
     <!-- Agent Details (Detail View) -->
     {#if selectedAgent}
-      <div class="col-span-2 lg:col-span-3 mt-6">
+      <div class="col-span-1">
         <Card class="max-w-full">
           <div class="mb-4 flex items-center gap-3">
             <Button
@@ -362,10 +368,10 @@
                 </div> -->
 
                 <div>
-                  <Label class="mb-2">Created On</Label>
-                  <p class="text-gray-700 dark:text-gray-300">
-                    {selectedAgent.createdAt}
-                  </p>
+                  <Label class="mb-2 font-bold inline-block">Created At:</Label>
+                  <span class="text-gray-700 text-sm dark:text-gray-300">
+                    {readableDate(selectedAgent.created_at)}
+                  </span>
                 </div>
               </div>
             </TabItem>
@@ -378,8 +384,7 @@
               <div class="space-y-6 py-4">
                 <div class="flex justify-between items-center mb-4">
                   <p class="text-gray-700 dark:text-gray-300">
-                    Steps define the workflow for this agent. Each step can be a
-                    Python script or a prompt template.
+                    Each step can be a Python script or a Prompt Template.
                   </p>
                   <Button
                     class="bg-sea text-black"
@@ -499,7 +504,6 @@
                     <TableHead>
                       <TableHeadCell>ID</TableHeadCell>
                       <TableHeadCell>Status</TableHeadCell>
-                      <TableHeadCell>Steps</TableHeadCell>
                       <TableHeadCell>Created</TableHeadCell>
                       <TableHeadCell>Last Updated</TableHeadCell>
                       <TableHeadCell>Actions</TableHeadCell>
@@ -512,17 +516,14 @@
                             <Badge color="green">{session.rts_status}</Badge>
                           </TableBodyCell>
                           <TableBodyCell
-                            >{session.latest_step_idx}</TableBodyCell
-                          >
-                          <TableBodyCell
-                            >{new Date(
+                            >{formatRelativeDate(
                               session.created_at,
-                            ).toLocaleString()}</TableBodyCell
+                            )}</TableBodyCell
                           >
                           <TableBodyCell
-                            >{new Date(
+                            >{formatRelativeDate(
                               session.updated_at,
-                            ).toLocaleString()}</TableBodyCell
+                            )}</TableBodyCell
                           >
                           <TableBodyCell>
                             <div class="flex gap-2">
