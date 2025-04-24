@@ -12,7 +12,10 @@ atlas schema apply \
 NOTE: the Atlas HCL syntax is custom and doesn't support everything yet (e.g. `mixin`, `domain`, etc.)
     Docs: https:atlasgo.io/atlas-schema/hcl
 
-To reset database state -- generation for the YOLO SQL below (run in `psql`):
+To seed some data into the database, run the `supabase/seed.sql` file with: `psql postgresql://postgres:postgres@localhost:54322/postgres -f seed.sql`
+
+To reset database state -- you can use the Supabase CLI (`supabase db reset`)
+  OR run generation for the YOLO SQL below (run in `psql`):
 ```
 psql -h localhost -p 54322 -U postgres -d postgres
 ```

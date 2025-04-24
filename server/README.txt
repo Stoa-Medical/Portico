@@ -17,6 +17,13 @@ TESTS
 - Integration tests are in `tests/`
 - Run tests with `cargo test`
 
+The database schema is maintained in `scheme.hcl`. This file should be considered the source-of-truth for the schema
+
+The `seed.sql` file contains sample data for development and testing purposes (NOT prod). This data includes:
+- Sample agents with different states and types
+- Steps associated with each agent
+- Signals with various statuses
+- Runtime sessions in different states
 
 Local toolkit:
 - brew (MacOS)
