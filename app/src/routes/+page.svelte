@@ -11,7 +11,7 @@
   <div class="grid grid-cols-1 gap-6">
     <Card class="overflow-x-auto max-w-full bg-card">
       <div class="p-4">
-        <h2 class="mb-4 text-4xl">Hi there, Howard!</h2>
+        <h2 class="mb-4 text-4xl">Hi there!</h2>
         <br />
         <h2 class="mb-4 text-4xl">Let's create a new project!</h2>
 

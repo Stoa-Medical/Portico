@@ -20,7 +20,7 @@ describe("app.test.ts", () => {
   test("initializes application", async () => {
     t.render();
 
-    const welcomeText = await screen.findByText(/Hi there, Howard!/i);
+    const welcomeText = await screen.findByText(/Hi there!/i);
 
     expect(welcomeText).toBeInTheDocument();
   });
