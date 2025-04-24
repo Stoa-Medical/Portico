@@ -37,7 +37,6 @@
     deleteStep,
   } from "./api";
   import { onMount } from "svelte";
-  import { readable } from "svelte/store";
 
   // Selected resources for detail views
   let selectedAgent = null;
@@ -161,10 +160,17 @@
   }
 
   function selectAgent(agent) {
-    originalAgent = structuredClone(agent);
-    selectedAgent = structuredClone(agent);
-    currentTab = "General";
-    updateUrl(agent.id, currentTab);
+    if (selectedAgent && selectedAgent?.id === agent.id) {
+      selectedAgent = null;
+      originalAgent = null;
+      currentTab = null;
+      updateUrl(null, null);
+    } else {
+      originalAgent = structuredClone(agent);
+      selectedAgent = structuredClone(agent);
+      currentTab = "General";
+      updateUrl(agent.id, currentTab);
+    }
   }
 
   function changeTab(tab) {
@@ -266,6 +272,7 @@
             {#each agents as agent}
               <TableBodyRow
                 on:click={() => selectAgent(agent)}
+                data-testid={`agent-row-${agent.name}`}
                 class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 {selectedAgent?.id ===
                 agent.id
                   ? 'bg-blue-50 dark:bg-blue-900/20'

@@ -7,6 +7,10 @@ import {
 } from "@testing-library/svelte";
 import AgentsPage from "./+page.svelte";
 
+beforeEach(() => {
+  window.history.pushState({}, "", "/agents"); // Reset to base state
+});
+
 // Mocking the `api.js` file for data access
 function getMockAgents() {
   return [
@@ -107,8 +111,8 @@ const t = {
     return within(table).getByText(text);
   },
   clickOnAgent: async (agentName: string = "Test Agent 1") => {
-    const agent = await screen.findByText(agentName);
-    fireEvent.click(agent);
+    const agentRow = await screen.findByTestId(`agent-row-${agentName}`);
+    fireEvent.click(agentRow);
 
     // Wait for agent panel to open (Check for "General" tab)
     await screen.findByText("General");
@@ -236,6 +240,25 @@ describe("agents.test.ts - Agents Page", () => {
         name: "Test Updated Agent Name",
       }),
     ]);
+  });
+
+  it("allows selecting and deselecting an agent by clicking the same row", async () => {
+    t.render();
+
+    // When you click on "Test Agent 1"
+    await t.clickOnAgent();
+
+    // Then the agent detail panel will display
+    const generalTabEl = await screen.getByRole("tab", { name: /general/i });
+    expect(generalTabEl).toBeInTheDocument();
+
+    // When you click on "Test Agent 1" again
+    await t.clickOnAgent();
+
+    // The agent should no longer be selected
+    expect(
+      screen.queryByRole("tab", { name: /general/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("allows a user to view an existing agents step configurations", async () => {
