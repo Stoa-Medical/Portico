@@ -1,17 +1,16 @@
 /// An Agent represents a component that listens for and reacts to Signals in the system.
 /// Agents are responsible for monitoring specific Signal types and acting on them
 /// NOTE: Agents are created in the UI, and Supabase is the source-of-truth for their state.
-
 use crate::models::{runtime_sessions::RuntimeSession, steps::Step};
-use crate::{DatabaseItem, IdFields, JsonLike, TimestampFields};
 use crate::python_runtime::PythonRuntime;
+use crate::{DatabaseItem, IdFields, JsonLike, TimestampFields};
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sqlx::{PgPool, Row};
 use sqlx::types::JsonValue;
+use sqlx::{PgPool, Row};
 use std::str::FromStr;
 use std::sync::Mutex;
 use uuid::Uuid;
@@ -21,7 +20,7 @@ pub struct Agent {
     pub identifiers: IdFields,
     pub timestamps: TimestampFields,
     pub description: String,
-    pub agent_state: Mutex<AgentState>,  // Make public for direct construction in other modules
+    pub agent_state: Mutex<AgentState>, // Make public for direct construction in other modules
     pub steps: Vec<Step>,
 }
 
@@ -73,7 +72,7 @@ impl FromStr for AgentState {
             "inactive" => Ok(AgentState::Inactive),
             "stable" => Ok(AgentState::Stable),
             "unstable" => Ok(AgentState::Unstable),
-            _ => Err(format!("Unknown agent state: {}", s))
+            _ => Err(format!("Unknown agent state: {}", s)),
         }
     }
 }
@@ -198,7 +197,9 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
         let global_uuid: uuid::Uuid = row.try_get("global_uuid")?;
         let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
         let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
-        let description: String = row.try_get::<Option<String>, _>("description")?.unwrap_or_default();
+        let description: String = row
+            .try_get::<Option<String>, _>("description")?
+            .unwrap_or_default();
         let agent_state: AgentState = row.try_get("agent_state")?;
 
         // Parse steps - each raw JSON will look like a `json_build_object` result
@@ -272,7 +273,7 @@ impl JsonLike for Agent {
                     obj.get("agent_state")
                         .and_then(|v| v.as_str())
                         .and_then(|s| AgentState::from_str(s).ok())
-                        .unwrap_or_default()
+                        .unwrap_or_default(),
                 ),
                 steps: obj
                     .get("steps")
@@ -566,7 +567,10 @@ impl DatabaseItem for Agent {
         Ok(agents)
     }
 
-    async fn try_db_select_by_id(pool: &PgPool, id: &IdFields<Self::IdType>) -> Result<Option<Self>> {
+    async fn try_db_select_by_id(
+        pool: &PgPool,
+        id: &IdFields<Self::IdType>,
+    ) -> Result<Option<Self>> {
         // Define struct compatible with query_as! output
         struct AgentRow {
             id: i32,

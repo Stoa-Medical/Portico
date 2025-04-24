@@ -1,12 +1,12 @@
 use crate::{DatabaseItem, IdFields, JsonLike, TimestampFields};
 use serde_json::Value;
 
+use crate::python_runtime::PythonRuntime;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgArgumentBuffer, PgPool, Postgres, Row};
 use uuid::Uuid;
-use crate::python_runtime::PythonRuntime;
 
 #[derive(Clone, Debug, Serialize, Deserialize, Copy)]
 pub enum StepType {
@@ -145,7 +145,12 @@ impl Step {
     /// Runs the step with fresh context
     /// For Python steps, a runtime must be provided.
     /// For Prompt steps, the runtime is optional.
-    pub async fn run(&self, source_data: Value, step_idx: usize, runtime: Option<&PythonRuntime>) -> Result<Value> {
+    pub async fn run(
+        &self,
+        source_data: Value,
+        step_idx: usize,
+        runtime: Option<&PythonRuntime>,
+    ) -> Result<Value> {
         match &self.step_type {
             StepType::Prompt => match crate::call_llm(&self.step_content, source_data).await {
                 Ok(res_str) => Ok(Value::String(res_str)),
@@ -156,7 +161,10 @@ impl Step {
                 if let Some(rt) = runtime {
                     rt.execute_step(&self.identifiers.global_uuid, source_data)
                 } else {
-                    Err(anyhow!("Python step {} requires a runtime to execute", step_idx))
+                    Err(anyhow!(
+                        "Python step {} requires a runtime to execute",
+                        step_idx
+                    ))
                 }
             }
         }
@@ -369,12 +377,9 @@ impl DatabaseItem for Step {
 
     async fn try_db_delete(&self, pool: &PgPool) -> Result<()> {
         let uuid_parsed = Uuid::parse_str(&self.identifiers.global_uuid)?;
-        let res = sqlx::query!(
-            "DELETE FROM steps WHERE global_uuid = $1",
-            uuid_parsed
-        )
-        .execute(pool)
-        .await?;
+        let res = sqlx::query!("DELETE FROM steps WHERE global_uuid = $1", uuid_parsed)
+            .execute(pool)
+            .await?;
 
         if res.rows_affected() == 1 {
             Ok(())
@@ -430,7 +435,10 @@ impl DatabaseItem for Step {
         Ok(steps)
     }
 
-    async fn try_db_select_by_id(pool: &PgPool, id: &IdFields<Self::IdType>) -> Result<Option<Self>> {
+    async fn try_db_select_by_id(
+        pool: &PgPool,
+        id: &IdFields<Self::IdType>,
+    ) -> Result<Option<Self>> {
         // Define struct compatible with query_as! output
         struct StepRow {
             id: i32,

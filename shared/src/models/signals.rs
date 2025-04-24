@@ -220,7 +220,8 @@ impl Signal {
     pub fn parse_command_payload(&self) -> Result<CommandPayload> {
         match &self.initial_data {
             Some(data) if self.signal_type == SignalType::Command => {
-                serde_json::from_value(data.clone()).map_err(|e| anyhow!("Invalid command payload: {}", e))
+                serde_json::from_value(data.clone())
+                    .map_err(|e| anyhow!("Invalid command payload: {}", e))
             }
             _ => Err(anyhow!("Not a command signal or missing data")),
         }
@@ -229,7 +230,8 @@ impl Signal {
     pub fn parse_sync_payload(&self) -> Result<SyncPayload> {
         match &self.initial_data {
             Some(data) if self.signal_type == SignalType::Sync => {
-                serde_json::from_value(data.clone()).map_err(|e| anyhow!("Invalid sync payload: {}", e))
+                serde_json::from_value(data.clone())
+                    .map_err(|e| anyhow!("Invalid sync payload: {}", e))
             }
             _ => Err(anyhow!("Not a sync signal or missing data")),
         }
@@ -237,9 +239,7 @@ impl Signal {
 
     pub fn parse_fyi_data(&self) -> Result<Value> {
         match &self.initial_data {
-            Some(data) if self.signal_type == SignalType::Fyi => {
-                Ok(data.clone())
-            }
+            Some(data) if self.signal_type == SignalType::Fyi => Ok(data.clone()),
             _ => Err(anyhow!("Not an FYI signal or missing data")),
         }
     }
@@ -260,7 +260,9 @@ impl Signal {
     async fn execute_signal(&self) -> Result<RuntimeSession> {
         match &self.agent {
             Some(agent) => {
-                let result = agent.run(self.initial_data.clone().unwrap_or(Value::Null)).await?;
+                let result = agent
+                    .run(self.initial_data.clone().unwrap_or(Value::Null))
+                    .await?;
                 Ok(result)
             }
             None => {
@@ -357,7 +359,11 @@ impl JsonLike for Signal {
                                     }
                                 }
                                 Err(e) => {
-                                    return Err(anyhow!("Invalid signal type '{}': {}", new_type, e))
+                                    return Err(anyhow!(
+                                        "Invalid signal type '{}': {}",
+                                        new_type,
+                                        e
+                                    ))
                                 }
                             }
                         }
@@ -531,7 +537,9 @@ impl DatabaseItem for Signal {
             uuid_parsed,
             user_requested_uuid,
             self.agent.as_ref().and_then(|a| a.identifiers.local_id),
-            self.linked_rts.as_ref().and_then(|rts| rts.identifiers.local_id),
+            self.linked_rts
+                .as_ref()
+                .and_then(|rts| rts.identifiers.local_id),
             signal_type_str,
             &self.initial_data as _,
             &self.result_data as _,
@@ -573,7 +581,9 @@ impl DatabaseItem for Signal {
             "#,
             user_requested_uuid,
             self.agent.as_ref().and_then(|a| a.identifiers.local_id),
-            self.linked_rts.as_ref().and_then(|rts| rts.identifiers.local_id),
+            self.linked_rts
+                .as_ref()
+                .and_then(|rts| rts.identifiers.local_id),
             signal_type_str,
             &self.initial_data as _,
             &self.result_data as _,
@@ -665,7 +675,10 @@ impl DatabaseItem for Signal {
                     Some(Agent {
                         identifiers: IdFields {
                             local_id: row.agent_id,
-                            global_uuid: row.agent_global_uuid.map(|uuid| uuid.to_string()).unwrap_or_default(),
+                            global_uuid: row
+                                .agent_global_uuid
+                                .map(|uuid| uuid.to_string())
+                                .unwrap_or_default(),
                         },
                         timestamps: TimestampFields {
                             created: row.agent_created_at.unwrap_or_default(),
@@ -691,7 +704,10 @@ impl DatabaseItem for Signal {
         Ok(signals)
     }
 
-    async fn try_db_select_by_id(pool: &PgPool, id: &IdFields<Self::IdType>) -> Result<Option<Self>> {
+    async fn try_db_select_by_id(
+        pool: &PgPool,
+        id: &IdFields<Self::IdType>,
+    ) -> Result<Option<Self>> {
         // Define struct compatible with query_as! output
         struct SignalRow {
             id: i64,
@@ -785,7 +801,10 @@ impl DatabaseItem for Signal {
                     Some(Agent {
                         identifiers: IdFields {
                             local_id: row.agent_id,
-                            global_uuid: row.agent_global_uuid.map(|uuid| uuid.to_string()).unwrap_or_default(),
+                            global_uuid: row
+                                .agent_global_uuid
+                                .map(|uuid| uuid.to_string())
+                                .unwrap_or_default(),
                         },
                         timestamps: TimestampFields {
                             created: row.agent_created_at.unwrap_or_default(),

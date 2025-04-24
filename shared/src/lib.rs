@@ -96,7 +96,13 @@ impl std::str::FromStr for RunningStatus {
 #[derive(Clone, Debug, sqlx::FromRow, Serialize, Deserialize)]
 pub struct IdFields<I = i32>
 where
-    I: sqlx::Type<Postgres> + for<'r> sqlx::Decode<'r, Postgres> + Send + Sync + Clone + std::fmt::Debug + 'static
+    I: sqlx::Type<Postgres>
+        + for<'r> sqlx::Decode<'r, Postgres>
+        + Send
+        + Sync
+        + Clone
+        + std::fmt::Debug
+        + 'static,
 {
     pub local_id: Option<I>,
     pub global_uuid: String,
@@ -108,7 +114,13 @@ pub type IdFields64 = IdFields<i64>;
 
 impl<I> Default for IdFields<I>
 where
-    I: sqlx::Type<Postgres> + for<'r> sqlx::Decode<'r, Postgres> + Send + Sync + Clone + std::fmt::Debug + 'static
+    I: sqlx::Type<Postgres>
+        + for<'r> sqlx::Decode<'r, Postgres>
+        + Send
+        + Sync
+        + Clone
+        + std::fmt::Debug
+        + 'static,
 {
     fn default() -> Self {
         Self::new()
@@ -117,7 +129,13 @@ where
 
 impl<I> IdFields<I>
 where
-    I: sqlx::Type<Postgres> + for<'r> sqlx::Decode<'r, Postgres> + Send + Sync + Clone + std::fmt::Debug + 'static
+    I: sqlx::Type<Postgres>
+        + for<'r> sqlx::Decode<'r, Postgres>
+        + Send
+        + Sync
+        + Clone
+        + std::fmt::Debug
+        + 'static,
 {
     pub fn new() -> Self {
         Self {
@@ -166,14 +184,27 @@ impl TimestampFields {
 #[async_trait]
 pub trait DatabaseItem {
     /// The integer type used for the local_id (defaults to i32)
-    type IdType: sqlx::Type<Postgres> + for<'r> sqlx::Decode<'r, Postgres> + Send + Sync + Clone + std::fmt::Debug + 'static;
+    type IdType: sqlx::Type<Postgres>
+        + for<'r> sqlx::Decode<'r, Postgres>
+        + Send
+        + Sync
+        + Clone
+        + std::fmt::Debug
+        + 'static;
 
     fn id(&self) -> &IdFields<Self::IdType>;
     async fn try_db_create(&self, pool: &PgPool) -> Result<()>;
     async fn try_db_update(&self, pool: &PgPool) -> Result<()>;
     async fn try_db_delete(&self, pool: &PgPool) -> Result<()>;
-    async fn try_db_select_all(pool: &PgPool) -> Result<Vec<Self>> where Self: Sized;
-    async fn try_db_select_by_id(pool: &PgPool, id: &IdFields<Self::IdType>) -> Result<Option<Self>> where Self: Sized;
+    async fn try_db_select_all(pool: &PgPool) -> Result<Vec<Self>>
+    where
+        Self: Sized;
+    async fn try_db_select_by_id(
+        pool: &PgPool,
+        id: &IdFields<Self::IdType>,
+    ) -> Result<Option<Self>>
+    where
+        Self: Sized;
 }
 
 pub trait JsonLike {
@@ -191,7 +222,10 @@ pub trait JsonLike {
 /// Checks if a record with the given UUID already exists in the specified table
 pub async fn check_exists_by_uuid(pool: &PgPool, table: &str, uuid: &str) -> Result<bool> {
     let uuid_parsed = Uuid::parse_str(uuid)?;
-    let query = format!("SELECT EXISTS(SELECT 1 FROM {} WHERE global_uuid = $1)", table);
+    let query = format!(
+        "SELECT EXISTS(SELECT 1 FROM {} WHERE global_uuid = $1)",
+        table
+    );
     sqlx::query_scalar::<_, bool>(&query)
         .bind(uuid_parsed)
         .fetch_one(pool)
@@ -295,9 +329,7 @@ pub async fn load_agent_steps(pool: &PgPool, agent_id: i32) -> Result<Option<Val
         agent_id
     );
 
-    let steps_row = sqlx::query(&steps_query)
-        .fetch_one(pool)
-        .await?;
+    let steps_row = sqlx::query(&steps_query).fetch_one(pool).await?;
 
     let steps_json: Option<Value> = steps_row.get("steps");
     Ok(steps_json)

@@ -127,15 +127,10 @@ fn create_test_agent() -> Agent {
         IdFields::new(),
         StepType::Python,
         "source['value'] += 10\nresult = source".to_string(),
-        Some("Adds 10 to the input value".to_string())
+        Some("Adds 10 to the input value".to_string()),
     );
 
     let steps = vec![step];
 
-    Agent::new(
-        id_fields,
-        timestamps,
-        description,
-        steps
-    )
+    Agent::new(id_fields, timestamps, description, steps)
 }

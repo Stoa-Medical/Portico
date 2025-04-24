@@ -1,14 +1,14 @@
+use crate::python_runtime::PythonRuntime;
 use crate::Step;
 use crate::{DatabaseItem, IdFields, RunningStatus, TimestampFields};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde_json::Value;
-use sqlx::{PgPool, Row};
 use sqlx::types::BigDecimal;
+use sqlx::{PgPool, Row};
+use std::str::FromStr;
 use std::time::{Duration, Instant};
 use uuid::Uuid;
-use crate::python_runtime::PythonRuntime;
-use std::str::FromStr;
 
 #[derive(Debug)]
 pub struct RuntimeSession {
@@ -19,8 +19,8 @@ pub struct RuntimeSession {
     pub source_data: Value,
     pub last_step_idx: Option<i32>,
     pub last_successful_result: Option<Value>,
-    pub step_execution_times: Vec<Duration>,  // Stores duration for each step
-    pub total_execution_time: Duration,       // Stores total runtime
+    pub step_execution_times: Vec<Duration>, // Stores duration for each step
+    pub total_execution_time: Duration,      // Stores total runtime
 }
 
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
@@ -54,9 +54,11 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
         let steps = Step::from_json_array(&steps_json);
 
         // Get execution times as array of numeric values
-        let step_execution_times = match row.try_get::<Option<Vec<f64>>, _>("step_execution_times") {
+        let step_execution_times = match row.try_get::<Option<Vec<f64>>, _>("step_execution_times")
+        {
             Ok(Some(times)) => {
-                times.into_iter()
+                times
+                    .into_iter()
                     .map(|seconds| {
                         // Convert seconds to Duration
                         let secs = seconds.trunc() as u64;
@@ -64,7 +66,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
                         Duration::new(secs, nanos)
                     })
                     .collect()
-            },
+            }
             _ => Vec::new(),
         };
 
@@ -75,7 +77,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
                 let secs = seconds.trunc() as u64;
                 let nanos = ((seconds.fract() * 1_000_000_000.0) as u32).min(999_999_999);
                 Duration::new(secs, nanos)
-            },
+            }
             _ => Duration::ZERO,
         };
 
@@ -124,7 +126,9 @@ impl RuntimeSession {
         // Check if a runtime is required but not provided
         if runtime.is_none() && self.steps.iter().any(|step| step.is_python_step()) {
             self.status = RunningStatus::Cancelled;
-            return Err(anyhow!("Python steps require a runtime but none was provided"));
+            return Err(anyhow!(
+                "Python steps require a runtime but none was provided"
+            ));
         }
 
         // Initialize timing fields
@@ -214,7 +218,7 @@ struct RuntimeSessionRow {
     updated_at: chrono::DateTime<chrono::Utc>,
     step_execution_times: Option<Vec<f64>>,
     total_execution_time: Option<f64>,
-    steps: Value,  // JSON aggregation result
+    steps: Value, // JSON aggregation result
 }
 
 #[async_trait]
@@ -227,24 +231,29 @@ impl DatabaseItem for RuntimeSession {
 
     async fn try_db_create(&self, pool: &PgPool) -> Result<()> {
         // Check if a session with the same UUID already exists
-        if crate::check_exists_by_uuid(pool, "runtime_sessions", &self.identifiers.global_uuid).await? {
-            return Ok(());  // Session already exists, no need to create it again
+        if crate::check_exists_by_uuid(pool, "runtime_sessions", &self.identifiers.global_uuid)
+            .await?
+        {
+            return Ok(()); // Session already exists, no need to create it again
         }
 
         // Convert execution times to BigDecimal array
-        let step_times_secs: Vec<BigDecimal> = self.step_execution_times
+        let step_times_secs: Vec<BigDecimal> = self
+            .step_execution_times
             .iter()
             .map(|duration| BigDecimal::from_str(&duration.as_secs_f64().to_string()).unwrap())
             .collect();
 
         // Collect step IDs from the steps vector
-        let step_ids: Vec<i32> = self.steps
+        let step_ids: Vec<i32> = self
+            .steps
             .iter()
             .filter_map(|step| step.identifiers.local_id)
             .collect();
 
         // Convert Duration to BigDecimal seconds
-        let total_time_secs = BigDecimal::from_str(&self.total_execution_time.as_secs_f64().to_string()).unwrap();
+        let total_time_secs =
+            BigDecimal::from_str(&self.total_execution_time.as_secs_f64().to_string()).unwrap();
 
         // Parse UUID once for all operations
         let parsed_uuid = Uuid::parse_str(&self.identifiers.global_uuid)?;
@@ -278,19 +287,22 @@ impl DatabaseItem for RuntimeSession {
 
     async fn try_db_update(&self, pool: &PgPool) -> Result<()> {
         // Convert execution times to BigDecimal array
-        let step_times_secs: Vec<BigDecimal> = self.step_execution_times
+        let step_times_secs: Vec<BigDecimal> = self
+            .step_execution_times
             .iter()
             .map(|duration| BigDecimal::from_str(&duration.as_secs_f64().to_string()).unwrap())
             .collect();
 
         // Collect step IDs from the steps vector
-        let step_ids: Vec<i32> = self.steps
+        let step_ids: Vec<i32> = self
+            .steps
             .iter()
             .filter_map(|step| step.identifiers.local_id)
             .collect();
 
         // Convert Duration to BigDecimal seconds
-        let total_time_secs = BigDecimal::from_str(&self.total_execution_time.as_secs_f64().to_string()).unwrap();
+        let total_time_secs =
+            BigDecimal::from_str(&self.total_execution_time.as_secs_f64().to_string()).unwrap();
 
         // Parse UUID once
         let parsed_uuid = Uuid::parse_str(&self.identifiers.global_uuid)?;
@@ -367,7 +379,8 @@ impl DatabaseItem for RuntimeSession {
             .await?;
 
         // Convert RuntimeSessionRow to RuntimeSession
-        let sessions = rows.into_iter()
+        let sessions = rows
+            .into_iter()
             .map(|row| RuntimeSession {
                 identifiers: IdFields {
                     local_id: Some(row.id),
@@ -382,7 +395,8 @@ impl DatabaseItem for RuntimeSession {
                 source_data: row.initial_data,
                 last_step_idx: row.latest_step_idx,
                 last_successful_result: row.latest_result,
-                step_execution_times: row.step_execution_times
+                step_execution_times: row
+                    .step_execution_times
                     .unwrap_or_default()
                     .into_iter()
                     .map(|secs| {
@@ -391,7 +405,8 @@ impl DatabaseItem for RuntimeSession {
                         Duration::new(secs_int, nanos)
                     })
                     .collect(),
-                total_execution_time: row.total_execution_time
+                total_execution_time: row
+                    .total_execution_time
                     .map(|secs| {
                         let secs_int = secs.trunc() as u64;
                         let nanos = ((secs.fract() * 1_000_000_000.0) as u32).min(999_999_999);
@@ -404,7 +419,10 @@ impl DatabaseItem for RuntimeSession {
         Ok(sessions)
     }
 
-    async fn try_db_select_by_id(pool: &PgPool, id: &IdFields<Self::IdType>) -> Result<Option<Self>> {
+    async fn try_db_select_by_id(
+        pool: &PgPool,
+        id: &IdFields<Self::IdType>,
+    ) -> Result<Option<Self>> {
         let steps_json_agg = crate::steps_json_agg_sql("rs", "agent_id");
 
         let row = if let Some(local_id) = id.local_id {
@@ -477,7 +495,8 @@ impl DatabaseItem for RuntimeSession {
             source_data: row.initial_data,
             last_step_idx: row.latest_step_idx,
             last_successful_result: row.latest_result,
-            step_execution_times: row.step_execution_times
+            step_execution_times: row
+                .step_execution_times
                 .unwrap_or_default()
                 .into_iter()
                 .map(|secs| {
@@ -486,7 +505,8 @@ impl DatabaseItem for RuntimeSession {
                     Duration::new(secs_int, nanos)
                 })
                 .collect(),
-            total_execution_time: row.total_execution_time
+            total_execution_time: row
+                .total_execution_time
                 .map(|secs| {
                     let secs_int = secs.trunc() as u64;
                     let nanos = ((secs.fract() * 1_000_000_000.0) as u32).min(999_999_999);

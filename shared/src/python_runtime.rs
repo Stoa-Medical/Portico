@@ -34,7 +34,7 @@ impl PythonRuntime {
     /// Add a step to the runtime
     pub fn add_step(&mut self, step: &Step) -> Result<()> {
         if !step.is_python_step() {
-            return Ok(());  // Skip non-Python steps
+            return Ok(()); // Skip non-Python steps
         }
 
         Python::with_gil(|py| {
@@ -53,7 +53,8 @@ impl PythonRuntime {
             py.run(code_cstring.as_c_str(), None, Some(&locals))?;
 
             // Store the function name mapped to the step UUID
-            self.step_functions.insert(step.identifiers.global_uuid.clone(), func_name);
+            self.step_functions
+                .insert(step.identifiers.global_uuid.clone(), func_name);
 
             Ok(())
         })
@@ -61,7 +62,9 @@ impl PythonRuntime {
 
     /// Execute a step with the given input data
     pub fn execute_step(&self, step_uuid: &str, input: Value) -> Result<Value> {
-        let func_name = self.step_functions.get(step_uuid)
+        let func_name = self
+            .step_functions
+            .get(step_uuid)
             .ok_or_else(|| anyhow!("Step function not found: {}", step_uuid))?;
 
         Python::with_gil(|py| {

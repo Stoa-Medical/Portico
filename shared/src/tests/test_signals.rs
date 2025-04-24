@@ -12,12 +12,7 @@ fn create_test_signal() -> Signal {
     // Create a simple agent for the signal
     let agent_id = IdFields::new();
     let timestamps = TimestampFields::new();
-    let agent = Agent::new(
-        agent_id,
-        timestamps,
-        "Test Agent".to_string(),
-        vec![]
-    );
+    let agent = Agent::new(agent_id, timestamps, "Test Agent".to_string(), vec![]);
 
     let initial_data = Some(json!({"value": 5}));
 
@@ -45,12 +40,7 @@ fn test_signal_without_data() {
     // Create a simple agent
     let agent_id = IdFields::new();
     let timestamps = TimestampFields::new();
-    let agent = Agent::new(
-        agent_id,
-        timestamps,
-        "Test Agent".to_string(),
-        vec![]
-    );
+    let agent = Agent::new(agent_id, timestamps, "Test Agent".to_string(), vec![]);
 
     // Create signal with no initial data
     let mut signal = Signal::new(

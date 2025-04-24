@@ -41,7 +41,7 @@ fn test_session_with_steps() {
         id_fields,
         StepType::Python,
         "source['value'] += 10\nresult = source".to_string(),
-        Some("A test step".to_string())
+        Some("A test step".to_string()),
     );
 
     // Create session with our test step
