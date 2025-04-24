@@ -43,12 +43,11 @@ SET step_ids = ARRAY[6, 7, 8]
 WHERE id = 3;
 
 -- Insert sample signals
-INSERT INTO signals (agent_id, user_requested_uuid, signal_type, signal_status, initial_data, response_data)
+INSERT INTO signals (agent_id, user_requested_uuid, signal_type, rts_id, initial_data, response_data)
 VALUES
-  (1, gen_random_uuid(), 'command', 'completed', '{"file_path": "/tmp/sample.txt"}', '{"report": "File processed successfully"}'),
-  (2, gen_random_uuid(), 'fyi', 'completed', '{"message": "System update completed"}', NULL),
-  (3, gen_random_uuid(), 'sync', 'running', '{"dataset_id": "ds-123"}', NULL),
-  (NULL, gen_random_uuid(), 'command', 'waiting', '{"action": "restart_service"}', NULL);
+  (1, gen_random_uuid(), 'command', 1, '{"file_path": "/tmp/sample.txt"}', '{"report": "File processed successfully"}'),
+  (2, gen_random_uuid(), 'fyi', 2, '{"message": "System update completed"}', NULL),
+  (3, gen_random_uuid(), 'sync', 3, '{"dataset_id": "ds-123"}', NULL);
 
 -- Insert sample runtime sessions
 INSERT INTO runtime_sessions (requested_by_agent_id, rts_status, initial_data, latest_step_idx, latest_result, step_execution_times, step_ids, total_execution_time)

@@ -35,7 +35,7 @@ async def insert_test_signal(client, signal_type, payload=None):
         "global_uuid": signal_uuid,
         "user_requested_uuid": user_uuid,
         "signal_type": signal_type,
-        "signal_status": "waiting",
+        "rts_id": None,  # Set to null initially, will be updated by the engine
         "initial_data": payload,
     }
 

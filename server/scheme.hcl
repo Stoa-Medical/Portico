@@ -87,6 +87,21 @@ table "signals" {
             table.agents.column.id
         ]
     }
+
+    column "rts_id" {
+        type = sql("bigint")
+        null = true
+    }
+
+    foreign_key "signal_rts_fk" {
+        columns = [
+            column.rts_id
+        ]
+        ref_columns = [
+            table.runtime_sessions.column.id
+        ]
+    }
+
     # === Timestamps ===
     column "created_at" {
         type = sql("timestamptz")
@@ -112,11 +127,6 @@ table "signals" {
         default = "fyi"
     }
 
-    column "signal_status" {
-        type = enum.running_status
-        null = true
-    }
-
     column "initial_data" {
         type = sql("json")
         null = true
@@ -127,6 +137,10 @@ table "signals" {
         null = true
     }
 
+    column "error_message" {
+        type = sql("text")
+        null = true
+    }
 }
 
 table "agents" {
