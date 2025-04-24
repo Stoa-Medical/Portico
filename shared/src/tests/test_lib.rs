@@ -3,7 +3,8 @@ use std::time::Duration;
 
 #[test]
 fn test_id_fields_creation() {
-    let id = IdFields::new();
+    let id = IdFields::<i32>::new();
+    let _id_64 = IdFields::<i64>::new();
 
     assert_eq!(id.local_id, None);
     assert!(!id.global_uuid.is_empty());
