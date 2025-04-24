@@ -9,6 +9,10 @@ mod tests;
 pub mod models;
 pub use models::{Agent, RuntimeSession, Signal, Step};
 
+/// Python runtime module for executing Python code with isolation
+pub mod python_runtime;
+pub use python_runtime::PythonRuntime;
+
 // ============ Custom Enums / Traits ============
 // === Imports ===
 use anyhow::{anyhow, Result};
@@ -271,7 +275,8 @@ pub async fn call_llm(prompt: &str, context: Value) -> Result<String> {
         .ok_or_else(|| anyhow::anyhow!("No completion found"))
 }
 
-/// Executes provided python code
+/// Executes provided python code - DEPRECATED: Use PythonRuntime instead
+#[deprecated(since = "0.2.0", note = "Use PythonRuntime instead")]
 pub fn exec_python(source: Value, the_code: &str) -> Result<Value> {
     // Preps python interpreter (needs to run at least once, and repeat calls are negligible)
     pyo3::prepare_freethreaded_python();
@@ -281,14 +286,14 @@ pub fn exec_python(source: Value, the_code: &str) -> Result<Value> {
         let locals = PyDict::new(py);
 
         // Convert serde_json::Value to PyObject directly
-        let py_json = pyo3::types::PyModule::import(py, "json")?;
+        let py_json = py.import("json")?;
         let incoming_data = serde_json::to_string(&source)?;
         let py_source = py_json.getattr("loads")?.call1((incoming_data,))?;
         locals.set_item("source", py_source)?;
 
-        // Convert String to CString correctly
-        let code_as_cstr = CString::new(the_code.as_bytes())?;
-        py.run(code_as_cstr.as_c_str(), None, Some(&locals))?;
+        // Convert String to CString for py.run
+        let code_cstring = CString::new(the_code.as_bytes())?;
+        py.run(code_cstring.as_c_str(), None, Some(&locals))?;
 
         // Get result and convert back to serde_json::Value
         match locals.get_item("result") {

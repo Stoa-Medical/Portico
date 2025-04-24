@@ -4,6 +4,7 @@
 
 use crate::models::{runtime_sessions::RuntimeSession, steps::Step};
 use crate::{DatabaseItem, IdFields, JsonLike, TimestampFields};
+use crate::python_runtime::PythonRuntime;
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -134,6 +135,20 @@ impl Agent {
         }
     }
 
+    /// Create a Python runtime for this agent
+    pub fn create_python_runtime(&self) -> Result<PythonRuntime> {
+        let mut runtime = PythonRuntime::new(&self.identifiers.global_uuid)?;
+
+        // Add all Python steps
+        for step in &self.steps {
+            if step.is_python_step() {
+                runtime.add_step(step)?;
+            }
+        }
+
+        Ok(runtime)
+    }
+
     /// Process data with this agent using an immutable reference
     pub async fn run(&self, source: Value) -> Result<RuntimeSession> {
         // Check if state is Inactive. If so, return error
@@ -141,11 +156,14 @@ impl Agent {
             return Err(anyhow!("Cannot run agent in Inactive state"));
         }
 
+        // Create a Python runtime for this agent
+        let runtime = self.create_python_runtime()?;
+
         // Create a new RuntimeSession with the agent's steps
         let mut session = RuntimeSession::new(source, self.steps.clone());
 
-        // Start the RuntimeSession and handle the result
-        let result = session.start().await;
+        // Start the RuntimeSession with the Python runtime
+        let result = session.start_with_runtime(&runtime).await;
 
         // If there was an error, propagate it
         if let Err(e) = result {

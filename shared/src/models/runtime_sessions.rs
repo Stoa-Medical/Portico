@@ -6,6 +6,8 @@ use serde_json::Value;
 use sqlx::{PgPool, Row};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
+use crate::python_runtime::PythonRuntime;
+use crate::models::steps::StepType;
 
 #[derive(Debug)]
 pub struct RuntimeSession {
@@ -111,7 +113,8 @@ impl RuntimeSession {
         }
     }
 
-    pub async fn start(&mut self) -> Result<Value> {
+    /// Start executing the session with a Python runtime
+    pub async fn start_with_runtime(&mut self, runtime: &PythonRuntime) -> Result<Value> {
         // Set status to Running
         self.status = RunningStatus::Running;
 
@@ -131,7 +134,19 @@ impl RuntimeSession {
             // Track this step's execution time
             let step_start = Instant::now();
 
-            match step.run(current_value, idx).await {
+            // Execute step based on its type
+            let result = match &step.step_type {
+                StepType::Python => {
+                    // Use the Python runtime to execute the step
+                    runtime.execute_step(&step.identifiers.global_uuid, current_value.clone())
+                }
+                StepType::Prompt => {
+                    crate::call_llm(&step.step_content, current_value.clone()).await
+                        .map(Value::String)
+                },
+            };
+
+            match result {
                 Ok(value) => {
                     // Record execution time for this step
                     let step_duration = step_start.elapsed();
@@ -162,6 +177,70 @@ impl RuntimeSession {
         self.status = RunningStatus::Completed;
 
         // Record total execution time
+        self.total_execution_time = start_time.elapsed();
+
+        // Store the final result and return it
+        self.last_successful_result = Some(current_value.clone());
+        Ok(current_value)
+    }
+
+    /// Start the session - deprecated, use start_with_runtime instead
+    #[deprecated(since = "0.2.0", note = "Use start_with_runtime() instead")]
+    pub async fn start(&mut self) -> Result<Value> {
+        eprintln!("Warning: Using deprecated start() method, please migrate to start_with_runtime()");
+
+        // Set status to Running
+        self.status = RunningStatus::Running;
+
+        // Initialize timing fields
+        self.step_execution_times = Vec::with_capacity(self.steps.len());
+        self.total_execution_time = Duration::ZERO;
+        let start_time = Instant::now();
+
+        // Execute each step in order, passing the result of each step to the next
+        let mut current_value = self.source_data.clone();
+
+        // Track step execution
+        for (idx, step) in self.steps.iter().enumerate() {
+            // Update latest step index before execution
+            self.last_step_idx = Some(idx as i32);
+
+            // Track this step's execution time
+            let step_start = Instant::now();
+
+            let result = step.run(current_value.clone(), idx).await;
+
+            match result {
+                Ok(value) => {
+                    // Record execution time for this step
+                    let step_duration = step_start.elapsed();
+                    self.step_execution_times.push(step_duration);
+
+                    // Update current value for next step
+                    current_value = value.clone();
+
+                    // Store the intermediate result
+                    self.last_successful_result = Some(value);
+                }
+                Err(e) => {
+                    // Still record execution time for the failed step
+                    let step_duration = step_start.elapsed();
+                    self.step_execution_times.push(step_duration);
+
+                    // Calculate total time before returning
+                    self.total_execution_time = start_time.elapsed();
+
+                    // Update status to cancelled
+                    self.status = RunningStatus::Cancelled;
+                    return Err(anyhow!("Step execution failed: {}", e));
+                }
+            }
+        }
+
+        // All steps completed successfully
+        self.status = RunningStatus::Completed;
+
+        // Record total time before returning
         self.total_execution_time = start_time.elapsed();
 
         // Store the final result and return it

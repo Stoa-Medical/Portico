@@ -1,4 +1,4 @@
-use crate::{call_llm, exec_python, DatabaseItem, IdFields, JsonLike, TimestampFields};
+use crate::{DatabaseItem, IdFields, JsonLike, TimestampFields};
 use serde_json::Value;
 
 use anyhow::{anyhow, Result};
@@ -99,65 +99,68 @@ impl Step {
         }
     }
 
-    /// Generates a Python function template for this step
-    pub fn generate_python_template(&self) -> String {
-        let func_name = format!("step_{}", self.identifiers.global_uuid.replace("-", "_"));
-        // Example of generated Python function:
-        // ```python
-        // def step_123e4567_e89b_12d3_a456_426614174000(source: dict) -> dict:
-        //     """
-        //     Process the input data
-        //
-        //     Args:
-        //         source: Input data dictionary from previous step
-        //
-        //     Returns:
-        //         dict: Output data to pass to next step
-        //     """
-        //     # Step implementation
-        //     result = source  # Default pass-through
-        //
-        //     # Custom code here
-        //
-        //     return result
-        //
-        // result = step_123e4567_e89b_12d3_a456_426614174000(source)
-        // ```
+    /// Check if this step is a Python step
+    pub fn is_python_step(&self) -> bool {
+        matches!(self.step_type, StepType::Python)
+    }
+
+    /// Generates a Python function with the standardized signature for a step
+    pub fn to_python_function(&self) -> String {
+        let func_name = self.python_function_name();
         let docstring = format!(
             "\"\"\"\n    {}\n    \n    Args:\n        source: Input data dictionary from previous step\n        \n    Returns:\n        dict: Output data to pass to next step\n    \"\"\"",
             self.description.as_deref().unwrap_or("No description provided")
         );
 
+        // Create a simplified Python function with proper indentation
         format!(
-            r#"def {}(source: dict) -> dict:
+            r#"def {}(source):
     {}
     # Step implementation
     result = source  # Default pass-through
 
-    {}
+{}
 
-    return result
-
-# Execute the step function
-result = {}(source)"#,
+    return result"#,
             func_name,
             docstring,
-            self.step_content.replace("\n", "\n    "),
-            func_name
+            // Indent all lines with 4 spaces for proper Python indentation
+            self.step_content
+                .lines()
+                .map(|line| format!("    {}", line))
+                .collect::<Vec<_>>()
+                .join("\n")
         )
     }
 
+    /// Returns the standard Python function name for this step
+    pub fn python_function_name(&self) -> String {
+        format!("step_{}", self.identifiers.global_uuid.replace("-", "_"))
+    }
+
+    /// Deprecated: Use to_python_function() instead
+    #[deprecated(since = "0.2.0", note = "Use to_python_function() instead")]
+    pub fn generate_python_template(&self) -> String {
+        self.to_python_function()
+    }
+
     /// Runs the step with fresh context
+    /// This method is deprecated and will be removed in the future
+    /// Use PythonRuntime for executing Python steps
+    #[deprecated(since = "0.2.0", note = "Use PythonRuntime for executing Python steps")]
     pub async fn run(&self, source_data: Value, step_idx: usize) -> Result<Value> {
         match &self.step_type {
-            StepType::Prompt => match call_llm(&self.step_content, source_data).await {
+            StepType::Prompt => match crate::call_llm(&self.step_content, source_data).await {
                 Ok(res_str) => Ok(Value::String(res_str)),
                 Err(err) => Err(anyhow!("Step {} failed: {}", step_idx, err)),
             },
-            StepType::Python => match exec_python(source_data, &self.generate_python_template()) {
-                Ok(result) => Ok(result),
-                Err(err) => Err(anyhow!("Step {} failed: {}", step_idx, err)),
-            },
+            StepType::Python => {
+                #[allow(deprecated)]
+                match crate::exec_python(source_data, &self.to_python_function()) {
+                    Ok(result) => Ok(result),
+                    Err(err) => Err(anyhow!("Step {} failed: {}", step_idx, err)),
+                }
+            }
         }
     }
 
