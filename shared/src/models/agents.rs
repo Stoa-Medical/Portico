@@ -386,7 +386,9 @@ impl JsonLike for Agent {
 
 #[async_trait]
 impl DatabaseItem for Agent {
-    fn id(&self) -> &IdFields {
+    type IdType = i32;
+
+    fn id(&self) -> &IdFields<Self::IdType> {
         &self.identifiers
     }
 
@@ -564,7 +566,7 @@ impl DatabaseItem for Agent {
         Ok(agents)
     }
 
-    async fn try_db_select_by_id(pool: &PgPool, id: &IdFields) -> Result<Option<Self>> {
+    async fn try_db_select_by_id(pool: &PgPool, id: &IdFields<Self::IdType>) -> Result<Option<Self>> {
         // Define struct compatible with query_as! output
         struct AgentRow {
             id: i32,

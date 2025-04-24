@@ -94,20 +94,31 @@ impl std::str::FromStr for RunningStatus {
 // ============ Struct definitions =============
 
 #[derive(Clone, Debug, sqlx::FromRow, Serialize, Deserialize)]
-pub struct IdFields {
-    pub local_id: Option<i32>,
+pub struct IdFields<I = i32>
+where
+    I: sqlx::Type<Postgres> + for<'r> sqlx::Decode<'r, Postgres> + Send + Sync + Clone + std::fmt::Debug + 'static
+{
+    pub local_id: Option<I>,
     pub global_uuid: String,
 }
 
-impl Default for IdFields {
+// Type aliases for common use cases
+pub type IdFields32 = IdFields<i32>;
+pub type IdFields64 = IdFields<i64>;
+
+impl<I> Default for IdFields<I>
+where
+    I: sqlx::Type<Postgres> + for<'r> sqlx::Decode<'r, Postgres> + Send + Sync + Clone + std::fmt::Debug + 'static
+{
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl IdFields {
-    // Primarily matters for `RuntimeSession` which is created here
-    //  (Supabase is the source-of-truth)
+impl<I> IdFields<I>
+where
+    I: sqlx::Type<Postgres> + for<'r> sqlx::Decode<'r, Postgres> + Send + Sync + Clone + std::fmt::Debug + 'static
+{
     pub fn new() -> Self {
         Self {
             local_id: None,
@@ -115,7 +126,7 @@ impl IdFields {
         }
     }
 
-    pub fn with_values(local_id: Option<i32>, global_uuid: String) -> Self {
+    pub fn with_values(local_id: Option<I>, global_uuid: String) -> Self {
         Self {
             local_id,
             global_uuid,
@@ -153,13 +164,16 @@ impl TimestampFields {
 
 /// Item that is in the `public` schema (Portico-custom, not Supabase-predefined)
 #[async_trait]
-pub trait DatabaseItem: Sized {
-    fn id(&self) -> &IdFields;
+pub trait DatabaseItem {
+    /// The integer type used for the local_id (defaults to i32)
+    type IdType: sqlx::Type<Postgres> + for<'r> sqlx::Decode<'r, Postgres> + Send + Sync + Clone + std::fmt::Debug + 'static;
+
+    fn id(&self) -> &IdFields<Self::IdType>;
     async fn try_db_create(&self, pool: &PgPool) -> Result<()>;
     async fn try_db_update(&self, pool: &PgPool) -> Result<()>;
     async fn try_db_delete(&self, pool: &PgPool) -> Result<()>;
-    async fn try_db_select_all(pool: &PgPool) -> Result<Vec<Self>>;
-    async fn try_db_select_by_id(pool: &PgPool, id: &IdFields) -> Result<Option<Self>>;
+    async fn try_db_select_all(pool: &PgPool) -> Result<Vec<Self>> where Self: Sized;
+    async fn try_db_select_by_id(pool: &PgPool, id: &IdFields<Self::IdType>) -> Result<Option<Self>> where Self: Sized;
 }
 
 pub trait JsonLike {

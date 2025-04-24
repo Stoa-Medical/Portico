@@ -295,7 +295,9 @@ impl JsonLike for Step {
 
 #[async_trait]
 impl DatabaseItem for Step {
-    fn id(&self) -> &IdFields {
+    type IdType = i32;
+
+    fn id(&self) -> &IdFields<Self::IdType> {
         &self.identifiers
     }
 
@@ -428,7 +430,7 @@ impl DatabaseItem for Step {
         Ok(steps)
     }
 
-    async fn try_db_select_by_id(pool: &PgPool, id: &IdFields) -> Result<Option<Self>> {
+    async fn try_db_select_by_id(pool: &PgPool, id: &IdFields<Self::IdType>) -> Result<Option<Self>> {
         // Define struct compatible with query_as! output
         struct StepRow {
             id: i32,

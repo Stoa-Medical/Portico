@@ -54,7 +54,7 @@ table "signals" {
 
     # === Ids ===
     column "id" {
-        type = int
+        type = sql("bigint")
         null = false
         identity {
             generated = "ALWAYS"
@@ -294,7 +294,6 @@ table "runtime_sessions" {
     schema = schema.public
 
     # === Ids ===
-    # NOTE: This is bigint because there could be a lot of these. Everything else should be int (update this comment if not the case)
     column "id" {
         type = sql("bigint")
         null = false

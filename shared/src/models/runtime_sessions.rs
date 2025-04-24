@@ -12,7 +12,7 @@ use std::str::FromStr;
 
 #[derive(Debug)]
 pub struct RuntimeSession {
-    pub identifiers: IdFields,
+    pub identifiers: IdFields<i64>,
     pub timestamps: TimestampFields,
     pub steps: Vec<Step>,
     pub status: RunningStatus,
@@ -204,7 +204,7 @@ impl RuntimeSession {
 
 #[derive(Debug, sqlx::FromRow)]
 struct RuntimeSessionRow {
-    id: i32,
+    id: i64,
     global_uuid: Uuid,
     rts_status: RunningStatus,
     initial_data: Value,
@@ -219,7 +219,9 @@ struct RuntimeSessionRow {
 
 #[async_trait]
 impl DatabaseItem for RuntimeSession {
-    fn id(&self) -> &IdFields {
+    type IdType = i64;
+
+    fn id(&self) -> &IdFields<Self::IdType> {
         &self.identifiers
     }
 
@@ -402,7 +404,7 @@ impl DatabaseItem for RuntimeSession {
         Ok(sessions)
     }
 
-    async fn try_db_select_by_id(pool: &PgPool, id: &IdFields) -> Result<Option<Self>> {
+    async fn try_db_select_by_id(pool: &PgPool, id: &IdFields<Self::IdType>) -> Result<Option<Self>> {
         let steps_json_agg = crate::steps_json_agg_sql("rs", "agent_id");
 
         let row = if let Some(local_id) = id.local_id {

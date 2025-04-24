@@ -91,7 +91,7 @@ pub struct SyncPayload {
 
 #[derive(Debug)]
 pub struct Signal {
-    pub identifiers: IdFields,
+    pub identifiers: IdFields<i64>,
     pub timestamps: TimestampFields,
     pub user_requested_uuid: String,
     pub agent: Option<Agent>,
@@ -104,8 +104,15 @@ pub struct Signal {
 
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Signal {
     fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
-        // For the agent field, we'll create a new Agent directly from the prefixed columns
-        let agent = if row.try_get::<Option<i32>, _>("agent_id")?.is_some() {
+        // Get the signal type
+        let signal_type = if let Ok(signal_type_str) = row.try_get::<&str, _>("signal_type") {
+            SignalType::from_str(signal_type_str).unwrap_or(SignalType::Fyi)
+        } else {
+            SignalType::Fyi
+        };
+
+        // Get the agent if one exists
+        let agent = if row.try_get::<Option<i64>, _>("agent_id")?.is_some() {
             Some(Agent {
                 identifiers: IdFields {
                     local_id: row.try_get("agent_id")?,
@@ -122,13 +129,6 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Signal {
         } else {
             None
         };
-
-        let signal_type_str: String = row.try_get("signal_type")?;
-        let signal_type = SignalType::from_str(&signal_type_str)
-            .map_err(|_| sqlx::Error::ColumnDecode {
-                index: "signal_type".to_string(),
-                source: Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid signal type")),
-            })?;
 
         Ok(Self {
             identifiers: IdFields {
@@ -152,7 +152,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Signal {
 
 impl Signal {
     pub fn new(
-        identifiers: IdFields,
+        identifiers: IdFields<i64>,
         user_requested_uuid: String,
         agent: Option<Agent>,
         signal_type: SignalType,
@@ -172,7 +172,7 @@ impl Signal {
     }
 
     pub fn new_command(
-        identifiers: IdFields,
+        identifiers: IdFields<i64>,
         user_requested_uuid: String,
         agent: Option<Agent>,
         command_payload: CommandPayload,
@@ -187,7 +187,7 @@ impl Signal {
     }
 
     pub fn new_sync(
-        identifiers: IdFields,
+        identifiers: IdFields<i64>,
         user_requested_uuid: String,
         agent: Option<Agent>,
         sync_payload: SyncPayload,
@@ -202,7 +202,7 @@ impl Signal {
     }
 
     pub fn new_fyi(
-        identifiers: IdFields,
+        identifiers: IdFields<i64>,
         user_requested_uuid: String,
         agent: Option<Agent>,
         data: Value,
@@ -454,7 +454,7 @@ impl JsonLike for Signal {
             .map_err(|e| anyhow!("Invalid signal type: {}", e))?;
 
         // Optional fields
-        let local_id = obj.get("id").and_then(|v| v.as_i64()).map(|id| id as i32);
+        let local_id = obj.get("id").and_then(|v| v.as_i64()).map(|id| id as i64);
 
         let agent = if let Some(agent_obj) = obj.get("agent") {
             if agent_obj.is_null() {
@@ -496,7 +496,9 @@ impl JsonLike for Signal {
 
 #[async_trait]
 impl DatabaseItem for Signal {
-    fn id(&self) -> &IdFields {
+    type IdType = i64;
+
+    fn id(&self) -> &IdFields<Self::IdType> {
         &self.identifiers
     }
 
@@ -602,7 +604,7 @@ impl DatabaseItem for Signal {
             let mut signal = Self::from_row(&row)?;
 
             // Load the RuntimeSession if there's an rts_id
-            if let Some(rts_id) = row.try_get::<Option<i32>, _>("rts_id")? {
+            if let Some(rts_id) = row.try_get::<Option<i64>, _>("rts_id")? {
                 // Create ID fields with just the local_id and fetch the full RuntimeSession
                 let rts_id_fields = IdFields {
                     local_id: Some(rts_id),
@@ -620,7 +622,7 @@ impl DatabaseItem for Signal {
         Ok(signals)
     }
 
-    async fn try_db_select_by_id(pool: &PgPool, id: &IdFields) -> Result<Option<Self>> {
+    async fn try_db_select_by_id(pool: &PgPool, id: &IdFields<Self::IdType>) -> Result<Option<Self>> {
         let where_clause = if let Some(local_id) = id.local_id {
             format!("WHERE s.id = {}", local_id)
         } else {
@@ -638,7 +640,7 @@ impl DatabaseItem for Signal {
                 let mut signal = Self::from_row(&row)?;
 
                 // Load the RuntimeSession if there's an rts_id
-                if let Some(rts_id) = row.try_get::<Option<i32>, _>("rts_id")? {
+                if let Some(rts_id) = row.try_get::<Option<i64>, _>("rts_id")? {
                     // Create ID fields with just the local_id and fetch the full RuntimeSession
                     let rts_id_fields = IdFields {
                         local_id: Some(rts_id),
