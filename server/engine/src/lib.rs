@@ -178,8 +178,14 @@ impl AgentManager {
                     if !agent_json.get("global_uuid").is_some() && !cmd.entity_uuid.is_empty() {
                         // Add entity_uuid as global_uuid if it doesn't exist
                         if let serde_json::Value::Object(ref mut obj) = agent_json {
-                            obj.insert("global_uuid".to_string(), serde_json::Value::String(cmd.entity_uuid.clone()));
-                            println!("[INFO] Using entity_uuid as global_uuid: {}", cmd.entity_uuid);
+                            obj.insert(
+                                "global_uuid".to_string(),
+                                serde_json::Value::String(cmd.entity_uuid.clone()),
+                            );
+                            println!(
+                                "[INFO] Using entity_uuid as global_uuid: {}",
+                                cmd.entity_uuid
+                            );
                         }
                     }
 
