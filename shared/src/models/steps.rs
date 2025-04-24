@@ -69,7 +69,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Step {
         Ok(Self {
             identifiers: IdFields {
                 local_id: row.try_get("id")?,
-                global_uuid: row.try_get("global_uuid")?,
+                global_uuid: row.try_get::<uuid::Uuid, _>("global_uuid")?.to_string(),
             },
             timestamps: TimestampFields {
                 created: row.try_get("created_at")?,

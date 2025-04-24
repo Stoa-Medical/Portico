@@ -212,7 +212,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
     // FROM agents a
     fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
         let id: i32 = row.try_get("id")?;
-        let global_uuid: String = row.try_get("global_uuid")?;
+        let global_uuid: uuid::Uuid = row.try_get("global_uuid")?;
         let created_at: chrono::DateTime<chrono::Utc> = row.try_get("created_at")?;
         let updated_at: chrono::DateTime<chrono::Utc> = row.try_get("updated_at")?;
         let description: String = row.try_get::<Option<String>, _>("description")?.unwrap_or_default();
@@ -225,7 +225,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
         Ok(Self {
             identifiers: IdFields {
                 local_id: Some(id),
-                global_uuid,
+                global_uuid: global_uuid.to_string(),
             },
             timestamps: TimestampFields {
                 created: created_at,
