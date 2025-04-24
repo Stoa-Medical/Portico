@@ -240,12 +240,14 @@ def executeScript(source):
       {/if}
     </div>
 
-    <div>
-      <p class="text-sm text-gray-500">
-        Last edited: {formatRelativeDate(step.updated_at) || "Just now"} | Created:
-        {formatRelativeDate(step.created_at) || "Just now"}
-      </p>
-    </div>
+    {#if step.id !== "new"}
+      <div>
+        <p class="text-sm text-gray-500">
+          Last edited: {formatRelativeDate(step.updated_at) || "Just now"} | Created:
+          {formatRelativeDate(step.created_at) || "Just now"}
+        </p>
+      </div>
+    {/if}
   </div>
 </Card>
 

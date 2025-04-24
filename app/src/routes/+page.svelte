@@ -40,7 +40,9 @@
           Create a project from scratch or start from a template
         </p>
 
-        <div class="flex flex-col sm:flex-row sm:space-y-0 sm:space-x-4 w-full">
+        <div
+          class="flex flex-col space-y-4 sm:flex-row sm:space-y-0 sm:space-x-4 w-full"
+        >
           <Button href="/agents" size="xl" class="bg-sea text-black"
             >Agents</Button
           >
