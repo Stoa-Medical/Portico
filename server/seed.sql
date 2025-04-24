@@ -42,19 +42,19 @@ UPDATE agents
 SET step_ids = ARRAY[6, 7, 8]
 WHERE id = 3;
 
--- Insert sample signals
-INSERT INTO signals (agent_id, user_requested_uuid, signal_type, rts_id, initial_data, response_data)
-VALUES
-  (1, gen_random_uuid(), 'command', 1, '{"file_path": "/tmp/sample.txt"}', '{"report": "File processed successfully"}'),
-  (2, gen_random_uuid(), 'fyi', 2, '{"message": "System update completed"}', NULL),
-  (3, gen_random_uuid(), 'sync', 3, '{"dataset_id": "ds-123"}', NULL);
-
 -- Insert sample runtime sessions
 INSERT INTO runtime_sessions (requested_by_agent_id, rts_status, initial_data, latest_step_idx, latest_result, step_execution_times, step_ids, total_execution_time)
 VALUES
   (1, 'completed', '{"file_path": "/tmp/doc.pdf"}', 3, '{"summary": "Processed 42 items"}', ARRAY[0.123, 0.456, 0.789], ARRAY[1, 2, 3], 1.368),
   (2, 'completed', '{"recipient": "user@example.com", "subject": "Weekly Report"}', 2, '{"status": "sent"}', ARRAY[0.234, 0.567], ARRAY[4, 5], 0.801),
-  (3, 'running', '{"dataset_id": "ds-456"}', 1, '{"data": [10, 20, 30, 40, 50]}', ARRAY[0.345], ARRAY[6], 0.345),
+  (3, 'running', '{"dataset_id": "ds-456"}', 1, '{"data": [10, 20, 30, 40, 50]}', ARRAY[0.345], ARRAY[6], 0.345);
+
+-- Insert sample signals (after runtime_sessions to satisfy foreign key constraint)
+INSERT INTO signals (agent_id, user_requested_uuid, signal_type, rts_id, initial_data, response_data)
+VALUES
+  (1, gen_random_uuid(), 'command', 1, '{"file_path": "/tmp/sample.txt"}', '{"report": "File processed successfully"}'),
+  (2, gen_random_uuid(), 'fyi', 2, '{"message": "System update completed"}', NULL),
+  (3, gen_random_uuid(), 'sync', 3, '{"dataset_id": "ds-123"}', NULL);
 
 -- Confirm the seeded data
 SELECT 'Agents: ' || COUNT(*) FROM agents;
