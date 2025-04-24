@@ -8,7 +8,7 @@ use sqlx::{postgres::PgArgumentBuffer, PgPool, Postgres, Row};
 use uuid::Uuid;
 use crate::python_runtime::PythonRuntime;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Copy)]
 pub enum StepType {
     Python,
     Prompt,
@@ -308,36 +308,24 @@ impl DatabaseItem for Step {
 
         let mut tx = pool.begin().await?;
 
-        // Get the next sequence_number for this step
-        let next_seq: i32 = sqlx::query_scalar(
-            r#"
-            SELECT COALESCE(MAX(sequence_number), -1) + 1
-            FROM steps
-            WHERE agent_id = $1
-            "#,
-        )
-        .bind(agent_id)
-        .fetch_one(&mut *tx)
-        .await?;
-
-        // Create the step
-        let res = sqlx::query(
+        // Create the step using query!
+        let uuid_parsed = Uuid::parse_str(&self.identifiers.global_uuid)?;
+        let res = sqlx::query!(
             r#"
             INSERT INTO steps (
-                global_uuid, agent_id, sequence_number, name, description,
+                global_uuid, agent_id, description,
                 step_type, step_content, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            VALUES ($1, $2, $3, $4::step_type, $5, $6, $7)
             "#,
+            uuid_parsed,
+            agent_id,
+            self.description.as_deref(),
+            self.step_type as StepType, // Cast enum for type checking
+            &self.step_content,
+            &self.timestamps.created,
+            &self.timestamps.updated
         )
-        .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
-        .bind(agent_id)
-        .bind(next_seq)
-        .bind(&self.description)
-        .bind(&self.step_type)
-        .bind(&self.step_content)
-        .bind(&self.timestamps.created)
-        .bind(&self.timestamps.updated)
         .execute(&mut *tx)
         .await?;
 
@@ -351,21 +339,22 @@ impl DatabaseItem for Step {
     }
 
     async fn try_db_update(&self, pool: &PgPool) -> Result<()> {
-        let res = sqlx::query(
+        let uuid_parsed = Uuid::parse_str(&self.identifiers.global_uuid)?;
+        let res = sqlx::query!(
             r#"
             UPDATE steps
             SET description = $1,
-                step_type = $2,
+                step_type = $2::step_type,
                 step_content = $3,
                 updated_at = $4
             WHERE global_uuid = $5
             "#,
+            self.description.as_deref(),
+            self.step_type as StepType, // Cast enum for type checking
+            &self.step_content,
+            &self.timestamps.updated,
+            uuid_parsed
         )
-        .bind(&self.description)
-        .bind(&self.step_type)
-        .bind(&self.step_content)
-        .bind(&self.timestamps.updated)
-        .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
         .execute(pool)
         .await?;
 
@@ -377,11 +366,13 @@ impl DatabaseItem for Step {
     }
 
     async fn try_db_delete(&self, pool: &PgPool) -> Result<()> {
-        // Simply delete this Step by UUID
-        let res = sqlx::query("DELETE FROM steps WHERE global_uuid = $1")
-            .bind(Uuid::parse_str(&self.identifiers.global_uuid)?)
-            .execute(pool)
-            .await?;
+        let uuid_parsed = Uuid::parse_str(&self.identifiers.global_uuid)?;
+        let res = sqlx::query!(
+            "DELETE FROM steps WHERE global_uuid = $1",
+            uuid_parsed
+        )
+        .execute(pool)
+        .await?;
 
         if res.rows_affected() == 1 {
             Ok(())
@@ -391,34 +382,129 @@ impl DatabaseItem for Step {
     }
 
     async fn try_db_select_all(pool: &PgPool) -> Result<Vec<Self>> {
-        let steps = sqlx::query_as::<_, Self>("SELECT * FROM steps ORDER BY id")
-            .fetch_all(pool)
-            .await?;
+        // Define struct compatible with query_as! output
+        struct StepRow {
+            id: i32,
+            global_uuid: uuid::Uuid,
+            description: Option<String>,
+            step_type: StepType,
+            step_content: String,
+            created_at: chrono::DateTime<chrono::Utc>,
+            updated_at: chrono::DateTime<chrono::Utc>,
+        }
+
+        let rows = sqlx::query_as!(
+            StepRow,
+            r#"
+            SELECT
+                id, global_uuid, description,
+                step_type as "step_type: _", -- Tell sqlx to use StepType
+                step_content, created_at, updated_at
+            FROM steps
+            ORDER BY id
+            "#
+        )
+        .fetch_all(pool)
+        .await?;
+
+        // Convert rows to Step objects
+        let steps = rows
+            .into_iter()
+            .map(|row| Step {
+                identifiers: IdFields {
+                    local_id: Some(row.id),
+                    global_uuid: row.global_uuid.to_string(),
+                },
+                timestamps: TimestampFields {
+                    created: row.created_at,
+                    updated: row.updated_at,
+                },
+                description: row.description,
+                step_type: row.step_type,
+                step_content: row.step_content,
+            })
+            .collect();
 
         Ok(steps)
     }
 
     async fn try_db_select_by_id(pool: &PgPool, id: &IdFields) -> Result<Option<Self>> {
-        // Try to find by global UUID
-        if !id.global_uuid.is_empty() {
-            let step = sqlx::query_as::<_, Self>("SELECT * FROM steps WHERE global_uuid = $1")
-                .bind(Uuid::parse_str(&id.global_uuid)?)
-                .fetch_optional(pool)
-                .await?;
+        // Define struct compatible with query_as! output
+        struct StepRow {
+            id: i32,
+            global_uuid: uuid::Uuid,
+            description: Option<String>,
+            step_type: StepType,
+            step_content: String,
+            created_at: chrono::DateTime<chrono::Utc>,
+            updated_at: chrono::DateTime<chrono::Utc>,
+        }
 
-            if step.is_some() {
-                return Ok(step);
+        // Try to find by global UUID first
+        if !id.global_uuid.is_empty() {
+            let uuid_parsed = Uuid::parse_str(&id.global_uuid)?;
+            let row = sqlx::query_as!(
+                StepRow,
+                r#"
+                SELECT
+                    id, global_uuid, description,
+                    step_type as "step_type: _", -- Tell sqlx to use StepType
+                    step_content, created_at, updated_at
+                FROM steps
+                WHERE global_uuid = $1
+                "#,
+                uuid_parsed
+            )
+            .fetch_optional(pool)
+            .await?;
+
+            if let Some(row) = row {
+                return Ok(Some(Step {
+                    identifiers: IdFields {
+                        local_id: Some(row.id),
+                        global_uuid: row.global_uuid.to_string(),
+                    },
+                    timestamps: TimestampFields {
+                        created: row.created_at,
+                        updated: row.updated_at,
+                    },
+                    description: row.description,
+                    step_type: row.step_type,
+                    step_content: row.step_content,
+                }));
             }
         }
 
-        // Fall back to local ID if available and uuid not found
+        // Fall back to local ID if available and UUID not found
         if let Some(local_id) = id.local_id {
-            let step = sqlx::query_as::<_, Self>("SELECT * FROM steps WHERE id = $1")
-                .bind(local_id)
-                .fetch_optional(pool)
-                .await?;
+            let row = sqlx::query_as!(
+                StepRow,
+                r#"
+                SELECT
+                    id, global_uuid, description,
+                    step_type as "step_type: _", -- Tell sqlx to use StepType
+                    step_content, created_at, updated_at
+                FROM steps
+                WHERE id = $1
+                "#,
+                local_id
+            )
+            .fetch_optional(pool)
+            .await?;
 
-            return Ok(step);
+            return Ok(row.map(|row| Step {
+                identifiers: IdFields {
+                    local_id: Some(row.id),
+                    global_uuid: row.global_uuid.to_string(),
+                },
+                timestamps: TimestampFields {
+                    created: row.created_at,
+                    updated: row.updated_at,
+                },
+                description: row.description,
+                step_type: row.step_type,
+                step_content: row.step_content,
+            }));
         }
 
         // If we get here, neither UUID nor local ID matched
