@@ -172,7 +172,16 @@ impl AgentManager {
         match cmd.entity_type() {
             EntityType::Agent => {
                 if let Some(data) = &cmd.data {
-                    let agent_json = proto_struct_to_json(data);
+                    let mut agent_json = proto_struct_to_json(data);
+
+                    // Check if global_uuid is present in the data, if not, use entity_uuid
+                    if !agent_json.get("global_uuid").is_some() && !cmd.entity_uuid.is_empty() {
+                        // Add entity_uuid as global_uuid if it doesn't exist
+                        if let serde_json::Value::Object(ref mut obj) = agent_json {
+                            obj.insert("global_uuid".to_string(), serde_json::Value::String(cmd.entity_uuid.clone()));
+                            println!("[INFO] Using entity_uuid as global_uuid: {}", cmd.entity_uuid);
+                        }
+                    }
 
                     println!("[INFO] Processing Agent creation: {}", agent_json);
 

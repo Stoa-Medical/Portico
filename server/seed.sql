@@ -55,7 +55,6 @@ VALUES
   (1, 'completed', '{"file_path": "/tmp/doc.pdf"}', 3, '{"summary": "Processed 42 items"}', ARRAY[0.123, 0.456, 0.789], ARRAY[1, 2, 3], 1.368),
   (2, 'completed', '{"recipient": "user@example.com", "subject": "Weekly Report"}', 2, '{"status": "sent"}', ARRAY[0.234, 0.567], ARRAY[4, 5], 0.801),
   (3, 'running', '{"dataset_id": "ds-456"}', 1, '{"data": [10, 20, 30, 40, 50]}', ARRAY[0.345], ARRAY[6], 0.345),
-  (1, 'waiting', '{"file_path": "/tmp/report.csv"}', 0, NULL, NULL, NULL, NULL);
 
 -- Confirm the seeded data
 SELECT 'Agents: ' || COUNT(*) FROM agents;
