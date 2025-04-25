@@ -1,3 +1,10 @@
+/**
+ * Returns a short, human-readable description of how long ago a given timestamp was.
+ * Examples: "Just now", "Today", "Yesterday", "This week", "Last week", "12 days ago"
+ *
+ * @param timestamp - A date input (timestamp, string, or Date object)
+ * @returns A relative time description string
+ */
 export const formatRelativeDate = (
   timestamp: number | string | Date,
 ): string => {
@@ -29,6 +36,13 @@ export const formatRelativeDate = (
   }
 };
 
+/**
+ * Converts a timestamp into a readable formatted string with date and time.
+ * Example output: "Apr 24, 2025, 11:58 AM"
+ *
+ * @param timestamp - A date input (timestamp, string, or Date object)
+ * @returns A nicely formatted date string
+ */
 export const readableDate = (timestamp: number | string | Date) => {
   const date = new Date(timestamp);
   return `${date.toLocaleDateString("en-US", {
@@ -40,4 +54,18 @@ export const readableDate = (timestamp: number | string | Date) => {
     minute: "2-digit", // e.g. "58"
     hour12: true, // "AM"/"PM"
   })}`;
+};
+
+/**
+ * Returns an ISO timestamp representing the start date based on a given time range (e.g., "7d" => 7 days ago).
+ * This is used to filter records created within the last N days.
+ *
+ * @param timePeriod - A string like "7d", "30d", or "90d"
+ * @returns ISO string timestamp representing the lower bound date
+ */
+export const getStartDateFromTimePeriod = (timePeriod: string): string => {
+  const now = new Date();
+  const daysAgo = parseInt(timePeriod.replace("d", ""), 10);
+  now.setDate(now.getDate() - daysAgo);
+  return now.toISOString();
 };

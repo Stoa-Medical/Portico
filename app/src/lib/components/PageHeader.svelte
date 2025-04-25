@@ -52,7 +52,11 @@
                 class="h-5 w-5 text-gray-500"
               />
             {/if}
-            <Select class="w-40" bind:value={action.value}>
+            <Select
+              class="w-40"
+              bind:value={action.value}
+              on:change={action.onChange}
+            >
               {#each action.options as option}
                 <option value={option.value}>{option.name}</option>
               {/each}

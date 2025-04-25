@@ -120,17 +120,16 @@
     `;
   }
 
-  // Fetch data
-  onMount(async () => {
+  const loadDataForTimePeriod = async (timePeriod) => {
     try {
-      const analytics = await getAnalyticsCounts();
+      const analytics = await getAnalyticsCounts(timePeriod);
       agentCount = analytics.agentCount;
       runtimeSessionCount = analytics.runtimeSessionCount;
       stepCount = analytics.stepCount;
 
       const [agentPerf, errorDist] = await Promise.all([
-        getAgentPerformance(),
-        getErrorDistribution(),
+        getAgentPerformance(timePeriod),
+        getErrorDistribution(timePeriod),
       ]);
 
       agentPerformance = agentPerf;
@@ -141,13 +140,17 @@
     } catch (e) {
       console.error("Error loading analytics data", e);
     }
+  };
+
+  // Fetch data on mount:
+  onMount(() => {
+    loadDataForTimePeriod(selectedTimePeriod);
   });
 
+  // Update data on time period change:
   $: if (selectedTimePeriod) {
-    // simulate update
     setTimeout(() => {
-      renderUsageChart();
-      renderErrorDistributionChart();
+      loadDataForTimePeriod(selectedTimePeriod);
     }, 0);
   }
 
@@ -157,6 +160,9 @@
       icon: CalendarMonthOutline,
       value: selectedTimePeriod,
       options: timePeriods,
+      onChange: (event) => {
+        selectedTimePeriod = event.target.value;
+      },
     },
   ];
 </script>
