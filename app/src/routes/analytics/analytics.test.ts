@@ -1,52 +1,38 @@
 import { render, waitFor, screen } from "@testing-library/svelte";
 import Analytics from "./+page.svelte";
 
-vi.mock("$lib/supabase", () => ({
-  default: {
-    from: (table: string) => ({
-      select: () => {
-        switch (table) {
-          case "agents":
-            return { count: 2, data: [{ id: 1 }, { id: 2 }], error: null };
-          case "runtime_sessions":
-            return {
-              count: 2,
-              data: [
-                {
-                  requested_by_agent_id: 1,
-                  rts_status: "completed",
-                  total_execution_time: "1.2",
-                },
-                {
-                  requested_by_agent_id: 2,
-                  rts_status: "completed",
-                  total_execution_time: "2.1",
-                },
-              ],
-              error: null,
-            };
-          case "steps":
-            return { count: 8, data: [], error: null };
-          default:
-            return { count: 0, data: [], error: null };
-        }
-      },
-      eq: vi.fn().mockReturnThis(),
-      order: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockReturnThis(),
-      insert: vi.fn().mockReturnThis(),
-      update: vi.fn().mockReturnThis(),
-      delete: vi.fn().mockReturnThis(),
+vi.mock("./api", () => ({
+  getAnalyticsCounts: vi.fn(() =>
+    Promise.resolve({
+      agentCount: 2,
+      runtimeSessionCount: 2,
+      stepCount: 8,
     }),
-    auth: {
-      getUser: vi.fn(() =>
-        Promise.resolve({
-          data: { user: { id: "mock-user" } },
-          error: null,
-        }),
-      ),
-    },
-  },
+  ),
+  getAgentPerformance: vi.fn(() =>
+    Promise.resolve([
+      {
+        agentId: 1,
+        totalRuns: 1,
+        successRate: 100,
+        avgResponseTime: "1.2s",
+      },
+      {
+        agentId: 2,
+        totalRuns: 1,
+        successRate: 100,
+        avgResponseTime: "2.1s",
+      },
+    ]),
+  ),
+  getErrorDistribution: vi.fn(() =>
+    Promise.resolve({
+      completed: 2,
+      cancelled: 0,
+      running: 0,
+      waiting: 0,
+    }),
+  ),
 }));
 
 describe("Analytics Dashboard", () => {

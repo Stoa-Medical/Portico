@@ -143,9 +143,7 @@
   };
 
   // Fetch data on mount:
-  onMount(() => {
-    loadDataForTimePeriod(selectedTimePeriod);
-  });
+  onMount(() => loadDataForTimePeriod(selectedTimePeriod));
 
   // Update data on time period change:
   $: if (selectedTimePeriod) {
@@ -176,19 +174,23 @@
     <Card padding="sm">
       <div class="flex flex-col p-4">
         <div class="text-gray-500 text-sm mb-1">Total Agents</div>
-        <div class="text-2xl font-bold">{agentCount}</div>
+        <div class="text-2xl font-bold" data-testid="total-agents">
+          {agentCount}
+        </div>
       </div>
     </Card>
     <Card padding="sm">
       <div class="flex flex-col p-4">
         <div class="text-gray-500 text-sm mb-1">Total Steps</div>
-        <div class="text-2xl font-bold">{stepCount}</div>
+        <div class="text-2xl font-bold" data-testid="total-steps">
+          {stepCount}
+        </div>
       </div>
     </Card>
     <Card padding="sm">
       <div class="flex flex-col p-4">
         <div class="text-gray-500 text-sm mb-1">Avg. Success Rate</div>
-        <div class="text-2xl font-bold">
+        <div class="text-2xl font-bold" data-testid="avg-success-rate">
           {agentPerformance.length > 0
             ? Math.round(
                 agentPerformance.reduce(
@@ -203,7 +205,9 @@
     <Card padding="sm">
       <div class="flex flex-col p-4">
         <div class="text-gray-500 text-sm mb-1">Total Executions</div>
-        <div class="text-2xl font-bold">{runtimeSessionCount}</div>
+        <div class="text-2xl font-bold" data-testid="total-executions">
+          {runtimeSessionCount}
+        </div>
       </div>
     </Card>
   </div>
