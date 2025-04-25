@@ -23,8 +23,7 @@
     ArrowLeftOutline,
     TrashBinOutline,
   } from "flowbite-svelte-icons";
-  import PageHeader from "$lib/components/PageHeader.svelte";
-  import StepConfig from "$lib/components/StepConfig.svelte";
+  import { PageHeader, StepConfig } from "$lib/components";
   import { formatRelativeDate, readableDate } from "$lib/date";
   import {
     getSteps,
