@@ -1,6 +1,13 @@
 import supabase from "$lib/supabase";
+import { getStartDateFromTimePeriod } from "$lib/date";
 
-export const getAnalyticsCounts = async () => {
+const DEFAULT_TIME_PERIOD = "30d";
+
+export const getAnalyticsCounts = async (
+  timePeriod: string = DEFAULT_TIME_PERIOD,
+) => {
+  const fromDate = getStartDateFromTimePeriod(timePeriod);
+
   const [
     { count: agentCount, error: agentError },
     { count: sessionCount, error: sessionError },
@@ -9,7 +16,8 @@ export const getAnalyticsCounts = async () => {
     supabase.from("agents").select("*", { count: "exact", head: true }),
     supabase
       .from("runtime_sessions")
-      .select("*", { count: "exact", head: true }),
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", fromDate),
     supabase.from("steps").select("*", { count: "exact", head: true }),
   ]);
 
@@ -24,10 +32,14 @@ export const getAnalyticsCounts = async () => {
   };
 };
 
-export const getAgentPerformance = async () => {
+export const getAgentPerformance = async (
+  timePeriod: string = DEFAULT_TIME_PERIOD,
+) => {
+  const fromDate = getStartDateFromTimePeriod(timePeriod);
   const { data, error } = await supabase
     .from("runtime_sessions")
-    .select("requested_by_agent_id, rts_status, total_execution_time");
+    .select("requested_by_agent_id, rts_status, total_execution_time")
+    .gte("created_at", fromDate);
 
   if (error) throw error;
 
@@ -59,10 +71,14 @@ export const getAgentPerformance = async () => {
   );
 };
 
-export const getStepPerformance = async () => {
+export const getStepPerformance = async (
+  timePeriod: string = DEFAULT_TIME_PERIOD,
+) => {
+  const fromDate = getStartDateFromTimePeriod(timePeriod);
   const { data, error } = await supabase
     .from("runtime_sessions")
-    .select("step_ids, step_execution_times");
+    .select("step_ids, step_execution_times")
+    .gte("created_at", fromDate);
 
   if (error) throw error;
 
@@ -104,10 +120,14 @@ export const getStepPerformance = async () => {
   );
 };
 
-export const getErrorDistribution = async () => {
+export const getErrorDistribution = async (
+  timePeriod: string = DEFAULT_TIME_PERIOD,
+) => {
+  const fromDate = getStartDateFromTimePeriod(timePeriod);
   const { data, error } = await supabase
     .from("runtime_sessions")
-    .select("rts_status");
+    .select("rts_status")
+    .gte("created_at", fromDate);
 
   if (error) throw error;
 

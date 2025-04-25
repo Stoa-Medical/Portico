@@ -87,6 +87,7 @@
       icon: PlusOutline,
       color: "blue",
       onClick: () => (showModal = true),
+      type: "button",
     },
   ];
 </script>

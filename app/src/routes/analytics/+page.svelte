@@ -1,10 +1,8 @@
-<script>
-  import SuccessChart from "$lib/components/SuccessChart.svelte";
+<script lang="ts">
+  import { PageHeader, SuccessChart, ResponseTimeChart } from "$lib/components";
   import {
     Card,
     Heading,
-    Breadcrumb,
-    BreadcrumbItem,
     Table,
     TableBody,
     TableBodyCell,
@@ -13,7 +11,6 @@
     TableHeadCell,
     Tabs,
     TabItem,
-    Select,
   } from "flowbite-svelte";
   import {
     ChartPieOutline,
@@ -24,14 +21,15 @@
   import {
     getAnalyticsCounts,
     getAgentPerformance,
-    getStepPerformance,
     getErrorDistribution,
   } from "./api";
-
   import { onMount } from "svelte";
-  import ResponseTimeChart from "$lib/components/ResponseTimeChart.svelte";
 
-  // Time period options
+  const breadcrumbs = [
+    { label: "Home", url: "/" },
+    { label: "Analytics", url: "/analytics" },
+  ];
+
   const timePeriods = [
     { value: "7d", name: "Last 7 days" },
     { value: "30d", name: "Last 30 days" },
@@ -42,9 +40,7 @@
   let agentCount = 0;
   let runtimeSessionCount = 0;
   let stepCount = 0;
-
   let agentPerformance = [];
-  let stepPerformance = [];
 
   let errorDistribution = {
     completed: 0,
@@ -53,31 +49,24 @@
     waiting: 0,
   };
 
-  // Chart rendering functions
   function renderUsageChart() {
-    const chartElement = document.getElementById("usage-chart");
-    if (chartElement) {
-      chartElement.innerHTML = `
-        <div class="h-40 w-full relative">
-          <div class="absolute inset-0 flex items-center justify-center">
-            <div class="text-center">
-              <div class="text-3xl font-bold">${agentPerformance.reduce(
-                (acc, agent) => {
-                  return acc + agent.totalRuns;
-                },
-                0,
-              )}</div>
-              <div class="text-sm text-gray-500">Total Agent Runs</div>
-            </div>
+    const el = document.getElementById("usage-chart");
+    if (!el) return;
+    el.innerHTML = `
+      <div class="h-40 w-full relative">
+        <div class="absolute inset-0 flex items-center justify-center">
+          <div class="text-center">
+            <div class="text-3xl font-bold">${agentPerformance.reduce((a, b) => a + b.totalRuns, 0)}</div>
+            <div class="text-sm text-gray-500">Total Agent Runs</div>
           </div>
         </div>
-      `;
-    }
+      </div>
+    `;
   }
 
   function renderErrorDistributionChart() {
-    const chartElement = document.getElementById("error-distribution-chart");
-    if (!chartElement || !errorDistribution) return;
+    const el = document.getElementById("error-distribution-chart");
+    if (!el || !errorDistribution) return;
 
     const total =
       errorDistribution.completed +
@@ -86,15 +75,10 @@
       errorDistribution.waiting;
 
     if (total === 0) {
-      chartElement.innerHTML = `
-      <div class="h-40 flex items-center justify-center text-sm text-gray-400">
-        No data available
-      </div>
-    `;
+      el.innerHTML = `<div class="h-40 flex items-center justify-center text-sm text-gray-400">No data available</div>`;
       return;
     }
 
-    // Calculate relative widths
     const segments = [
       {
         label: "Completed",
@@ -119,44 +103,36 @@
     ];
 
     const bars = segments
-      .map((segment) => {
-        const percent = ((segment.value / total) * 100).toFixed(2);
-        if (+percent > 0) {
-          return `
-        <div class="${segment.color} h-full relative flex items-center justify-center"
-             style="width: ${percent}%;">
-          <span class="text-white text-xs">${segment.label} (${segment.value})</span>
-        </div>
-      `;
-        }
+      .map(({ label, value, color }) => {
+        const percent = ((value / total) * 100).toFixed(2);
+        return value > 0
+          ? `<div class="${color} h-full relative flex items-center justify-center" style="width: ${percent}%;">
+               <span class="text-white text-xs">${label} (${value})</span>
+             </div>`
+          : "";
       })
       .join("");
 
-    chartElement.innerHTML = `
-    <div class="h-40 w-full">
-      <div class="flex h-full overflow-hidden rounded-md shadow-sm">
-        ${bars}
+    el.innerHTML = `
+      <div class="h-40 w-full">
+        <div class="flex h-full overflow-hidden rounded-md shadow-sm">${bars}</div>
       </div>
-    </div>
-  `;
+    `;
   }
 
-  // Initialize charts on mount
-  onMount(async () => {
+  const loadDataForTimePeriod = async (timePeriod) => {
     try {
-      const analytics = await getAnalyticsCounts();
+      const analytics = await getAnalyticsCounts(timePeriod);
       agentCount = analytics.agentCount;
       runtimeSessionCount = analytics.runtimeSessionCount;
       stepCount = analytics.stepCount;
 
-      const [agentPerf, stepPerf, errorDist] = await Promise.all([
-        getAgentPerformance(),
-        getStepPerformance(),
-        getErrorDistribution(),
+      const [agentPerf, errorDist] = await Promise.all([
+        getAgentPerformance(timePeriod),
+        getErrorDistribution(timePeriod),
       ]);
 
       agentPerformance = agentPerf;
-      stepPerformance = stepPerf;
       errorDistribution = errorDist;
 
       renderUsageChart();
@@ -164,41 +140,34 @@
     } catch (e) {
       console.error("Error loading analytics data", e);
     }
-  });
+  };
 
-  // Update charts when time period changes
+  // Fetch data on mount:
+  onMount(() => loadDataForTimePeriod(selectedTimePeriod));
+
+  // Update data on time period change:
   $: if (selectedTimePeriod) {
-    // In a real app, this would fetch new data based on the time period
     setTimeout(() => {
-      renderUsageChart();
-      renderErrorDistributionChart();
+      loadDataForTimePeriod(selectedTimePeriod);
     }, 0);
   }
+
+  const actionBar = [
+    {
+      type: "select",
+      icon: CalendarMonthOutline,
+      value: selectedTimePeriod,
+      options: timePeriods,
+      onChange: (event) => {
+        selectedTimePeriod = event.target.value;
+      },
+    },
+  ];
 </script>
 
 <main class="container mx-auto p-4">
-  <!-- Page Header with Breadcrumb -->
-  <div class="mb-6">
-    <Breadcrumb class="mb-4">
-      <BreadcrumbItem href="/" home>Home</BreadcrumbItem>
-      <BreadcrumbItem>Analytics</BreadcrumbItem>
-    </Breadcrumb>
-
-    <div
-      class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4"
-    >
-      <h1>Analytics</h1>
-
-      <div class="flex items-center gap-2">
-        <CalendarMonthOutline class="h-5 w-5 text-gray-500" />
-        <Select class="w-40" bind:value={selectedTimePeriod}>
-          {#each timePeriods as period}
-            <option value={period.value}>{period.name}</option>
-          {/each}
-        </Select>
-      </div>
-    </div>
-  </div>
+  <!-- 🔥 PageHeader Component with Dropdown -->
+  <PageHeader title="Analytics" {breadcrumbs} {actionBar} />
 
   <!-- Summary Cards -->
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -210,7 +179,6 @@
         </div>
       </div>
     </Card>
-
     <Card padding="sm">
       <div class="flex flex-col p-4">
         <div class="text-gray-500 text-sm mb-1">Total Steps</div>
@@ -219,7 +187,6 @@
         </div>
       </div>
     </Card>
-
     <Card padding="sm">
       <div class="flex flex-col p-4">
         <div class="text-gray-500 text-sm mb-1">Avg. Success Rate</div>
@@ -235,7 +202,6 @@
         </div>
       </div>
     </Card>
-
     <Card padding="sm">
       <div class="flex flex-col p-4">
         <div class="text-gray-500 text-sm mb-1">Total Executions</div>
@@ -259,7 +225,6 @@
         </div>
       </div>
     </Card>
-
     <Card class="max-w-full">
       <div class="p-4">
         <div class="flex justify-between items-center mb-4">
@@ -273,7 +238,6 @@
         </div>
       </div>
     </Card>
-
     <Card class="max-w-full">
       <div class="p-4">
         <div class="flex justify-between items-center mb-4">
@@ -285,7 +249,6 @@
         <div id="usage-chart" class="w-full"></div>
       </div>
     </Card>
-
     <Card class="max-w-full">
       <div class="p-4">
         <div class="flex justify-between items-center mb-4">
@@ -301,7 +264,7 @@
   <Tabs style="underline">
     <TabItem open title="Agent Performance">
       <Card class="max-w-full">
-        <Table hoverable={true}>
+        <Table hoverable>
           <TableHead>
             <TableHeadCell>Agent</TableHeadCell>
             <TableHeadCell>Success Rate</TableHeadCell>
