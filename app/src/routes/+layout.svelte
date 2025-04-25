@@ -89,9 +89,11 @@
 
         <!-- Avatar Placeholder -->
         <div
-          class="w-8 h-8 bg-gray-500 mb-2 rounded-full"
+          class="w-8 h-8 bg-cyan-800 text-white flex items-center justify-center mb-2 rounded-full cursor-pointer uppercase font-semibold"
           on:click={() => supabase.auth.signOut()}
-        ></div>
+        >
+          {user?.email?.[0] ?? "?"}
+        </div>
       </aside>
     {/if}
 

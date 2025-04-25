@@ -58,7 +58,7 @@
 
     <Card class="overflow-x-auto max-w-full bg-card">
       <div class="p-4">
-        <h2 class="mb-6 text-4xl text-white font-sans">System Status</h2>
+        <h2 class="mb-6 text-4xl text-white font-sans">System status</h2>
 
         <div class="flex flex-wrap gap-4">
           <div
