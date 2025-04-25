@@ -212,12 +212,14 @@
             onClick: deleteAgentClick,
             icon: TrashBinOutline,
             color: "red",
+            type: "button",
           },
           {
             label: "Save Changes",
             onClick: saveChanges,
             color: "blue",
             disabled: !hasAgentChanges,
+            type: "button",
           },
         ]
       : [
@@ -226,6 +228,7 @@
             onClick: () => (showModal = true),
             icon: PlusOutline,
             color: "blue",
+            type: "button",
           },
         ];
 
@@ -301,7 +304,7 @@
             {#if agents?.length === 0}
               <TableBodyRow>
                 <TableBodyCell
-                  colspan="4"
+                  colspan="5"
                   class="text-center py-4 text-gray-500"
                 >
                   No agents found. Click "Add Agent" to create one.

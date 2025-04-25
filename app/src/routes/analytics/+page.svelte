@@ -24,7 +24,6 @@
   import {
     getAnalyticsCounts,
     getAgentPerformance,
-    getStepPerformance,
     getErrorDistribution,
   } from "./api";
 
@@ -44,7 +43,6 @@
   let stepCount = 0;
 
   let agentPerformance = [];
-  let stepPerformance = [];
 
   let errorDistribution = {
     completed: 0,
@@ -149,14 +147,12 @@
       runtimeSessionCount = analytics.runtimeSessionCount;
       stepCount = analytics.stepCount;
 
-      const [agentPerf, stepPerf, errorDist] = await Promise.all([
+      const [agentPerf, errorDist] = await Promise.all([
         getAgentPerformance(),
-        getStepPerformance(),
         getErrorDistribution(),
       ]);
 
       agentPerformance = agentPerf;
-      stepPerformance = stepPerf;
       errorDistribution = errorDist;
 
       renderUsageChart();
