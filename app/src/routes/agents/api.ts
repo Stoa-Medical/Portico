@@ -59,8 +59,9 @@ export type UpdateStepPayload = Partial<Step> & {
 };
 export type UpdateAgentPayload = Partial<Agent> & { id: number };
 
-export const getAgents = async (): Promise<Agent[]> => {
+export const getAgents = async (userId: string = ""): Promise<Agent[]> => {
   const { data, error } = await supabase.from("agents").select("*");
+  // .eq("owner_id", userId);
   if (error) throw error;
   return data;
 };

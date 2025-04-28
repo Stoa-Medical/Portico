@@ -65,6 +65,6 @@
 
   <p class="mt-4">
     Already have an account?
-    <a href="/login" class="text-blue-500 underline">Login</a>
+    <a href="/login" class="text-sea underline">Login</a>
   </p>
 </main>
