@@ -31,5 +31,7 @@ Local toolkit:
     - `cargo install cargo-audit --features=fix`
 
 Dependencies:
+- Python >3.11
 - supabase
+- protobuf
 - Atlas (https://atlasgo.io)
