@@ -1,0 +1,311 @@
+use crate::core::agent_manager::AgentManager;
+use crate::proto::signal_request;
+use crate::proto::{CommandPayload, EntityType, SignalRequest, SignalResponse};
+use crate::proto_struct_to_json;
+use portico_shared::models::Agent;
+use portico_shared::DatabaseItem;
+use portico_shared::JsonLike;
+use serde_json;
+use tonic::Status;
+
+// Create operation handler
+pub async fn handle_create(
+    manager: &mut AgentManager,
+    cmd: &CommandPayload,
+    runtime_session_uuid: String,
+) -> Result<SignalResponse, Status> {
+    match cmd.entity_type() {
+        EntityType::Agent => {
+            if let Some(data) = &cmd.data {
+                let mut agent_json = proto_struct_to_json(data);
+
+                // Check if global_uuid is present in the data, if not, use entity_uuid
+                if !agent_json.get("global_uuid").is_some() && !cmd.entity_uuid.is_empty() {
+                    // Add entity_uuid as global_uuid if it doesn't exist
+                    if let serde_json::Value::Object(ref mut obj) = agent_json {
+                        obj.insert(
+                            "global_uuid".to_string(),
+                            serde_json::Value::String(cmd.entity_uuid.clone()),
+                        );
+                        println!(
+                            "[INFO] Using entity_uuid as global_uuid: {}",
+                            cmd.entity_uuid
+                        );
+                    }
+                }
+
+                println!("[INFO] Processing Agent creation: {}", agent_json);
+
+                match Agent::from_json(agent_json.clone()) {
+                    Ok(agent) => {
+                        let agent_uuid = agent.identifiers.global_uuid.clone();
+                        println!("[INFO] Adding agent with UUID: {}", agent_uuid);
+
+                        // Setup a queue for this agent
+                        if let Err(e) = manager.setup_agent_queue(agent_uuid.clone()).await {
+                            eprintln!("[ERROR] Failed to setup agent queue: {}", e);
+                            return Err(Status::internal(
+                                "Failed to setup message queue for agent",
+                            ));
+                        }
+
+                        // Store the agent
+                        let mut agents_guard = manager.agents.write().await;
+                        agents_guard.insert(agent_uuid.clone(), agent);
+
+                        // Save to database if not already there
+                        let agent = agents_guard.get(&agent_uuid).unwrap();
+                        if let Err(e) = agent.try_db_create(&manager.db_pool).await {
+                            if !e.to_string().contains("duplicate key") {
+                                eprintln!("[ERROR] Failed to save agent to database: {}", e);
+                                return Err(Status::internal("Failed to save agent to database"));
+                            }
+                        }
+
+                        Ok(SignalResponse {
+                            success: true,
+                            message: format!("Agent {} created successfully", agent_uuid),
+                            runtime_session_uuid,
+                            result_data: None,
+                        })
+                    }
+                    Err(e) => {
+                        eprintln!("[ERROR] Agent creation failed: {}", e);
+                        Err(Status::invalid_argument(format!(
+                            "Invalid agent data: {}",
+                            e
+                        )))
+                    }
+                }
+            } else {
+                Err(Status::invalid_argument("Missing agent data"))
+            }
+        }
+        EntityType::Step => {
+            eprintln!("[ERROR] Step creation not implemented yet");
+            Err(Status::unimplemented("Step creation not implemented yet"))
+        }
+    }
+}
+
+// Update operation handler
+pub async fn handle_update(
+    manager: &mut AgentManager,
+    cmd: &CommandPayload,
+    runtime_session_uuid: String,
+) -> Result<SignalResponse, Status> {
+    match cmd.entity_type() {
+        EntityType::Agent => {
+            if let Some(data) = &cmd.data {
+                let agent_json = proto_struct_to_json(data);
+
+                println!("[INFO] Processing Agent update: {}", agent_json);
+
+                let global_uuid = agent_json
+                    .get("global_uuid")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| Status::invalid_argument("Missing global_uuid in agent data"))?;
+
+                // Ensure we have a queue for this agent
+                if let Err(e) = manager.setup_agent_queue(global_uuid.to_string()).await {
+                    eprintln!("[ERROR] Failed to setup agent queue: {}", e);
+                }
+
+                let mut agents_guard = manager.agents.write().await;
+                if let Some(existing_agent) = agents_guard.get_mut(global_uuid) {
+                    match existing_agent.update_from_json(agent_json.clone()) {
+                        Ok(updated_fields) => {
+                            // Save changes to database
+                            if let Err(e) = existing_agent.try_db_update(&manager.db_pool).await {
+                                eprintln!("[ERROR] Failed to update agent in database: {}", e);
+                                return Err(Status::internal("Failed to update agent in database"));
+                            }
+
+                            if !updated_fields.is_empty() {
+                                println!(
+                                    "[INFO] Agent updated: fields changed: {:?}",
+                                    updated_fields
+                                );
+                                Ok(SignalResponse {
+                                    success: true,
+                                    message: format!(
+                                        "Agent {} updated successfully. Fields changed: {:?}",
+                                        global_uuid, updated_fields
+                                    ),
+                                    runtime_session_uuid,
+                                    result_data: None,
+                                })
+                            } else {
+                                println!("[INFO] No fields were changed during agent update");
+                                Ok(SignalResponse {
+                                    success: true,
+                                    message: format!(
+                                        "Agent {} update: no fields changed",
+                                        global_uuid
+                                    ),
+                                    runtime_session_uuid,
+                                    result_data: None,
+                                })
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("[ERROR] Agent update failed: {}", e);
+                            Err(Status::invalid_argument(format!(
+                                "Invalid agent update data: {}",
+                                e
+                            )))
+                        }
+                    }
+                } else {
+                    eprintln!(
+                        "[ERROR] Agent update failed: Agent with UUID {} not found",
+                        global_uuid
+                    );
+                    Err(Status::not_found(format!(
+                        "Agent with UUID {} not found",
+                        global_uuid
+                    )))
+                }
+            } else {
+                Err(Status::invalid_argument("Missing agent data"))
+            }
+        }
+        EntityType::Step => {
+            eprintln!("[ERROR] Step update not implemented yet");
+            Err(Status::unimplemented("Step update not implemented yet"))
+        }
+    }
+}
+
+// Delete operation handler
+pub async fn handle_delete(
+    manager: &mut AgentManager,
+    cmd: &CommandPayload,
+    runtime_session_uuid: String,
+) -> Result<SignalResponse, Status> {
+    match cmd.entity_type() {
+        EntityType::Agent => {
+            let entity_uuid = cmd.entity_uuid.clone();
+            if entity_uuid.is_empty() {
+                return Err(Status::invalid_argument(
+                    "Missing entity_uuid for delete operation",
+                ));
+            }
+
+            println!("[INFO] Processing Agent deletion for UUID: {}", entity_uuid);
+
+            // Remove the agent from the map
+            let agent_existed = {
+                let mut agents_guard = manager.agents.write().await;
+                agents_guard.remove(&entity_uuid).is_some()
+            };
+
+            if !agent_existed {
+                eprintln!(
+                    "[ERROR] Agent deletion failed: Agent with UUID {} not found in memory",
+                    entity_uuid
+                );
+                return Err(Status::not_found(format!(
+                    "Agent with UUID {} not found",
+                    entity_uuid
+                )));
+            }
+
+            // Remove the message queue
+            manager.message_queues.remove(&entity_uuid);
+
+            // First delete associated steps for the agent
+            if let Err(e) = sqlx::query("DELETE FROM steps WHERE agent_id IN (SELECT id FROM agents WHERE global_uuid = $1)")
+                .bind(&entity_uuid)
+                .execute(&manager.db_pool)
+                .await {
+                eprintln!("[ERROR] Failed to delete agent's steps from database: {}", e);
+                return Err(Status::internal("Failed to delete agent's steps from database"));
+            }
+
+            // Then delete the agent itself
+            if let Err(e) = sqlx::query("DELETE FROM agents WHERE global_uuid = $1")
+                .bind(&entity_uuid)
+                .execute(&manager.db_pool)
+                .await
+            {
+                eprintln!("[ERROR] Failed to delete agent from database: {}", e);
+                return Err(Status::internal("Failed to delete agent from database"));
+            }
+
+            println!("[INFO] Agent successfully removed");
+            Ok(SignalResponse {
+                success: true,
+                message: format!("Agent {} deleted successfully", entity_uuid),
+                runtime_session_uuid,
+                result_data: None,
+            })
+        }
+        EntityType::Step => {
+            eprintln!("[ERROR] Step deletion not implemented yet");
+            Err(Status::unimplemented("Step deletion not implemented yet"))
+        }
+    }
+}
+
+// Run operation handler
+pub async fn handle_run(
+    manager: &AgentManager,
+    signal: SignalRequest,
+    runtime_session_uuid: String,
+) -> Result<SignalResponse, Status> {
+    if let Some(signal_request::Payload::Command(cmd)) = &signal.payload {
+        let agent_uuid = cmd.entity_uuid.clone();
+        if agent_uuid.is_empty() {
+            return Err(Status::invalid_argument(
+                "Missing entity_uuid for run operation",
+            ));
+        }
+
+        println!("[INFO] Processing run operation for agent {}", agent_uuid);
+
+        // Check if agent exists
+        let agent_exists = {
+            let agents_guard = manager.agents.read().await;
+            agents_guard.contains_key(&agent_uuid)
+        };
+
+        if !agent_exists {
+            eprintln!(
+                "[ERROR] Agent run failed: Agent with UUID {} not found",
+                agent_uuid
+            );
+            return Err(Status::not_found(format!(
+                "Agent with UUID {} not found",
+                agent_uuid
+            )));
+        }
+
+        // Send to the agent's queue
+        if let Some(tx) = manager.message_queues.get(&agent_uuid) {
+            match tx.send(signal).await {
+                Ok(_) => {
+                    println!("[INFO] Run operation queued for agent {}", agent_uuid);
+                    Ok(SignalResponse {
+                        success: true,
+                        message: format!("Run operation queued for agent {}", agent_uuid),
+                        runtime_session_uuid,
+                        result_data: None,
+                    })
+                }
+                Err(e) => {
+                    eprintln!("[ERROR] Failed to send run command to agent queue: {}", e);
+                    Err(Status::internal("Failed to queue run operation"))
+                }
+            }
+        } else {
+            eprintln!("[ERROR] Agent queue for UUID {} not found", agent_uuid);
+            Err(Status::internal(format!(
+                "Message queue for agent {} not found",
+                agent_uuid
+            )))
+        }
+    } else {
+        Err(Status::invalid_argument("Missing command payload"))
+    }
+}

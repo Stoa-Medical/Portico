@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tonic::transport::Server;
 
-use portico_engine::BridgeServiceImpl;
+use portico_engine::RpcServer;
 use portico_shared::models::Agent;
 use portico_shared::DatabaseItem;
 
@@ -50,7 +50,7 @@ async fn main() -> Result<()> {
     ));
 
     // Create an instance of our gRPC service
-    let bridge_service = BridgeServiceImpl::new(agent_map, db_conn_pool);
+    let bridge_service = RpcServer::new(agent_map, db_conn_pool);
 
     // Start the gRPC server
     println!("Starting gRPC server with agent queuing support...");
