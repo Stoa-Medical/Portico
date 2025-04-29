@@ -301,8 +301,6 @@ pub trait JsonLike {
     fn from_json(obj: Value) -> Result<Self>
     where
         Self: Sized;
-    /// Updates existing object
-    fn update_from_json(&mut self, obj: Value) -> Result<Vec<String>>;
 }
 
 // ============ Shared functions ============

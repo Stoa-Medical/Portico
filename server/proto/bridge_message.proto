@@ -61,9 +61,8 @@ message CommandPayload {
 
 enum CommandOperation {
   CREATE = 0;
-  UPDATE = 1;
-  DELETE = 2;
-  RUN = 3;
+  DELETE = 1;
+  RUN = 2;
 }
 
 enum EntityType {

@@ -22,7 +22,7 @@ from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x14\x62ridge_message.proto\x12\x07portico\x1a\x1cgoogle/protobuf/struct.proto"(\n\x11ServerInitRequest\x12\x13\n\x0bserver_init\x18\x01 \x01(\x08"6\n\x12ServerInitResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t"\xf5\x01\n\rSignalRequest\x12\x13\n\x0bglobal_uuid\x18\x01 \x01(\t\x12\x1b\n\x13user_requested_uuid\x18\x02 \x01(\t\x12(\n\x0bsignal_type\x18\x03 \x01(\x0e\x32\x13.portico.SignalType\x12*\n\x07\x63ommand\x18\x04 \x01(\x0b\x32\x17.portico.CommandPayloadH\x00\x12$\n\x04sync\x18\x05 \x01(\x0b\x32\x14.portico.SyncPayloadH\x00\x12+\n\x08\x66yi_data\x18\x06 \x01(\x0b\x32\x17.google.protobuf.StructH\x00\x42\t\n\x07payload"\xbb\x01\n\x0e\x43ommandPayload\x12,\n\toperation\x18\x01 \x01(\x0e\x32\x19.portico.CommandOperation\x12(\n\x0b\x65ntity_type\x18\x02 \x01(\x0e\x32\x13.portico.EntityType\x12\x13\n\x0b\x65ntity_uuid\x18\x03 \x01(\t\x12%\n\x04\x64\x61ta\x18\x04 \x01(\x0b\x32\x17.google.protobuf.Struct\x12\x15\n\rupdate_fields\x18\x05 \x03(\t"q\n\x0bSyncPayload\x12!\n\x05scope\x18\x01 \x01(\x0e\x32\x12.portico.SyncScope\x12\x14\n\x0c\x65ntity_uuids\x18\x02 \x03(\t\x12)\n\x0c\x65ntity_types\x18\x03 \x03(\x0e\x32\x13.portico.EntityType"~\n\x0eSignalResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x1c\n\x14runtime_session_uuid\x18\x03 \x01(\t\x12,\n\x0bresult_data\x18\x04 \x01(\x0b\x32\x17.google.protobuf.Struct*,\n\nSignalType\x12\x0b\n\x07\x43OMMAND\x10\x00\x12\x08\n\x04SYNC\x10\x01\x12\x07\n\x03\x46YI\x10\x02*?\n\x10\x43ommandOperation\x12\n\n\x06\x43REATE\x10\x00\x12\n\n\x06UPDATE\x10\x01\x12\n\n\x06\x44\x45LETE\x10\x02\x12\x07\n\x03RUN\x10\x03*!\n\nEntityType\x12\t\n\x05\x41GENT\x10\x00\x12\x08\n\x04STEP\x10\x01*"\n\tSyncScope\x12\x07\n\x03\x41LL\x10\x00\x12\x0c\n\x08SPECIFIC\x10\x01\x32\x98\x01\n\rBridgeService\x12\x45\n\nInitServer\x12\x1a.portico.ServerInitRequest\x1a\x1b.portico.ServerInitResponse\x12@\n\rProcessSignal\x12\x16.portico.SignalRequest\x1a\x17.portico.SignalResponseb\x06proto3'
+    b'\n\x14\x62ridge_message.proto\x12\x07portico\x1a\x1cgoogle/protobuf/struct.proto"(\n\x11ServerInitRequest\x12\x13\n\x0bserver_init\x18\x01 \x01(\x08"6\n\x12ServerInitResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t"\xf5\x01\n\rSignalRequest\x12\x13\n\x0bglobal_uuid\x18\x01 \x01(\t\x12\x1b\n\x13user_requested_uuid\x18\x02 \x01(\t\x12(\n\x0bsignal_type\x18\x03 \x01(\x0e\x32\x13.portico.SignalType\x12*\n\x07\x63ommand\x18\x04 \x01(\x0b\x32\x17.portico.CommandPayloadH\x00\x12$\n\x04sync\x18\x05 \x01(\x0b\x32\x14.portico.SyncPayloadH\x00\x12+\n\x08\x66yi_data\x18\x06 \x01(\x0b\x32\x17.google.protobuf.StructH\x00\x42\t\n\x07payload"\xbb\x01\n\x0e\x43ommandPayload\x12,\n\toperation\x18\x01 \x01(\x0e\x32\x19.portico.CommandOperation\x12(\n\x0b\x65ntity_type\x18\x02 \x01(\x0e\x32\x13.portico.EntityType\x12\x13\n\x0b\x65ntity_uuid\x18\x03 \x01(\t\x12%\n\x04\x64\x61ta\x18\x04 \x01(\x0b\x32\x17.google.protobuf.Struct\x12\x15\n\rupdate_fields\x18\x05 \x03(\t"q\n\x0bSyncPayload\x12!\n\x05scope\x18\x01 \x01(\x0e\x32\x12.portico.SyncScope\x12\x14\n\x0c\x65ntity_uuids\x18\x02 \x03(\t\x12)\n\x0c\x65ntity_types\x18\x03 \x03(\x0e\x32\x13.portico.EntityType"~\n\x0eSignalResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x1c\n\x14runtime_session_uuid\x18\x03 \x01(\t\x12,\n\x0bresult_data\x18\x04 \x01(\x0b\x32\x17.google.protobuf.Struct*,\n\nSignalType\x12\x0b\n\x07\x43OMMAND\x10\x00\x12\x08\n\x04SYNC\x10\x01\x12\x07\n\x03\x46YI\x10\x02*3\n\x10\x43ommandOperation\x12\n\n\x06\x43REATE\x10\x00\x12\n\n\x06\x44\x45LETE\x10\x01\x12\x07\n\x03RUN\x10\x02*!\n\nEntityType\x12\t\n\x05\x41GENT\x10\x00\x12\x08\n\x04STEP\x10\x01*"\n\tSyncScope\x12\x07\n\x03\x41LL\x10\x00\x12\x0c\n\x08SPECIFIC\x10\x01\x32\x98\x01\n\rBridgeService\x12\x45\n\nInitServer\x12\x1a.portico.ServerInitRequest\x1a\x1b.portico.ServerInitResponse\x12@\n\rProcessSignal\x12\x16.portico.SignalRequest\x1a\x17.portico.SignalResponseb\x06proto3'
 )
 
 _globals = globals()
@@ -33,11 +33,11 @@ if not _descriptor._USE_C_DESCRIPTORS:
     _globals["_SIGNALTYPE"]._serialized_start = 842
     _globals["_SIGNALTYPE"]._serialized_end = 886
     _globals["_COMMANDOPERATION"]._serialized_start = 888
-    _globals["_COMMANDOPERATION"]._serialized_end = 951
-    _globals["_ENTITYTYPE"]._serialized_start = 953
-    _globals["_ENTITYTYPE"]._serialized_end = 986
-    _globals["_SYNCSCOPE"]._serialized_start = 988
-    _globals["_SYNCSCOPE"]._serialized_end = 1022
+    _globals["_COMMANDOPERATION"]._serialized_end = 939
+    _globals["_ENTITYTYPE"]._serialized_start = 941
+    _globals["_ENTITYTYPE"]._serialized_end = 974
+    _globals["_SYNCSCOPE"]._serialized_start = 976
+    _globals["_SYNCSCOPE"]._serialized_end = 1010
     _globals["_SERVERINITREQUEST"]._serialized_start = 63
     _globals["_SERVERINITREQUEST"]._serialized_end = 103
     _globals["_SERVERINITRESPONSE"]._serialized_start = 105
@@ -50,6 +50,6 @@ if not _descriptor._USE_C_DESCRIPTORS:
     _globals["_SYNCPAYLOAD"]._serialized_end = 712
     _globals["_SIGNALRESPONSE"]._serialized_start = 714
     _globals["_SIGNALRESPONSE"]._serialized_end = 840
-    _globals["_BRIDGESERVICE"]._serialized_start = 1025
-    _globals["_BRIDGESERVICE"]._serialized_end = 1177
+    _globals["_BRIDGESERVICE"]._serialized_start = 1013
+    _globals["_BRIDGESERVICE"]._serialized_end = 1165
 # @@protoc_insertion_point(module_scope)

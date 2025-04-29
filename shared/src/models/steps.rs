@@ -247,57 +247,6 @@ impl JsonLike for Step {
         }
     }
 
-    fn update_from_json(&mut self, obj: Value) -> Result<Vec<String>> {
-        let mut updated_fields = Vec::new();
-
-        if let Some(obj) = obj.as_object() {
-            for (key, value) in obj {
-                match key.as_str() {
-                    "description" => {
-                        if value.is_null() {
-                            if self.description.is_some() {
-                                self.description = None;
-                                updated_fields.push(key.to_string());
-                            }
-                        } else if let Some(s) = value.as_str() {
-                            let current = self.description.as_deref().unwrap_or("");
-                            if current != s {
-                                self.description = Some(s.to_string());
-                                updated_fields.push(key.to_string());
-                            }
-                        }
-                    }
-                    "step_type" => {
-                        if let Some(s) = value.as_str() {
-                            if let Ok(new_type) = StepType::from_str(s) {
-                                if self.step_type.as_str() != new_type.as_str() {
-                                    self.step_type = new_type;
-                                    updated_fields.push(key.to_string());
-                                }
-                            }
-                        }
-                    }
-                    "step_content" => {
-                        if let Some(s) = value.as_str() {
-                            if self.step_content != s {
-                                self.step_content = s.to_string();
-                                updated_fields.push(key.to_string());
-                            }
-                        }
-                    }
-                    // Skip fields that shouldn't be updated directly
-                    "id" | "global_uuid" | "created_at" | "updated_at" => {
-                        // These are either ID fields or timestamp fields
-                        // Skip updating them via this method
-                    }
-                    // If we don't recognize the field, just skip
-                    _ => {}
-                }
-            }
-        }
-
-        Ok(updated_fields)
-    }
 }
 
 #[async_trait]

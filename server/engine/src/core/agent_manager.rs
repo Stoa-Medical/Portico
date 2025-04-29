@@ -65,9 +65,6 @@ impl AgentManager {
                         CommandOperation::Create => {
                             command::handle_create(self, cmd, runtime_session_uuid).await
                         }
-                        CommandOperation::Update => {
-                            command::handle_update(self, cmd, runtime_session_uuid).await
-                        }
                         CommandOperation::Delete => {
                             command::handle_delete(self, cmd, runtime_session_uuid).await
                         }
