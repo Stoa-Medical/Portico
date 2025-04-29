@@ -118,6 +118,7 @@ impl AgentManager {
         // Spawn a dedicated worker for this agent
         tokio::spawn(async move {
             println!("[INFO] Started worker for agent {}", agent_uuid);
+
             while let Some(signal) = rx.recv().await {
                 println!(
                     "[INFO] Agent {} worker processing signal type {:?}",
@@ -136,11 +137,15 @@ impl AgentManager {
 
                                 if let Some(agent) = agents_guard.get(&agent_uuid) {
                                     println!("[INFO] Running agent {} with data", agent_uuid);
+
+                                    // Call agent.run() which creates a RuntimeSession internally
                                     match agent.run(run_data).await {
                                         Ok(session) => {
                                             println!(
                                                 "[INFO] Agent execution successful, saving session"
                                             );
+
+                                            // Save the session to the database using the DatabaseItem trait
                                             if let Err(e) = session.try_db_create(&db_pool).await {
                                                 eprintln!("[ERROR] Failed to save session: {}", e);
                                             }
@@ -157,6 +162,7 @@ impl AgentManager {
                     }
                 }
             }
+
             println!("[INFO] Worker for agent {} shutting down", agent_uuid);
         });
 
@@ -423,15 +429,15 @@ impl AgentManager {
                 ));
             }
 
-            println!("[INFO] Queueing run operation for agent {}", agent_uuid);
+            println!("[INFO] Processing run operation for agent {}", agent_uuid);
 
             // Check if agent exists
-            let agents_exist = {
+            let agent_exists = {
                 let agents_guard = self.agents.read().await;
                 agents_guard.contains_key(&agent_uuid)
             };
 
-            if !agents_exist {
+            if !agent_exists {
                 eprintln!(
                     "[ERROR] Agent run failed: Agent with UUID {} not found",
                     agent_uuid
