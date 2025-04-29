@@ -2,8 +2,7 @@
 /// Agents are responsible for monitoring specific Signal types and acting on them
 /// NOTE: Agents are created in the UI, and Supabase is the source-of-truth for their state.
 use crate::models::{runtime_sessions::RuntimeSession, steps::Step};
-use crate::python_runtime::PythonRuntime;
-use crate::{DatabaseItem, IdFields, JsonLike, TimestampFields};
+use crate::{DatabaseItem, IdFields, JsonLike, PythonRuntime, TimestampFields};
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
