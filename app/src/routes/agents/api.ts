@@ -78,7 +78,7 @@ export const saveAgent = async (
 
   const { error } = await supabase
     .from("agents")
-    .insert([{ ...agent, owner_id: user.id }]);
+    .insert([{ ...agent, owner_id: user.id, agent_state: "stable" }]);
 
   if (error) throw error;
   return getAgents();

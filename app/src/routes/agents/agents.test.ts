@@ -178,7 +178,7 @@ describe("agents.test.ts - Agents Page", () => {
     expect(insertAgentMock.mock.calls[0]).toMatchObject([
       [
         {
-          agent_state: "inactive",
+          agent_state: "stable",
           description: "",
           name: "New Agent Test",
           type: "Assistant",

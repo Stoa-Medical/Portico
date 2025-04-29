@@ -23,8 +23,8 @@
     ArrowLeftOutline,
     TrashBinOutline,
   } from "flowbite-svelte-icons";
-  import { PageHeader, StepConfig } from "$lib/components";
-  import { formatRelativeDate, readableDate } from "$lib/date";
+  import { PageHeader, StepConfig, DateTimeRow } from "$lib/components";
+  import { readableDate } from "$lib/date";
   import {
     getSteps,
     updateStep,
@@ -73,10 +73,8 @@
       await updateStep(selectedStep);
       await loadSteps(selectedAgent.id);
       selectedStep = null;
-      alert("Step saved successfully!");
     } catch (err) {
       console.error("Failed to save step", err);
-      alert("Failed to save step.");
     }
   }
 
@@ -195,7 +193,6 @@
   async function saveChanges() {
     await updateAgent(selectedAgent);
     await loadAgents();
-    alert("Agent settings saved!");
   }
 
   const breadcrumbs = [
@@ -292,11 +289,7 @@
                     {agent.agent_state}
                   </span>
                 </TableBodyCell>
-                <TableBodyCell
-                  >{agent.updated_at
-                    ? formatRelativeDate(agent.updated_at)
-                    : "Just now"}</TableBodyCell
-                >
+                <DateTimeRow datetime={agent.updated_at} />
               </TableBodyRow>
             {/each}
 
@@ -524,16 +517,8 @@
                           <TableBodyCell>
                             <Badge color="green">{session.rts_status}</Badge>
                           </TableBodyCell>
-                          <TableBodyCell
-                            >{formatRelativeDate(
-                              session.created_at,
-                            )}</TableBodyCell
-                          >
-                          <TableBodyCell
-                            >{formatRelativeDate(
-                              session.updated_at,
-                            )}</TableBodyCell
-                          >
+                          <DateTimeRow datetime={session.created_at} />
+                          <DateTimeRow datetime={session.updated_at} />
                           <TableBodyCell>
                             <div class="flex gap-2">
                               {#if selectedRuntimeSession?.id === session.id}

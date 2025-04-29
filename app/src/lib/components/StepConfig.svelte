@@ -1,7 +1,14 @@
 <script>
-  import { formatRelativeDate } from "$lib/date.js";
+  import { formatRelativeDate, readableDate } from "$lib/date.js";
   import { onMount } from "svelte";
-  import { Card, Label, Input, Textarea, Select } from "flowbite-svelte";
+  import {
+    Card,
+    Label,
+    Input,
+    Textarea,
+    Select,
+    Tooltip,
+  } from "flowbite-svelte";
   import { EditorState } from "@codemirror/state";
   import { EditorView, keymap, lineNumbers } from "@codemirror/view";
   import { defaultKeymap } from "@codemirror/commands";
@@ -243,8 +250,16 @@ def executeScript(source):
     {#if step.id !== "new"}
       <div>
         <p class="text-sm text-gray-500">
-          Last edited: {formatRelativeDate(step.updated_at) || "Just now"} | Created:
-          {formatRelativeDate(step.created_at) || "Just now"}
+          <span>
+            <strong>Last edited:</strong>
+            {formatRelativeDate(step.updated_at) || "Just now"} |
+          </span>
+          <Tooltip>{readableDate(step.updated_at)}</Tooltip>
+          <span>
+            <strong>Created:</strong>
+            {formatRelativeDate(step.created_at) || "Just now"}
+          </span>
+          <Tooltip>{readableDate(step.created_at)}</Tooltip>
         </p>
       </div>
     {/if}
