@@ -52,7 +52,7 @@ VALUES
 -- Insert sample signals (after runtime_sessions to satisfy foreign key constraint)
 INSERT INTO signals (agent_id, user_requested_uuid, signal_type, rts_id, initial_data, response_data)
 VALUES
-  (1, gen_random_uuid(), 'command', 1, '{"file_path": "/tmp/sample.txt"}', '{"report": "File processed successfully"}'),
+  (1, gen_random_uuid(), 'run', 1, '{"file_path": "/tmp/sample.txt"}', '{"report": "File processed successfully"}'),
   (2, gen_random_uuid(), 'fyi', 2, '{"message": "System update completed"}', NULL),
   (3, gen_random_uuid(), 'sync', 3, '{"dataset_id": "ds-123"}', NULL);
 
