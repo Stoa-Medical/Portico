@@ -1,6 +1,6 @@
 *Portico Server* – Design Doc (Dev)
 
-Last significant update: Apr 21, 2025
+Last significant update: Apr 30, 2025
 
 Overview:
 
@@ -11,7 +11,7 @@ Overview:
     * **Rust runtime service**: runtime for agent code
     * **Supabase**: handles auth \+ database (***source of truth***)
     * **Python bridge service:** listens to changes in Supabase and forwards them to Rust service
-  * **app** – this is a Tauri desktop app that can update servers / run in demo mode
+  * **app** – this is a Tauri desktop app that can update servers / run in demo mode (outside of demo scope)
 
 Goals (min 1, max 3):
 
@@ -40,11 +40,11 @@ Key Technical Decisions (min 1):
 Key Data Models:
 
 * **Signal:** Something that happens and can trigger actions.
-  * A Signal is the core “event” in this event-based architecture. It can either come with some data that needs to be run, some data that’s stashed as FYI, or just an event as an FYI.
+  * A Signal is the core “event” in this event-based architecture. It can either come with some data that needs to be run, a request to sync the state of the server with the current database, or some data that’s stashed as FYI.
   * A Signal can request an Agent to do something and wait for a result – the result of the run is stored back to the Signal.
   * There are three types of Signals:
     * sync: Requests that the engine state pulls from the database
-    * command: Triggers a specific action/state change (e.g. Agent update, Step delete, Agent run, Step run, etc.)
+    * run: Triggers an Agent run with specific data
     * fyi: Doesn’t trigger anything, used for logging data with timestamp
 * **Agent**: this represents an “automation” unit. It does things with Steps and either starts or responds to Signals.
 * **Step**: a unit of action that an Agent can take. It's either deterministic (code – Python) or non-deterministic (calling an LLM).
@@ -97,6 +97,8 @@ Using the above workflow, users can:
 
 This constitutes the “core” features of the open-core version of Portico. Advanced features that I’ve thought about, though are not scoped here, include (and are not limited to):
 
+* Analytic database (a la STARR OMOP)
+* Custom integration
 * AI Customization
 * Metrics via OpenTelemetry and Graphana
 * Pre-configured Agent modules
