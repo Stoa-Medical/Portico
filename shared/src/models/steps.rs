@@ -3,21 +3,21 @@ use crate::{DatabaseItem, IdFields, JsonLike, PythonRuntime, TimestampFields};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use sqlx::{postgres::PgArgumentBuffer, PgPool, Postgres, Row};
 use uuid::Uuid;
 
-#[derive(Clone, Debug, Serialize, Deserialize, Copy)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum StepType {
     Python,
-    Prompt,
+    Prompt(String),
 }
 
 impl StepType {
     pub fn from_str(s: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         match s {
             "python" => Ok(StepType::Python),
-            "prompt" => Ok(StepType::Prompt),
+            "prompt" => Ok(StepType::Prompt(crate::JsonModeLLMs::MetaLlama33_70b.to_string())),
             _ => Err("Invalid step type".into()),
         }
     }
@@ -25,7 +25,14 @@ impl StepType {
     pub fn as_str(&self) -> &'static str {
         match self {
             StepType::Python => "python",
-            StepType::Prompt => "prompt",
+            StepType::Prompt(_) => "prompt",
+        }
+    }
+
+    pub fn get_llm_model(&self) -> Option<String> {
+        match self {
+            StepType::Prompt(model) => Some(model.clone()),
+            _ => None,
         }
     }
 }
@@ -40,7 +47,12 @@ impl<'r> sqlx::Decode<'r, Postgres> for StepType {
     fn decode(
         value: sqlx::postgres::PgValueRef<'r>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        Self::from_str(value.as_str()?)
+        // Only decode the type string, not the LLM model (which will be handled separately)
+        match value.as_str()? {
+            "python" => Ok(StepType::Python),
+            "prompt" => Ok(StepType::Prompt(crate::JsonModeLLMs::MetaLlama33_70b.to_string())),
+            s => Err(format!("Invalid step type: {}", s).into()),
+        }
     }
 }
 
@@ -66,6 +78,21 @@ pub struct Step {
 
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Step {
     fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
+        let step_type_str: &str = row.try_get("step_type")?;
+
+        // Try to get llm_model, but don't fail if the column doesn't exist
+        let llm_model: Option<String> = match row.try_get("llm_model") {
+            Ok(model) => model,
+            Err(_) => None, // Column might not exist yet
+        };
+
+        let step_type = match step_type_str {
+            "python" => StepType::Python,
+            "prompt" => StepType::Prompt(llm_model.unwrap_or_else(||
+                crate::JsonModeLLMs::MetaLlama33_70b.to_string())),
+            _ => return Err(sqlx::Error::ColumnNotFound("Invalid step type".into())),
+        };
+
         Ok(Self {
             identifiers: IdFields {
                 local_id: row.try_get("id")?,
@@ -75,9 +102,8 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Step {
                 created: row.try_get("created_at")?,
                 updated: row.try_get("updated_at")?,
             },
-            // agent_owner_uuid: row.try_get("agent_id")?,
             description: row.try_get("description")?,
-            step_type: row.try_get("step_type")?,
+            step_type,
             step_content: row.try_get("step_content")?,
         })
     }
@@ -99,9 +125,36 @@ impl Step {
         }
     }
 
+    // Helper method to create a new Prompt step with an LLM model
+    pub fn new_prompt(
+        identifiers: IdFields,
+        step_content: String,
+        description: Option<String>,
+        llm_model: Option<String>,
+    ) -> Self {
+        Self {
+            identifiers,
+            timestamps: TimestampFields::new(),
+            step_type: StepType::Prompt(llm_model.unwrap_or_else(||
+                crate::JsonModeLLMs::MetaLlama33_70b.to_string())),
+            step_content,
+            description,
+        }
+    }
+
     /// Check if this step is a Python step
     pub fn is_python_step(&self) -> bool {
         matches!(self.step_type, StepType::Python)
+    }
+
+    /// Check if this step is a Prompt step
+    pub fn is_prompt_step(&self) -> bool {
+        matches!(self.step_type, StepType::Prompt(_))
+    }
+
+    /// Get the LLM model if this is a Prompt step
+    pub fn get_llm_model(&self) -> Option<String> {
+        self.step_type.get_llm_model()
     }
 
     /// Generates a Python function with the standardized signature for execution in a PythonRuntime
@@ -151,7 +204,7 @@ impl Step {
         runtime: Option<&PythonRuntime>,
     ) -> Result<Value> {
         match &self.step_type {
-            StepType::Prompt => match crate::call_llm(&self.step_content, source_data).await {
+            StepType::Prompt(llm_model) => match crate::call_llm(&self.step_content, source_data, Some(llm_model.clone())).await {
                 Ok(res_str) => Ok(Value::String(res_str)),
                 Err(err) => Err(anyhow!("Step {} failed: {}", step_idx, err)),
             },
@@ -183,70 +236,81 @@ impl Step {
 
 impl JsonLike for Step {
     fn to_json(&self) -> Value {
-        serde_json::json!({
+        let mut json = json!({
             "id": self.identifiers.local_id,
             "global_uuid": self.identifiers.global_uuid,
-            "created_at": self.timestamps.created.format("%Y-%m-%d %H:%M:%S").to_string(),
-            "updated_at": self.timestamps.updated.format("%Y-%m-%d %H:%M:%S").to_string(),
             "description": self.description,
             "step_type": self.step_type.as_str(),
             "step_content": self.step_content,
-        })
+            "created_at": self.timestamps.created.format("%Y-%m-%d %H:%M:%S").to_string(),
+            "updated_at": self.timestamps.updated.format("%Y-%m-%d %H:%M:%S").to_string(),
+        });
+
+        // Add llm_model field only for Prompt steps
+        if let StepType::Prompt(model) = &self.step_type {
+            json["llm_model"] = json!(model);
+        }
+
+        json
     }
 
     fn from_json(obj: Value) -> Result<Self> {
-        if let Some(obj) = obj.as_object() {
-            Ok(Self {
-                identifiers: IdFields {
-                    local_id: obj.get("id").and_then(|v| v.as_i64()).map(|v| v as i32),
-                    global_uuid: obj
-                        .get("global_uuid")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or_default()
-                        .to_string(),
-                },
-                timestamps: TimestampFields {
-                    created: chrono::DateTime::parse_from_str(
-                        &obj.get("created_at")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or_default(),
-                        "%Y-%m-%d %H:%M:%S %z",
-                    )
-                    .unwrap_or_default()
-                    .with_timezone(&chrono::Utc),
-                    updated: chrono::DateTime::parse_from_str(
-                        &obj.get("updated_at")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or_default(),
-                        "%Y-%m-%d %H:%M:%S %z",
-                    )
-                    .unwrap_or_default()
-                    .with_timezone(&chrono::Utc),
-                },
-                description: obj.get("description").and_then(|v| {
-                    if v.is_null() {
-                        None
-                    } else {
-                        Some(v.as_str().unwrap_or_default().to_string())
-                    }
-                }),
-                step_type: StepType::from_str(
-                    obj.get("step_type")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("python"),
-                )
-                .unwrap_or(StepType::Python),
-                step_content: obj
-                    .get("step_content")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default()
-                    .to_string(),
-            })
-        } else {
-            Err(anyhow!("Step::from_json - not a JSON object"))
-        }
-    }
+        let step_type_str = obj["step_type"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing step_type"))?;
 
+        let step_content = obj["step_content"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing step_content"))?;
+
+        // Handle optional fields
+        let description = obj["description"].as_str().map(|s| s.to_string());
+        let llm_model = obj["llm_model"].as_str().map(|s| s.to_string());
+
+        // Create the appropriate StepType based on the type string and llm_model
+        let step_type = match step_type_str {
+            "python" => StepType::Python,
+            "prompt" => StepType::Prompt(llm_model.unwrap_or_else(||
+                crate::JsonModeLLMs::MetaLlama33_70b.to_string())),
+            _ => return Err(anyhow!("Invalid step type: {}", step_type_str)),
+        };
+
+        // Handle ID fields
+        let local_id = obj["id"].as_i64().map(|id| id as i32);
+        let global_uuid = if let Some(uuid_str) = obj["global_uuid"].as_str() {
+            uuid_str.to_string()
+        } else {
+            Uuid::new_v4().to_string()
+        };
+
+        // Handle timestamp fields
+        let created = if let Some(ts) = obj["created_at"].as_str() {
+            chrono::DateTime::parse_from_rfc3339(ts)
+                .map_err(|e| anyhow!("Invalid created_at timestamp: {}", e))?
+                .with_timezone(&chrono::Utc)
+        } else {
+            chrono::Utc::now()
+        };
+
+        let updated = if let Some(ts) = obj["updated_at"].as_str() {
+            chrono::DateTime::parse_from_rfc3339(ts)
+                .map_err(|e| anyhow!("Invalid updated_at timestamp: {}", e))?
+                .with_timezone(&chrono::Utc)
+        } else {
+            chrono::Utc::now()
+        };
+
+        Ok(Self {
+            identifiers: IdFields {
+                local_id,
+                global_uuid,
+            },
+            timestamps: TimestampFields { created, updated },
+            description,
+            step_type,
+            step_content: step_content.to_string(),
+        })
+    }
 }
 
 #[async_trait]
@@ -258,74 +322,96 @@ impl DatabaseItem for Step {
     }
 
     async fn try_db_create(&self, pool: &PgPool) -> Result<()> {
-        let agent_id = if let Some(id) = self.identifiers.local_id {
-            id
-        } else {
-            return Err(anyhow!("Cannot create a Step without a local_id"));
+        let uuid_parsed = Uuid::parse_str(&self.identifiers.global_uuid)?;
+
+        // Extract llm_model from step_type if it's a Prompt step
+        let llm_model = match &self.step_type {
+            StepType::Prompt(model) => Some(model.clone()),
+            _ => None,
         };
 
-        let mut tx = pool.begin().await?;
-
-        // Create the step using query!
-        let uuid_parsed = Uuid::parse_str(&self.identifiers.global_uuid)?;
-        let res = sqlx::query!(
+        // Insert with the llm_model column
+        sqlx::query(
             r#"
-            INSERT INTO steps (
-                global_uuid, agent_id, description,
-                step_type, step_content, created_at, updated_at
-            )
-            VALUES ($1, $2, $3, $4::step_type, $5, $6, $7)
-            "#,
-            uuid_parsed,
-            agent_id,
-            self.description.as_deref(),
-            self.step_type as StepType, // Cast enum for type checking
-            &self.step_content,
-            &self.timestamps.created,
-            &self.timestamps.updated
+            INSERT INTO steps
+                (global_uuid, description, step_type, step_content, llm_model)
+            VALUES
+                ($1, $2, $3, $4, $5)
+            "#
         )
-        .execute(&mut *tx)
+        .bind(uuid_parsed)
+        .bind(&self.description)
+        .bind(self.step_type.as_str())
+        .bind(&self.step_content)
+        .bind(llm_model)
+        .execute(pool)
         .await?;
 
-        tx.commit().await?;
-
-        if res.rows_affected() == 1 {
-            Ok(())
-        } else {
-            Err(anyhow!("Failed to create Step"))
-        }
+        Ok(())
     }
 
     async fn try_db_update(&self, pool: &PgPool) -> Result<()> {
         let uuid_parsed = Uuid::parse_str(&self.identifiers.global_uuid)?;
-        let res = sqlx::query!(
+
+        // Extract llm_model from step_type if it's a Prompt step
+        let llm_model = match &self.step_type {
+            StepType::Prompt(model) => Some(model.clone()),
+            _ => None,
+        };
+
+        // Try to update by global UUID first
+        let result = sqlx::query(
             r#"
             UPDATE steps
-            SET description = $1,
-                step_type = $2::step_type,
+            SET
+                description = $1,
+                step_type = $2,
                 step_content = $3,
-                updated_at = $4
+                llm_model = $4,
+                updated_at = CURRENT_TIMESTAMP
             WHERE global_uuid = $5
-            "#,
-            self.description.as_deref(),
-            self.step_type as StepType, // Cast enum for type checking
-            &self.step_content,
-            &self.timestamps.updated,
-            uuid_parsed
+            "#
         )
+        .bind(&self.description)
+        .bind(self.step_type.as_str())
+        .bind(&self.step_content)
+        .bind(&llm_model)
+        .bind(uuid_parsed)
         .execute(pool)
         .await?;
 
-        if res.rows_affected() == 1 {
-            Ok(())
-        } else {
-            Err(anyhow!("Failed to update Step"))
+        if result.rows_affected() == 0 {
+            // If no rows were updated by UUID, try by local ID if available
+            if let Some(local_id) = self.identifiers.local_id {
+                sqlx::query(
+                    r#"
+                    UPDATE steps
+                    SET
+                        description = $1,
+                        step_type = $2,
+                        step_content = $3,
+                        llm_model = $4,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = $5
+                    "#
+                )
+                .bind(&self.description)
+                .bind(self.step_type.as_str())
+                .bind(&self.step_content)
+                .bind(&llm_model)
+                .bind(local_id)
+                .execute(pool)
+                .await?;
+            }
         }
+
+        Ok(())
     }
 
     async fn try_db_delete(&self, pool: &PgPool) -> Result<()> {
         let uuid_parsed = Uuid::parse_str(&self.identifiers.global_uuid)?;
-        let res = sqlx::query!("DELETE FROM steps WHERE global_uuid = $1", uuid_parsed)
+        let res = sqlx::query("DELETE FROM steps WHERE global_uuid = $1")
+            .bind(uuid_parsed)
             .execute(pool)
             .await?;
 
@@ -337,24 +423,25 @@ impl DatabaseItem for Step {
     }
 
     async fn try_db_select_all(pool: &PgPool) -> Result<Vec<Self>> {
-        // Define struct compatible with query_as! output
+        // Define struct compatible with query_as output
+        #[derive(sqlx::FromRow)]
         struct StepRow {
             id: i32,
             global_uuid: uuid::Uuid,
             description: Option<String>,
-            step_type: StepType,
+            step_type: String,
             step_content: String,
+            llm_model: Option<String>,
             created_at: chrono::DateTime<chrono::Utc>,
             updated_at: chrono::DateTime<chrono::Utc>,
         }
 
-        let rows = sqlx::query_as!(
-            StepRow,
+        let rows = sqlx::query_as::<_, StepRow>(
             r#"
             SELECT
                 id, global_uuid, description,
-                step_type as "step_type: _", -- Tell sqlx to use StepType
-                step_content, created_at, updated_at
+                step_type, step_content, llm_model,
+                created_at, updated_at
             FROM steps
             ORDER BY id
             "#
@@ -365,18 +452,28 @@ impl DatabaseItem for Step {
         // Convert rows to Step objects
         let steps = rows
             .into_iter()
-            .map(|row| Step {
-                identifiers: IdFields {
-                    local_id: Some(row.id),
-                    global_uuid: row.global_uuid.to_string(),
-                },
-                timestamps: TimestampFields {
-                    created: row.created_at,
-                    updated: row.updated_at,
-                },
-                description: row.description,
-                step_type: row.step_type,
-                step_content: row.step_content,
+            .map(|row| {
+                // Create the appropriate StepType based on the type string and llm_model
+                let step_type = match row.step_type.as_str() {
+                    "python" => StepType::Python,
+                    "prompt" => StepType::Prompt(row.llm_model.unwrap_or_else(||
+                        crate::JsonModeLLMs::MetaLlama33_70b.to_string())),
+                    _ => StepType::Python, // Default fallback
+                };
+
+                Step {
+                    identifiers: IdFields {
+                        local_id: Some(row.id),
+                        global_uuid: row.global_uuid.to_string(),
+                    },
+                    timestamps: TimestampFields {
+                        created: row.created_at,
+                        updated: row.updated_at,
+                    },
+                    description: row.description,
+                    step_type,
+                    step_content: row.step_content,
+                }
             })
             .collect();
 
@@ -387,13 +484,15 @@ impl DatabaseItem for Step {
         pool: &PgPool,
         id: &IdFields<Self::IdType>,
     ) -> Result<Option<Self>> {
-        // Define struct compatible with query_as! output
+        // Define struct compatible with query_as output
+        #[derive(sqlx::FromRow)]
         struct StepRow {
             id: i32,
             global_uuid: uuid::Uuid,
             description: Option<String>,
-            step_type: StepType,
+            step_type: String,
             step_content: String,
+            llm_model: Option<String>,
             created_at: chrono::DateTime<chrono::Utc>,
             updated_at: chrono::DateTime<chrono::Utc>,
         }
@@ -401,22 +500,29 @@ impl DatabaseItem for Step {
         // Try to find by global UUID first
         if !id.global_uuid.is_empty() {
             let uuid_parsed = Uuid::parse_str(&id.global_uuid)?;
-            let row = sqlx::query_as!(
-                StepRow,
+            let row = sqlx::query_as::<_, StepRow>(
                 r#"
                 SELECT
                     id, global_uuid, description,
-                    step_type as "step_type: _", -- Tell sqlx to use StepType
-                    step_content, created_at, updated_at
+                    step_type, step_content, llm_model,
+                    created_at, updated_at
                 FROM steps
                 WHERE global_uuid = $1
-                "#,
-                uuid_parsed
+                "#
             )
+            .bind(uuid_parsed)
             .fetch_optional(pool)
             .await?;
 
             if let Some(row) = row {
+                // Create the appropriate StepType based on the type string and llm_model
+                let step_type = match row.step_type.as_str() {
+                    "python" => StepType::Python,
+                    "prompt" => StepType::Prompt(row.llm_model.unwrap_or_else(||
+                        crate::JsonModeLLMs::MetaLlama33_70b.to_string())),
+                    _ => StepType::Python, // Default fallback
+                };
+
                 return Ok(Some(Step {
                     identifiers: IdFields {
                         local_id: Some(row.id),
@@ -427,7 +533,7 @@ impl DatabaseItem for Step {
                         updated: row.updated_at,
                     },
                     description: row.description,
-                    step_type: row.step_type,
+                    step_type,
                     step_content: row.step_content,
                 }));
             }
@@ -435,33 +541,42 @@ impl DatabaseItem for Step {
 
         // Fall back to local ID if available and UUID not found
         if let Some(local_id) = id.local_id {
-            let row = sqlx::query_as!(
-                StepRow,
+            let row = sqlx::query_as::<_, StepRow>(
                 r#"
                 SELECT
                     id, global_uuid, description,
-                    step_type as "step_type: _", -- Tell sqlx to use StepType
-                    step_content, created_at, updated_at
+                    step_type, step_content, llm_model,
+                    created_at, updated_at
                 FROM steps
                 WHERE id = $1
-                "#,
-                local_id
+                "#
             )
+            .bind(local_id)
             .fetch_optional(pool)
             .await?;
 
-            return Ok(row.map(|row| Step {
-                identifiers: IdFields {
-                    local_id: Some(row.id),
-                    global_uuid: row.global_uuid.to_string(),
-                },
-                timestamps: TimestampFields {
-                    created: row.created_at,
-                    updated: row.updated_at,
-                },
-                description: row.description,
-                step_type: row.step_type,
-                step_content: row.step_content,
+            return Ok(row.map(|row| {
+                // Create the appropriate StepType based on the type string and llm_model
+                let step_type = match row.step_type.as_str() {
+                    "python" => StepType::Python,
+                    "prompt" => StepType::Prompt(row.llm_model.unwrap_or_else(||
+                        crate::JsonModeLLMs::MetaLlama33_70b.to_string())),
+                    _ => StepType::Python, // Default fallback
+                };
+
+                Step {
+                    identifiers: IdFields {
+                        local_id: Some(row.id),
+                        global_uuid: row.global_uuid.to_string(),
+                    },
+                    timestamps: TimestampFields {
+                        created: row.created_at,
+                        updated: row.updated_at,
+                    },
+                    description: row.description,
+                    step_type,
+                    step_content: row.step_content,
+                }
             }));
         }
 

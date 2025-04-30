@@ -288,6 +288,11 @@ table "steps" {
         type = sql("text")
         null = false
     }
+    column "llm_model" {
+        type = sql("varchar(255)")
+        null = true
+        comment = "The LLM model to use for this step"
+    }
 }
 
 table "runtime_sessions" {

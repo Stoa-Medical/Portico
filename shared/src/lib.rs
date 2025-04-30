@@ -380,13 +380,27 @@ impl std::fmt::Display for JsonModeLLMs {
     }
 }
 
-// TODO: Add options to use different LLMs
-pub async fn call_llm(prompt: &str, context: Value) -> Result<String> {
+// Call the LLM with a specific model or use the default
+pub async fn call_llm(prompt: &str, context: Value, model: Option<String>) -> Result<String> {
     let api_key = env::var("LLM_API_KEY").unwrap();
     let api_endpoint = env::var("LLM_API_ENDPOINT").unwrap();
 
+    // Determine which model to use
+    let model_name = if let Some(model_str) = model {
+        // Try to match the provided model string with a known model
+        match model_str.as_str() {
+            "meta-llama/Llama-3.3-70B-Instruct-Turbo" => JsonModeLLMs::MetaLlama33_70b.to_string(),
+            "deepseek-ai/DeepSeek-V3" => JsonModeLLMs::DeepseekV3_671b.to_string(),
+            "Qwen/Qwen2.5-VL-72B-Instruct" => JsonModeLLMs::Qwen25_72b.to_string(),
+            _ => JsonModeLLMs::MetaLlama33_70b.to_string(), // Default if not recognized
+        }
+    } else {
+        // Use default model if none specified
+        JsonModeLLMs::MetaLlama33_70b.to_string()
+    };
+
     let request = serde_json::json!({
-        "model": JsonModeLLMs::MetaLlama33_70b.to_string(),
+        "model": model_name,
         "prompt": format!("{} | Context: ```json\n{}\n```", prompt, context),
         "max_tokens": 1000,
         "temperature": 0.7
