@@ -406,7 +406,8 @@ enum "step_type" {
     schema = schema.public
     values = [
         "python",
-        "prompt"
+        "prompt",
+        "webscrape"
     ]
 }
 

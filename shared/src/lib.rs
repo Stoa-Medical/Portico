@@ -9,6 +9,10 @@ mod tests;
 pub mod models;
 pub use models::{Agent, RuntimeSession, Signal, Step};
 
+/// Module for web scraping functionality
+pub mod webscrape;
+pub use webscrape::scrape_webpage;
+
 // ============ Custom Enums / Traits ============
 // === Imports ===
 use anyhow::{anyhow, Result};

@@ -11,6 +11,8 @@ anyhow = "1.0.95"
 reqwest = { version = "0.12.12", features = ["json"] }
 chrono = { version = "0.4", features = ["serde"] }
 pyo3 = { version = "0.23.4", features = ["auto-initialize"] }
+scraper = "0.18.1"
+url = "2.5.0"
 # SQLx with all needed features
 sqlx = { version = "0.8.3", features = ["postgres", "runtime-tokio", "tls-native-tls", "macros", "uuid", "chrono", "json", "bigdecimal"] }
 tokio = { version = "1.0", features = ["full"] }

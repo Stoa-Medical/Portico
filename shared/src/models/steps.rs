@@ -11,13 +11,17 @@ use uuid::Uuid;
 pub enum StepType {
     Python,
     Prompt(String),
+    WebScrape,
 }
 
 impl StepType {
     pub fn from_str(s: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         match s {
             "python" => Ok(StepType::Python),
-            "prompt" => Ok(StepType::Prompt(crate::JsonModeLLMs::MetaLlama33_70b.to_string())),
+            "prompt" => Ok(StepType::Prompt(
+                crate::JsonModeLLMs::MetaLlama33_70b.to_string(),
+            )),
+            "webscrape" => Ok(StepType::WebScrape),
             _ => Err("Invalid step type".into()),
         }
     }
@@ -26,6 +30,7 @@ impl StepType {
         match self {
             StepType::Python => "python",
             StepType::Prompt(_) => "prompt",
+            StepType::WebScrape => "webscrape",
         }
     }
 
@@ -50,7 +55,10 @@ impl<'r> sqlx::Decode<'r, Postgres> for StepType {
         // Only decode the type string, not the LLM model (which will be handled separately)
         match value.as_str()? {
             "python" => Ok(StepType::Python),
-            "prompt" => Ok(StepType::Prompt(crate::JsonModeLLMs::MetaLlama33_70b.to_string())),
+            "prompt" => Ok(StepType::Prompt(
+                crate::JsonModeLLMs::MetaLlama33_70b.to_string(),
+            )),
+            "webscrape" => Ok(StepType::WebScrape),
             s => Err(format!("Invalid step type: {}", s).into()),
         }
     }
@@ -88,8 +96,10 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Step {
 
         let step_type = match step_type_str {
             "python" => StepType::Python,
-            "prompt" => StepType::Prompt(llm_model.unwrap_or_else(||
-                crate::JsonModeLLMs::MetaLlama33_70b.to_string())),
+            "prompt" => StepType::Prompt(
+                llm_model.unwrap_or_else(|| crate::JsonModeLLMs::MetaLlama33_70b.to_string()),
+            ),
+            "webscrape" => StepType::WebScrape,
             _ => return Err(sqlx::Error::ColumnNotFound("Invalid step type".into())),
         };
 
@@ -135,9 +145,21 @@ impl Step {
         Self {
             identifiers,
             timestamps: TimestampFields::new(),
-            step_type: StepType::Prompt(llm_model.unwrap_or_else(||
-                crate::JsonModeLLMs::MetaLlama33_70b.to_string())),
+            step_type: StepType::Prompt(
+                llm_model.unwrap_or_else(|| crate::JsonModeLLMs::MetaLlama33_70b.to_string()),
+            ),
             step_content,
+            description,
+        }
+    }
+
+    /// Helper method to create a new WebScrape step
+    pub fn new_webscrape(identifiers: IdFields, url: String, description: Option<String>) -> Self {
+        Self {
+            identifiers,
+            timestamps: TimestampFields::new(),
+            step_type: StepType::WebScrape,
+            step_content: url,
             description,
         }
     }
@@ -150,6 +172,11 @@ impl Step {
     /// Check if this step is a Prompt step
     pub fn is_prompt_step(&self) -> bool {
         matches!(self.step_type, StepType::Prompt(_))
+    }
+
+    /// Check if this step is a WebScrape step
+    pub fn is_webscrape_step(&self) -> bool {
+        matches!(self.step_type, StepType::WebScrape)
     }
 
     /// Get the LLM model if this is a Prompt step
@@ -204,10 +231,14 @@ impl Step {
         runtime: Option<&PythonRuntime>,
     ) -> Result<Value> {
         match &self.step_type {
-            StepType::Prompt(llm_model) => match crate::call_llm(&self.step_content, source_data, Some(llm_model.clone())).await {
-                Ok(res_str) => Ok(Value::String(res_str)),
-                Err(err) => Err(anyhow!("Step {} failed: {}", step_idx, err)),
-            },
+            StepType::Prompt(llm_model) => {
+                match crate::call_llm(&self.step_content, source_data, Some(llm_model.clone()))
+                    .await
+                {
+                    Ok(res_str) => Ok(Value::String(res_str)),
+                    Err(err) => Err(anyhow!("Step {} failed: {}", step_idx, err)),
+                }
+            }
             StepType::Python => {
                 // For Python steps, require a runtime
                 if let Some(rt) = runtime {
@@ -217,6 +248,19 @@ impl Step {
                         "Python step {} requires a runtime to execute",
                         step_idx
                     ))
+                }
+            }
+            StepType::WebScrape => {
+                // For WebScrape steps, the step_content should contain the URL to scrape
+                let url = self.step_content.trim();
+                if url.is_empty() {
+                    return Err(anyhow!("WebScrape step {} has empty URL", step_idx));
+                }
+
+                // Call the web scraping function
+                match crate::scrape_webpage(url).await {
+                    Ok(result) => Ok(result),
+                    Err(err) => Err(anyhow!("WebScrape step {} failed: {}", step_idx, err)),
                 }
             }
         }
@@ -270,8 +314,9 @@ impl JsonLike for Step {
         // Create the appropriate StepType based on the type string and llm_model
         let step_type = match step_type_str {
             "python" => StepType::Python,
-            "prompt" => StepType::Prompt(llm_model.unwrap_or_else(||
-                crate::JsonModeLLMs::MetaLlama33_70b.to_string())),
+            "prompt" => StepType::Prompt(
+                llm_model.unwrap_or_else(|| crate::JsonModeLLMs::MetaLlama33_70b.to_string()),
+            ),
             _ => return Err(anyhow!("Invalid step type: {}", step_type_str)),
         };
 
@@ -337,7 +382,7 @@ impl DatabaseItem for Step {
                 (global_uuid, description, step_type, step_content, llm_model)
             VALUES
                 ($1, $2, $3, $4, $5)
-            "#
+            "#,
         )
         .bind(uuid_parsed)
         .bind(&self.description)
@@ -370,7 +415,7 @@ impl DatabaseItem for Step {
                 llm_model = $4,
                 updated_at = CURRENT_TIMESTAMP
             WHERE global_uuid = $5
-            "#
+            "#,
         )
         .bind(&self.description)
         .bind(self.step_type.as_str())
@@ -393,7 +438,7 @@ impl DatabaseItem for Step {
                         llm_model = $4,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE id = $5
-                    "#
+                    "#,
                 )
                 .bind(&self.description)
                 .bind(self.step_type.as_str())
@@ -444,7 +489,7 @@ impl DatabaseItem for Step {
                 created_at, updated_at
             FROM steps
             ORDER BY id
-            "#
+            "#,
         )
         .fetch_all(pool)
         .await?;
@@ -456,8 +501,11 @@ impl DatabaseItem for Step {
                 // Create the appropriate StepType based on the type string and llm_model
                 let step_type = match row.step_type.as_str() {
                     "python" => StepType::Python,
-                    "prompt" => StepType::Prompt(row.llm_model.unwrap_or_else(||
-                        crate::JsonModeLLMs::MetaLlama33_70b.to_string())),
+                    "prompt" => StepType::Prompt(
+                        row.llm_model
+                            .unwrap_or_else(|| crate::JsonModeLLMs::MetaLlama33_70b.to_string()),
+                    ),
+                    "webscrape" => StepType::WebScrape,
                     _ => StepType::Python, // Default fallback
                 };
 
@@ -508,7 +556,7 @@ impl DatabaseItem for Step {
                     created_at, updated_at
                 FROM steps
                 WHERE global_uuid = $1
-                "#
+                "#,
             )
             .bind(uuid_parsed)
             .fetch_optional(pool)
@@ -518,8 +566,11 @@ impl DatabaseItem for Step {
                 // Create the appropriate StepType based on the type string and llm_model
                 let step_type = match row.step_type.as_str() {
                     "python" => StepType::Python,
-                    "prompt" => StepType::Prompt(row.llm_model.unwrap_or_else(||
-                        crate::JsonModeLLMs::MetaLlama33_70b.to_string())),
+                    "prompt" => StepType::Prompt(
+                        row.llm_model
+                            .unwrap_or_else(|| crate::JsonModeLLMs::MetaLlama33_70b.to_string()),
+                    ),
+                    "webscrape" => StepType::WebScrape,
                     _ => StepType::Python, // Default fallback
                 };
 
@@ -549,7 +600,7 @@ impl DatabaseItem for Step {
                     created_at, updated_at
                 FROM steps
                 WHERE id = $1
-                "#
+                "#,
             )
             .bind(local_id)
             .fetch_optional(pool)
@@ -559,8 +610,11 @@ impl DatabaseItem for Step {
                 // Create the appropriate StepType based on the type string and llm_model
                 let step_type = match row.step_type.as_str() {
                     "python" => StepType::Python,
-                    "prompt" => StepType::Prompt(row.llm_model.unwrap_or_else(||
-                        crate::JsonModeLLMs::MetaLlama33_70b.to_string())),
+                    "prompt" => StepType::Prompt(
+                        row.llm_model
+                            .unwrap_or_else(|| crate::JsonModeLLMs::MetaLlama33_70b.to_string()),
+                    ),
+                    "webscrape" => StepType::WebScrape,
                     _ => StepType::Python, // Default fallback
                 };
 
