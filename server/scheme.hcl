@@ -88,6 +88,7 @@ table "signals" {
         ]
     }
 
+    // "rts" == RuntimeSession
     column "rts_id" {
         type = sql("bigint")
         null = true
@@ -381,7 +382,7 @@ table "runtime_sessions" {
 enum "signal_type" {
     schema = schema.public
     values = [
-        "command",
+        "run",
         "sync",
         "fyi"
     ]

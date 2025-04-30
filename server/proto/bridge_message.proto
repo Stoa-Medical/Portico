@@ -6,84 +6,39 @@ import "google/protobuf/struct.proto";
 
 service BridgeService {
   // Initialize server connection
-  rpc InitServer(ServerInitRequest) returns (ServerInitResponse);
+  rpc InitServer(ServerInitRequest) returns (GeneralResponse);
 
-  // Process signals (handles all signal types)
+  // Process signals
   rpc ProcessSignal(SignalRequest) returns (SignalResponse);
+
+  // Process changes
+  rpc CreateAgent(CreateAgentRequest) returns (GeneralResponse);
+  rpc DeleteAgent(DeleteAgentRequest) returns (GeneralResponse);
 }
 
+// === Core definitions ===
 // Server initialization
 message ServerInitRequest {
   bool server_init = 1;
 }
 
-message ServerInitResponse {
+message GeneralResponse {
   bool success = 1;
   string message = 2;
 }
 
 // Signal request structure
 message SignalRequest {
-  string global_uuid = 1;
-  string user_requested_uuid = 2;
+  string signal_uuid = 1;
+  string agent_uuid = 2;
   SignalType signal_type = 3;
 
   // Optional payload based on signal type
   oneof payload {
-    CommandPayload command = 4;
+    google.protobuf.Struct command = 4;
     SyncPayload sync = 5;
     google.protobuf.Struct fyi_data = 6;
   }
-}
-
-enum SignalType {
-  COMMAND = 0;
-  SYNC = 1;
-  FYI = 2;
-}
-
-message CommandPayload {
-  // Type of command operation
-  CommandOperation operation = 1;
-
-  // Target entity type
-  EntityType entity_type = 2;
-
-  // Target entity UUID
-  string entity_uuid = 3;
-
-  // Payload data for create/update/run operations
-  google.protobuf.Struct data = 4;
-
-  // For update operations, specific fields to update
-  repeated string update_fields = 5;
-}
-
-enum CommandOperation {
-  CREATE = 0;
-  DELETE = 1;
-  RUN = 2;
-}
-
-enum EntityType {
-  AGENT = 0;
-  STEP = 1;
-}
-
-message SyncPayload {
-  // Sync scope
-  SyncScope scope = 1;
-
-  // Optional specific entity UUIDs to sync (if not ALL)
-  repeated string entity_uuids = 2;
-
-  // Target entity types to sync
-  repeated EntityType entity_types = 3;
-}
-
-enum SyncScope {
-  ALL = 0;
-  SPECIFIC = 1;
 }
 
 // Response with the result of processing the signal
@@ -92,4 +47,33 @@ message SignalResponse {
   string message = 2;
   string runtime_session_uuid = 3;
   google.protobuf.Struct result_data = 4;
+}
+
+message CreateAgentRequest {
+  google.protobuf.Struct agent_json = 1;
+}
+
+message DeleteAgentRequest {
+  string agent_uuid = 1;
+}
+
+// === Sub definitions ===
+
+enum SignalType {
+  RUN = 0;
+  SYNC = 1;
+  FYI = 2;
+}
+
+message SyncPayload {
+  // Sync scope
+  SyncScope scope = 1;
+
+  // Optional specific UUIDs to sync (if not ALL)
+  repeated string agent_uuids = 2;
+}
+
+enum SyncScope {
+  ALL = 0;
+  SPECIFIC = 1;
 }
