@@ -1,15 +1,10 @@
 use crate::core::agent_manager::AgentManager;
-use crate::json_to_proto_struct;
 use crate::proto::bridge_service_server::{BridgeService, BridgeServiceServer};
-use crate::proto::signal_request;
-use crate::proto::SignalType;
 use crate::proto::{
     CreateAgentRequest, DeleteAgentRequest, GeneralResponse, ServerInitRequest, SignalRequest,
     SignalResponse,
 };
-use crate::proto_struct_to_json;
 use crate::SharedAgentMap;
-use serde_json::Value;
 use sqlx::PgPool;
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
@@ -93,40 +88,12 @@ impl BridgeService for RpcServer {
         println!("[INFO] Received create_agent request");
 
         if let Some(agent_json) = &agent_request.agent_json {
-            let agent_data = proto_struct_to_json(agent_json);
-
-            // Create a SignalRequest with RUN operation to reuse existing logic
-            let mut run_data = serde_json::Map::new();
-            run_data.insert("operation".to_string(), Value::String("CREATE".to_string()));
-            run_data.insert(
-                "entity_type".to_string(),
-                Value::String("AGENT".to_string()),
-            );
-            run_data.insert("data".to_string(), agent_data);
-
-            let signal_uuid = uuid::Uuid::new_v4().to_string();
-
-            // Convert run_data to a proto struct
-            let run_data_value = Value::Object(run_data);
-            let run_data_struct = json_to_proto_struct(&run_data_value);
-
-            // Create a SignalRequest
-            let signal = SignalRequest {
-                signal_uuid,
-                agent_uuid: String::new(), // Not needed for creation
-                signal_type: SignalType::Run as i32,
-                payload: Some(signal_request::Payload::RunData(run_data_struct)),
-            };
-
-            // Process the signal
+            // Use the create_agent handler directly
             let mut manager = self.agent_manager.lock().await;
-            match manager.process_signal(signal).await {
+            match crate::handlers::create::handle_create_agent(&mut *manager, agent_json).await {
                 Ok(response) => {
                     println!("[INFO] Agent created successfully");
-                    Ok(Response::new(GeneralResponse {
-                        success: true,
-                        message: format!("Agent created successfully: {}", response.message),
-                    }))
+                    Ok(Response::new(response))
                 }
                 Err(status) => {
                     eprintln!("[ERROR] Failed to create agent: {}", status);
@@ -158,36 +125,12 @@ impl BridgeService for RpcServer {
             ));
         }
 
-        // Create a SignalRequest with RUN operation to reuse existing logic
-        let mut run_data = serde_json::Map::new();
-        run_data.insert("operation".to_string(), Value::String("DELETE".to_string()));
-        run_data.insert(
-            "entity_type".to_string(),
-            Value::String("AGENT".to_string()),
-        );
-        run_data.insert("entity_uuid".to_string(), Value::String(agent_uuid.clone()));
-
-        // Convert run_data to a proto struct
-        let run_data_value = Value::Object(run_data);
-        let run_data_struct = json_to_proto_struct(&run_data_value);
-
-        // Create a SignalRequest
-        let signal = SignalRequest {
-            signal_uuid: uuid::Uuid::new_v4().to_string(),
-            agent_uuid: agent_uuid.clone(), // Use the agent_uuid from the request
-            signal_type: SignalType::Run as i32,
-            payload: Some(signal_request::Payload::RunData(run_data_struct)),
-        };
-
-        // Process the signal
+        // Use the delete_agent handler directly
         let mut manager = self.agent_manager.lock().await;
-        match manager.process_signal(signal).await {
+        match crate::handlers::delete::handle_delete_agent(&mut *manager, agent_uuid).await {
             Ok(response) => {
                 println!("[INFO] Agent deleted successfully");
-                Ok(Response::new(GeneralResponse {
-                    success: true,
-                    message: format!("Agent deleted successfully: {}", response.message),
-                }))
+                Ok(Response::new(response))
             }
             Err(status) => {
                 eprintln!("[ERROR] Failed to delete agent: {}", status);
