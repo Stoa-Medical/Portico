@@ -107,7 +107,7 @@ impl AgentManager {
                     if let Some(crate::proto::signal_request::Payload::RunData(run_data)) =
                         &signal.payload
                     {
-                        // Process the run data directly - the new schema doesn't use entity_type
+                        // Process the run data - expecting a "data" field in the wrapper
                         if let Some(data_field) = run_data.fields.get("data") {
                             if let Some(value) = &data_field.kind {
                                 if let prost_types::value::Kind::StructValue(data_struct) = value {

@@ -72,6 +72,21 @@ class BridgeClient:
                 logger.error("gRPC stub not initialized")
                 return None
             response = await self.stub.ProcessSignal(signal_request)
+
+            # Log the runtime_session_uuid if present
+            if (
+                response
+                and hasattr(response, "runtime_session_uuid")
+                and response.runtime_session_uuid
+            ):
+                logger.info(
+                    f"Received runtime_session_uuid: {response.runtime_session_uuid}"
+                )
+
+                # In a real implementation, you might want to update the database with this UUID
+                # to link the signal with the runtime session
+                # Example: update_signal_with_session_uuid(signal_request.signal_uuid, response.runtime_session_uuid)
+
             return response
         except Exception as e:
             logger.error(f"Error processing signal: {sanitize_data(str(e))}")
@@ -128,9 +143,18 @@ async def create_signal_request(data: dict[str, Any]) -> Any:
             logger.error("No record found in data payload")
             return None
 
-        # Create the SignalRequest
-        global_uuid = str(get(record, "global_uuid", uuid.uuid4()))
-        user_requested_uuid = str(get(record, "user_requested_uuid", ""))
+        # Extract the necessary fields from the record
+        signal_uuid = str(get(record, "global_uuid", uuid.uuid4()))
+
+        # Get the agent_id from the record and fetch the corresponding agent's global_uuid
+        agent_id = get(record, "agent_id")
+        agent_uuid = ""
+        if agent_id:
+            # In a real implementation, you would fetch the agent's global_uuid from the database
+            # For now, we'll use the agent_id as a placeholder
+            agent_uuid = str(agent_id)
+        else:
+            logger.warning("No agent_id found in record, using empty agent_uuid")
 
         # Determine signal type
         signal_type_str = get(record, "signal_type", "").upper()
@@ -154,22 +178,26 @@ async def create_signal_request(data: dict[str, Any]) -> Any:
                 logger.error(f"Invalid JSON in initial_data: {initial_data}")
                 initial_data = {}
 
-        # Create the base request via pb2 namespace
+        # Create the base request via pb2 namespace using the correct field names
         request = pb2.SignalRequest(
-            global_uuid=global_uuid,
-            user_requested_uuid=user_requested_uuid,
+            signal_uuid=signal_uuid,
+            agent_uuid=agent_uuid,
             signal_type=signal_type,
         )
 
         # Handle payload based on signal type - access via pb2 namespace
         if signal_type == pb2.SignalType.RUN:
-            # Convert the initial_data directly to a Struct
-            request.run_data.CopyFrom(dict_to_struct(initial_data))
+            # Ensure the run_data has the expected structure with a "data" field
+            # that the Rust engine is looking for
+            run_data_wrapper = {"data": initial_data}
+            request.run_data.CopyFrom(dict_to_struct(run_data_wrapper))
         elif signal_type == pb2.SignalType.SYNC:
             sync_payload = create_sync_payload(initial_data)
             request.sync.CopyFrom(sync_payload)
         elif signal_type == pb2.SignalType.FYI:
-            request.fyi_data.CopyFrom(dict_to_struct(initial_data))
+            # Wrap fyi_data in a similar structure for consistency
+            fyi_data_wrapper = {"data": initial_data}
+            request.fyi_data.CopyFrom(dict_to_struct(fyi_data_wrapper))
 
         return request
     except Exception as e:
