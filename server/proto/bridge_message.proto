@@ -35,7 +35,7 @@ message SignalRequest {
 
   // Optional payload based on signal type
   oneof payload {
-    google.protobuf.Struct command = 4;
+    google.protobuf.Struct run_data = 4;
     SyncPayload sync = 5;
     google.protobuf.Struct fyi_data = 6;
   }

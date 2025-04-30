@@ -5,9 +5,9 @@ This script simulates sending different types of signals to the bridge service
 through Supabase.
 
 Usage:
-    python -m src.test_client command  # Send a command signal
-    python -m src.test_client sync     # Send a sync signal
-    python -m src.test_client fyi      # Send an FYI signal
+    python -m src.test_client run     # Send a run signal
+    python -m src.test_client sync    # Send a sync signal
+    python -m src.test_client fyi     # Send a FYI signal
 """
 
 import os
@@ -51,11 +51,11 @@ async def insert_test_signal(client, signal_type, payload=None):
         return None
 
 
-async def create_command_signal(client):
-    """Create a COMMAND signal"""
+async def create_run_signal(client):
+    """Create a RUN signal"""
 
     # Example: Create a new agent
-    command_payload = {
+    run_payload = {
         "operation": "CREATE",
         "entity_type": "AGENT",
         "entity_uuid": str(uuid.uuid4()),
@@ -68,7 +68,7 @@ async def create_command_signal(client):
         },
     }
 
-    return await insert_test_signal(client, "command", command_payload)
+    return await insert_test_signal(client, "RUN", run_payload)
 
 
 async def create_sync_signal(client):
@@ -77,7 +77,7 @@ async def create_sync_signal(client):
     # Example: Sync all agents
     sync_payload = {"scope": "ALL", "entity_types": ["AGENT"]}
 
-    return await insert_test_signal(client, "sync", sync_payload)
+    return await insert_test_signal(client, "SYNC", sync_payload)
 
 
 async def create_fyi_signal(client):
@@ -90,7 +90,7 @@ async def create_fyi_signal(client):
         "metadata": {"source": "test_client.py"},
     }
 
-    return await insert_test_signal(client, "fyi", fyi_payload)
+    return await insert_test_signal(client, "FYI", fyi_payload)
 
 
 async def main():
@@ -113,21 +113,21 @@ async def main():
 
     # Get the signal type from command line
     if len(sys.argv) < 2:
-        print("Please specify a signal type: command, sync, or fyi")
+        print("Please specify a signal type: run, sync, or fyi")
         return 1
 
     signal_type = sys.argv[1].lower()
 
     try:
-        if signal_type == "command":
-            await create_command_signal(client)
+        if signal_type == "run":
+            await create_run_signal(client)
         elif signal_type == "sync":
             await create_sync_signal(client)
         elif signal_type == "fyi":
             await create_fyi_signal(client)
         else:
             print(f"Unknown signal type: {signal_type}")
-            print("Please specify one of: command, sync, or fyi")
+            print("Please specify one of: run, sync, or fyi")
             return 1
     except Exception as e:
         print(f"Error: {e}")

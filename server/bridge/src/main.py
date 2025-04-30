@@ -8,8 +8,8 @@ This is a Python microservice that:
 
 So the flow is:
                         Triggers:
-                        • Signals (on CREATE). Either `Command` or `Sync`
-                        - `Command` requests Create/Update/Delete/Run of specific Agent/Step
+                        • Signals (on CREATE). Either `Run` or `Sync`
+                        - `Run` requests Create/Update/Delete/Run of specific Agent/Step
                         - `Sync` requests a re-read/serialization of specific Agent/Step (or of all)
 ┌────────┐         ┌──────────┐         ┌────────┐         ┌────────┐
 │  User  │────────▶│`supabase`│────────▶│`bridge`│────────▶│`engine`│
@@ -31,7 +31,12 @@ from supabase import create_async_client
 from dotenv import load_dotenv
 
 from src.lib import logger
-from src.lib import BridgeClient, handle_new_signal
+from src.lib import (
+    BridgeClient,
+    handle_signal_insert,
+    handle_agent_insert,
+    handle_agent_delete,
+)
 
 # Ensure proto files are generated
 from src.proto import build_proto
@@ -101,14 +106,34 @@ async def main():
     # Subscribe to changes on the `signals` table (only when added)
     channel_signals.on_postgres_changes(
         event="INSERT",
-        callback=lambda payload, handler=handle_new_signal: asyncio.create_task(
-            handler(payload, grpc_client)
+        callback=lambda payload: asyncio.create_task(
+            handle_signal_insert(payload, grpc_client)
         ),
         table="signals",
         schema="public",
     )
     await channel_signals.subscribe()
-
+    # Also subscribe to Agent Create/Delete
+    channel_agents = client.channel("agent-inserts")
+    channel_agents.on_postgres_changes(
+        event="INSERT",
+        callback=lambda payload: asyncio.create_task(
+            handle_agent_insert(payload, grpc_client)
+        ),
+        table="agents",
+        schema="public",
+    )
+    await channel_agents.subscribe()
+    channel_agents_deletes = client.channel("agent-deletes")
+    channel_agents.on_postgres_changes(
+        event="INSERT",
+        callback=lambda payload: asyncio.create_task(
+            handle_agent_delete(payload, grpc_client)
+        ),
+        table="agents",
+        schema="public",
+    )
+    await channel_agents_deletes.subscribe()
     logger.info("Subscribed to Supabase realtime channels")
 
     # Use asyncio.Event for cleaner termination
@@ -119,7 +144,11 @@ async def main():
         asyncio.get_event_loop().add_signal_handler(
             sig,
             lambda: asyncio.create_task(
-                shutdown([channel_signals], stop_event, grpc_client)
+                shutdown(
+                    [channel_signals, channel_agents, channel_agents_deletes],
+                    stop_event,
+                    grpc_client,
+                )
             ),
         )
 

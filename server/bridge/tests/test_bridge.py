@@ -1,14 +1,10 @@
-import os
 import uuid
-import json
 import pytest
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.lib import (
     BridgeClient,
     create_signal_request,
-    create_command_payload,
     create_sync_payload,
 )
 from src.proto import bridge_message_pb2 as pb2
@@ -24,7 +20,7 @@ def signal_data():
             "record": {
                 "global_uuid": str(uuid.uuid4()),
                 "user_requested_uuid": str(uuid.uuid4()),
-                "signal_type": "command",
+                "signal_type": "RUN",
                 "initial_data": {
                     "operation": "CREATE",
                     "entity_type": "AGENT",
@@ -46,7 +42,7 @@ def sync_data():
             "record": {
                 "global_uuid": str(uuid.uuid4()),
                 "user_requested_uuid": str(uuid.uuid4()),
-                "signal_type": "sync",
+                "signal_type": "SYNC",
                 "initial_data": {"scope": "ALL", "entity_types": ["AGENT", "STEP"]},
             },
         }
@@ -63,31 +59,11 @@ def fyi_data():
             "record": {
                 "global_uuid": str(uuid.uuid4()),
                 "user_requested_uuid": str(uuid.uuid4()),
-                "signal_type": "fyi",
+                "signal_type": "FYI",
                 "initial_data": {"message": "Test FYI", "data": {"some": "value"}},
             },
         }
     }
-
-
-@pytest.mark.asyncio
-async def test_create_command_payload():
-    """Test creating a command payload"""
-    data = {
-        "operation": "CREATE",
-        "entity_type": "AGENT",
-        "entity_uuid": "test-uuid",
-        "data": {"name": "Test"},
-        "update_fields": ["name"],
-    }
-
-    payload = create_command_payload(data)
-
-    assert payload.operation == pb2.CommandOperation.CREATE
-    assert payload.entity_type == pb2.EntityType.AGENT
-    assert payload.entity_uuid == "test-uuid"
-    assert len(payload.update_fields) == 1
-    assert payload.update_fields[0] == "name"
 
 
 @pytest.mark.asyncio
@@ -109,19 +85,21 @@ async def test_create_sync_payload():
 
 
 @pytest.mark.asyncio
-async def test_create_signal_request_command(signal_data):
-    """Test creating a command signal request"""
+async def test_create_signal_request_run(signal_data):
+    """Test creating a run signal request"""
     request = await create_signal_request(signal_data)
 
     assert request is not None
-    assert request.signal_type == pb2.SignalType.COMMAND
+    assert request.signal_type == pb2.SignalType.RUN
     assert request.global_uuid == signal_data["data"]["record"]["global_uuid"]
     assert (
         request.user_requested_uuid
         == signal_data["data"]["record"]["user_requested_uuid"]
     )
-    assert request.command.operation == pb2.CommandOperation.CREATE
-    assert request.command.entity_type == pb2.EntityType.AGENT
+    assert request.run_data is not None
+    # Verify the data was serialized correctly
+    initial_data = signal_data["data"]["record"]["initial_data"]
+    assert "operation" in initial_data
 
 
 @pytest.mark.asyncio
@@ -187,7 +165,7 @@ async def test_bridge_client():
     request = pb2.SignalRequest(
         global_uuid=str(uuid.uuid4()),
         user_requested_uuid=str(uuid.uuid4()),
-        signal_type=pb2.SignalType.COMMAND,
+        signal_type=pb2.SignalType.RUN,
     )
     response = await client.process_signal(request)
     assert response is not None

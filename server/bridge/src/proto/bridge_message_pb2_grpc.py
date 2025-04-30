@@ -40,13 +40,25 @@ class BridgeServiceStub(object):
         self.InitServer = channel.unary_unary(
             "/portico.BridgeService/InitServer",
             request_serializer=bridge__message__pb2.ServerInitRequest.SerializeToString,
-            response_deserializer=bridge__message__pb2.ServerInitResponse.FromString,
+            response_deserializer=bridge__message__pb2.GeneralResponse.FromString,
             _registered_method=True,
         )
         self.ProcessSignal = channel.unary_unary(
             "/portico.BridgeService/ProcessSignal",
             request_serializer=bridge__message__pb2.SignalRequest.SerializeToString,
             response_deserializer=bridge__message__pb2.SignalResponse.FromString,
+            _registered_method=True,
+        )
+        self.CreateAgent = channel.unary_unary(
+            "/portico.BridgeService/CreateAgent",
+            request_serializer=bridge__message__pb2.CreateAgentRequest.SerializeToString,
+            response_deserializer=bridge__message__pb2.GeneralResponse.FromString,
+            _registered_method=True,
+        )
+        self.DeleteAgent = channel.unary_unary(
+            "/portico.BridgeService/DeleteAgent",
+            request_serializer=bridge__message__pb2.DeleteAgentRequest.SerializeToString,
+            response_deserializer=bridge__message__pb2.GeneralResponse.FromString,
             _registered_method=True,
         )
 
@@ -61,7 +73,19 @@ class BridgeServiceServicer(object):
         raise NotImplementedError("Method not implemented!")
 
     def ProcessSignal(self, request, context):
-        """Process signals (handles all signal types)"""
+        """Process signals"""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def CreateAgent(self, request, context):
+        """Process changes"""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
+    def DeleteAgent(self, request, context):
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
@@ -72,12 +96,22 @@ def add_BridgeServiceServicer_to_server(servicer, server):
         "InitServer": grpc.unary_unary_rpc_method_handler(
             servicer.InitServer,
             request_deserializer=bridge__message__pb2.ServerInitRequest.FromString,
-            response_serializer=bridge__message__pb2.ServerInitResponse.SerializeToString,
+            response_serializer=bridge__message__pb2.GeneralResponse.SerializeToString,
         ),
         "ProcessSignal": grpc.unary_unary_rpc_method_handler(
             servicer.ProcessSignal,
             request_deserializer=bridge__message__pb2.SignalRequest.FromString,
             response_serializer=bridge__message__pb2.SignalResponse.SerializeToString,
+        ),
+        "CreateAgent": grpc.unary_unary_rpc_method_handler(
+            servicer.CreateAgent,
+            request_deserializer=bridge__message__pb2.CreateAgentRequest.FromString,
+            response_serializer=bridge__message__pb2.GeneralResponse.SerializeToString,
+        ),
+        "DeleteAgent": grpc.unary_unary_rpc_method_handler(
+            servicer.DeleteAgent,
+            request_deserializer=bridge__message__pb2.DeleteAgentRequest.FromString,
+            response_serializer=bridge__message__pb2.GeneralResponse.SerializeToString,
         ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -109,7 +143,7 @@ class BridgeService(object):
             target,
             "/portico.BridgeService/InitServer",
             bridge__message__pb2.ServerInitRequest.SerializeToString,
-            bridge__message__pb2.ServerInitResponse.FromString,
+            bridge__message__pb2.GeneralResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -140,6 +174,66 @@ class BridgeService(object):
             "/portico.BridgeService/ProcessSignal",
             bridge__message__pb2.SignalRequest.SerializeToString,
             bridge__message__pb2.SignalResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def CreateAgent(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/portico.BridgeService/CreateAgent",
+            bridge__message__pb2.CreateAgentRequest.SerializeToString,
+            bridge__message__pb2.GeneralResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def DeleteAgent(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/portico.BridgeService/DeleteAgent",
+            bridge__message__pb2.DeleteAgentRequest.SerializeToString,
+            bridge__message__pb2.GeneralResponse.FromString,
             options,
             channel_credentials,
             insecure,
