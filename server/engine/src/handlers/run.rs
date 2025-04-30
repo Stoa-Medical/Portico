@@ -236,67 +236,57 @@ pub async fn handle_run(
     signal: SignalRequest,
     runtime_session_uuid: String,
 ) -> Result<SignalResponse, Status> {
+    // Process run signal with original field names (signal_uuid, agent_uuid)
+    println!(
+        "[INFO] Processing run operation for signal: {}",
+        signal.signal_uuid
+    );
+
     if let Some(signal_request::Payload::RunData(run_data)) = &signal.payload {
-        let agent_uuid = run_data
-            .fields
-            .get("entity_uuid")
-            .and_then(|f| f.kind.as_ref())
-            .and_then(|k| match k {
-                prost_types::value::Kind::StringValue(s) => Some(s.clone()),
-                _ => None,
-            })
-            .unwrap_or_default();
+        // Use agent_uuid as the agent UUID, or attempt to extract from run_data if not present
+        let agent_uuid = if !signal.agent_uuid.is_empty() {
+            signal.agent_uuid.clone()
+        } else {
+            run_data
+                .fields
+                .get("entity_uuid")
+                .and_then(|f| f.kind.as_ref())
+                .and_then(|k| match k {
+                    prost_types::value::Kind::StringValue(s) => Some(s.clone()),
+                    _ => None,
+                })
+                .unwrap_or_default()
+        };
 
         if agent_uuid.is_empty() {
             return Err(Status::invalid_argument(
-                "Missing entity_uuid for run operation",
+                "Missing agent_uuid for RUN operation",
             ));
         }
 
-        println!("[INFO] Processing run operation for agent {}", agent_uuid);
-
-        // Check if agent exists
-        let agent_exists = {
-            let agents_guard = manager.agents.read().await;
-            agents_guard.contains_key(&agent_uuid)
-        };
-
-        if !agent_exists {
-            eprintln!(
-                "[ERROR] Agent run failed: Agent with UUID {} not found",
-                agent_uuid
-            );
-            return Err(Status::not_found(format!(
-                "Agent with UUID {} not found",
-                agent_uuid
-            )));
-        }
-
-        // Send to the agent's queue
-        if let Some(tx) = manager.message_queues.get(&agent_uuid) {
-            match tx.send(signal).await {
-                Ok(_) => {
-                    println!("[INFO] Run operation queued for agent {}", agent_uuid);
-                    Ok(SignalResponse {
-                        success: true,
-                        message: format!("Run operation queued for agent {}", agent_uuid),
-                        runtime_session_uuid,
-                        result_data: None,
-                    })
-                }
-                Err(e) => {
-                    eprintln!("[ERROR] Failed to send run command to agent queue: {}", e);
-                    Err(Status::internal("Failed to queue run operation"))
-                }
+        // Forward the signal to the agent's queue if it exists
+        if let Some(queue) = manager.message_queues.get(&agent_uuid) {
+            if let Err(e) = queue.send(signal.clone()).await {
+                eprintln!("[ERROR] Failed to send signal to agent queue: {}", e);
+                return Err(Status::internal("Failed to forward signal to agent queue"));
             }
+
+            Ok(SignalResponse {
+                success: true,
+                message: format!("Signal forwarded to agent {}", agent_uuid),
+                runtime_session_uuid,
+                result_data: None,
+            })
         } else {
-            eprintln!("[ERROR] Agent queue for UUID {} not found", agent_uuid);
-            Err(Status::internal(format!(
-                "Message queue for agent {} not found",
+            eprintln!("[ERROR] No queue found for agent: {}", agent_uuid);
+            Err(Status::not_found(format!(
+                "Agent with UUID {} not found",
                 agent_uuid
             )))
         }
     } else {
-        Err(Status::invalid_argument("Missing run_data payload"))
+        Err(Status::invalid_argument(
+            "Missing run_data for RUN signal type",
+        ))
     }
 }

@@ -3,7 +3,8 @@ use crate::proto::signal_request;
 use crate::proto::{SignalRequest, SignalResponse, SignalType};
 use crate::proto_struct_to_json;
 use crate::SharedAgentMap;
-use portico_shared::DatabaseItem;
+use portico_shared::{DatabaseItem, RunningStatus, RuntimeSession};
+use serde_json::json;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -57,6 +58,12 @@ impl AgentManager {
         signal: SignalRequest,
     ) -> Result<SignalResponse, Status> {
         let runtime_session_uuid = uuid::Uuid::new_v4().to_string();
+
+        println!(
+            "[INFO] Processing signal: type={:?}, signal_uuid={}",
+            signal.signal_type(),
+            signal.signal_uuid
+        );
 
         match signal.signal_type() {
             SignalType::Run => {
@@ -131,8 +138,9 @@ impl AgentManager {
 
             while let Some(signal) = rx.recv().await {
                 println!(
-                    "[INFO] Agent {} worker processing signal type {:?}",
+                    "[INFO] Agent {} worker processing signal: signal_uuid={}, type={:?}",
                     agent_uuid,
+                    signal.signal_uuid,
                     signal.signal_type()
                 );
 
@@ -172,12 +180,13 @@ impl AgentManager {
 
                                             if let Some(agent) = agents_guard.get(&agent_uuid) {
                                                 println!(
-                                                    "[INFO] Running agent {} with data",
-                                                    agent_uuid
+                                                    "[INFO] Running agent {} with data from signal {}",
+                                                    agent_uuid,
+                                                    signal.signal_uuid
                                                 );
 
                                                 // Call agent.run() which creates a RuntimeSession internally
-                                                match agent.run(run_data_json).await {
+                                                match agent.run(run_data_json.clone()).await {
                                                     Ok(session) => {
                                                         println!(
                                                             "[INFO] Agent execution successful, saving session"
@@ -195,6 +204,42 @@ impl AgentManager {
                                                             "[ERROR] Agent execution failed: {}",
                                                             e
                                                         );
+
+                                                        // Create a failed session
+                                                        println!("[INFO] Creating and saving failed RuntimeSession");
+
+                                                        // Extract steps from the agent
+                                                        let steps = agent.steps.clone();
+
+                                                        // Create a new RuntimeSession with failed status
+                                                        let mut failed_session =
+                                                            RuntimeSession::new(
+                                                                run_data_json,
+                                                                steps,
+                                                            );
+
+                                                        // Set the status to Cancelled
+                                                        failed_session.status =
+                                                            RunningStatus::Cancelled;
+
+                                                        // Set the last result to include the error message
+                                                        failed_session.last_successful_result =
+                                                            Some(json!({
+                                                                "error": e.to_string(),
+                                                                "signal_uuid": signal.signal_uuid,
+                                                                "agent_uuid": agent_uuid
+                                                            }));
+
+                                                        // Try to save the failed session
+                                                        if let Err(db_err) = failed_session
+                                                            .try_db_create(&db_pool)
+                                                            .await
+                                                        {
+                                                            eprintln!("[ERROR] Failed to save error session: {}", db_err);
+                                                        } else {
+                                                            println!("[INFO] Failed session saved successfully with UUID: {}",
+                                                                     failed_session.identifiers.global_uuid);
+                                                        }
                                                     }
                                                 }
                                             } else {

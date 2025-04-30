@@ -11,7 +11,10 @@ pub async fn handle_sync(
     signal: &SignalRequest,
     runtime_session_uuid: String,
 ) -> Result<SignalResponse, Status> {
-    println!("[INFO] Processing sync operation");
+    println!(
+        "[INFO] Processing sync operation for signal: {}",
+        signal.signal_uuid
+    );
 
     if let Some(crate::proto::signal_request::Payload::Sync(sync)) = &signal.payload {
         match sync.scope() {
@@ -54,6 +57,8 @@ pub async fn handle_sync(
                     if let Some(agent) = agents.get(uuid) {
                         let agent_json = agent.to_json();
                         result_map.insert(uuid.clone(), agent_json);
+                    } else {
+                        println!("[WARN] Agent with UUID {} not found", uuid);
                     }
                 }
 
