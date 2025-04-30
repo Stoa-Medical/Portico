@@ -1,6 +1,6 @@
 use crate::handlers::{command, fyi, sync};
 use crate::proto::signal_request;
-use crate::proto::{CommandOperation, EntityType, SignalRequest, SignalResponse, SignalType};
+use crate::proto::{SignalRequest, SignalResponse, SignalType};
 use crate::proto_struct_to_json;
 use crate::SharedAgentMap;
 use portico_shared::DatabaseItem;
@@ -59,22 +59,47 @@ impl AgentManager {
         let runtime_session_uuid = uuid::Uuid::new_v4().to_string();
 
         match signal.signal_type() {
-            SignalType::Command => {
-                if let Some(signal_request::Payload::Command(cmd)) = &signal.payload {
-                    match cmd.operation() {
-                        CommandOperation::Create => {
-                            command::handle_create(self, cmd, runtime_session_uuid).await
+            SignalType::Run => {
+                if let Some(signal_request::Payload::RunData(run_data)) = &signal.payload {
+                    let operation_str = if let Some(operation_field) =
+                        run_data.fields.get("operation")
+                    {
+                        if let Some(value) = &operation_field.kind {
+                            match value {
+                                prost_types::value::Kind::StringValue(s) => s.clone(),
+                                _ => {
+                                    return Err(Status::invalid_argument(
+                                        "operation field is not a string",
+                                    ))
+                                }
+                            }
+                        } else {
+                            return Err(Status::invalid_argument("operation field has no value"));
                         }
-                        CommandOperation::Delete => {
-                            command::handle_delete(self, cmd, runtime_session_uuid).await
+                    } else {
+                        return Err(Status::invalid_argument(
+                            "Missing operation field in run_data",
+                        ));
+                    };
+
+                    match operation_str.as_str() {
+                        "CREATE" => {
+                            command::handle_create(self, run_data, runtime_session_uuid).await
                         }
-                        CommandOperation::Run => {
+                        "DELETE" => {
+                            command::handle_delete(self, run_data, runtime_session_uuid).await
+                        }
+                        "RUN" => {
                             command::handle_run(self, signal.clone(), runtime_session_uuid).await
                         }
+                        _ => Err(Status::invalid_argument(format!(
+                            "Invalid operation type: {}",
+                            operation_str
+                        ))),
                     }
                 } else {
                     Err(Status::invalid_argument(
-                        "Missing command payload for COMMAND signal type",
+                        "Missing run_data payload for RUN signal type",
                     ))
                 }
             }
@@ -111,38 +136,75 @@ impl AgentManager {
                     signal.signal_type()
                 );
 
-                if let SignalType::Command = signal.signal_type() {
-                    if let Some(crate::proto::signal_request::Payload::Command(cmd)) =
+                if let SignalType::Run = signal.signal_type() {
+                    if let Some(crate::proto::signal_request::Payload::RunData(run_data)) =
                         &signal.payload
                     {
-                        if cmd.entity_type() == EntityType::Agent
-                            && cmd.operation() == CommandOperation::Run
+                        let entity_type_opt = run_data
+                            .fields
+                            .get("entity_type")
+                            .and_then(|f| f.kind.as_ref())
+                            .and_then(|k| match k {
+                                prost_types::value::Kind::StringValue(s) => Some(s.clone()),
+                                _ => None,
+                            });
+
+                        let operation_opt = run_data
+                            .fields
+                            .get("operation")
+                            .and_then(|f| f.kind.as_ref())
+                            .and_then(|k| match k {
+                                prost_types::value::Kind::StringValue(s) => Some(s.clone()),
+                                _ => None,
+                            });
+
+                        if let (Some(entity_type), Some(operation)) =
+                            (entity_type_opt, operation_opt)
                         {
-                            if let Some(data) = &cmd.data {
-                                let run_data = proto_struct_to_json(data);
-                                let agents_guard = agents.read().await;
+                            if entity_type == "AGENT" && operation == "RUN" {
+                                if let Some(data_field) = run_data.fields.get("data") {
+                                    if let Some(value) = &data_field.kind {
+                                        if let prost_types::value::Kind::StructValue(data_struct) =
+                                            value
+                                        {
+                                            let run_data_json = proto_struct_to_json(data_struct);
+                                            let agents_guard = agents.read().await;
 
-                                if let Some(agent) = agents_guard.get(&agent_uuid) {
-                                    println!("[INFO] Running agent {} with data", agent_uuid);
+                                            if let Some(agent) = agents_guard.get(&agent_uuid) {
+                                                println!(
+                                                    "[INFO] Running agent {} with data",
+                                                    agent_uuid
+                                                );
 
-                                    // Call agent.run() which creates a RuntimeSession internally
-                                    match agent.run(run_data).await {
-                                        Ok(session) => {
-                                            println!(
-                                                "[INFO] Agent execution successful, saving session"
-                                            );
+                                                // Call agent.run() which creates a RuntimeSession internally
+                                                match agent.run(run_data_json).await {
+                                                    Ok(session) => {
+                                                        println!(
+                                                            "[INFO] Agent execution successful, saving session"
+                                                        );
 
-                                            // Save the session to the database using the DatabaseItem trait
-                                            if let Err(e) = session.try_db_create(&db_pool).await {
-                                                eprintln!("[ERROR] Failed to save session: {}", e);
+                                                        // Save the session to the database using the DatabaseItem trait
+                                                        if let Err(e) =
+                                                            session.try_db_create(&db_pool).await
+                                                        {
+                                                            eprintln!("[ERROR] Failed to save session: {}", e);
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        eprintln!(
+                                                            "[ERROR] Agent execution failed: {}",
+                                                            e
+                                                        );
+                                                    }
+                                                }
+                                            } else {
+                                                eprintln!(
+                                                    "[ERROR] Agent {} not found in map",
+                                                    agent_uuid
+                                                );
                                             }
                                         }
-                                        Err(e) => {
-                                            eprintln!("[ERROR] Agent execution failed: {}", e);
-                                        }
                                     }
-                                } else {
-                                    eprintln!("[ERROR] Agent {} not found in map", agent_uuid);
                                 }
                             }
                         }

@@ -38,19 +38,19 @@ pub async fn handle_sync(
             }
             SyncScope::Specific => {
                 // Check if specific UUIDs were provided
-                if sync.entity_uuids.is_empty() {
+                if sync.agent_uuids.is_empty() {
                     return Err(Status::invalid_argument(
-                        "Missing entity_uuids for SPECIFIC sync scope",
+                        "Missing agent_uuids for SPECIFIC sync scope",
                     ));
                 }
 
-                println!("[INFO] Syncing specific entities: {:?}", sync.entity_uuids);
+                println!("[INFO] Syncing specific entities: {:?}", sync.agent_uuids);
 
                 // Sync specific entities by UUID
                 let agents = manager.agents.read().await;
                 let mut result_map = serde_json::Map::new();
 
-                for uuid in &sync.entity_uuids {
+                for uuid in &sync.agent_uuids {
                     if let Some(agent) = agents.get(uuid) {
                         let agent_json = agent.to_json();
                         result_map.insert(uuid.clone(), agent_json);

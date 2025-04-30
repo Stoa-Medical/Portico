@@ -16,7 +16,7 @@ The Bridge Service is a middleware component that connects the Supabase database
 
 The Bridge Service handles three types of signals:
 
-1. **Command Signals**: Create, update, delete, or run operations on Agents and Steps
+1. **Run Signals**: Create, update, delete, or run operations on Agents and Steps
 2. **Sync Signals**: Re-read and serialize specific entities or all entities
 3. **FYI Signals**: Informational updates (e.g., general state changes) -- these are not acted on
 
@@ -142,7 +142,7 @@ To test the bridge service without a running Engine:
 
 3. Send test signals using the test client:
    ```bash
-   python -m tests.test_client command
+   python -m tests.test_client run
    python -m tests.test_client sync
    python -m tests.test_client fyi
    ```
@@ -165,7 +165,7 @@ message SignalRequest {
 
   // Optional payload based on signal type
   oneof payload {
-    CommandPayload command = 4;
+    RunPayload run = 4;
     SyncPayload sync = 5;
     google.protobuf.Struct fyi_data = 6;
   }

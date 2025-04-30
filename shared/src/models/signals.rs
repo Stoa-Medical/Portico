@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum SignalType {
-    Command,
+    Run,
     Sync,
     Fyi,
 }
@@ -21,7 +21,7 @@ pub enum SignalType {
 impl SignalType {
     pub fn as_str(&self) -> &'static str {
         match self {
-            SignalType::Command => "command",
+            SignalType::Run => "run",
             SignalType::Sync => "sync",
             SignalType::Fyi => "fyi",
         }
@@ -33,7 +33,8 @@ impl FromStr for SignalType {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "command" => Ok(SignalType::Command),
+            "run" => Ok(SignalType::Run),
+            "command" => Ok(SignalType::Run), // For backward compatibility
             "sync" => Ok(SignalType::Sync),
             "fyi" => Ok(SignalType::Fyi),
             _ => Err(format!("Invalid signal type: {}", s)),
@@ -52,7 +53,8 @@ impl<'r> sqlx::Decode<'r, sqlx::Postgres> for SignalType {
         value: sqlx::postgres::PgValueRef<'r>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         match value.as_str()? {
-            "command" => Ok(SignalType::Command),
+            "run" => Ok(SignalType::Run),
+            "command" => Ok(SignalType::Run), // For backward compatibility
             "sync" => Ok(SignalType::Sync),
             "fyi" => Ok(SignalType::Fyi),
             _ => Err("Invalid signal type".into()),
@@ -72,13 +74,13 @@ impl<'q> sqlx::Encode<'q, sqlx::Postgres> for SignalType {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct CommandPayload {
-    pub command: String,
-    pub payload: CommandDataPayload,
+pub struct RunPayload {
+    pub operation: String,
+    pub payload: RunDataPayload,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct CommandDataPayload {
+pub struct RunDataPayload {
     pub id: String,
     pub properties: Value,
 }
@@ -172,18 +174,18 @@ impl Signal {
         }
     }
 
-    pub fn new_command(
+    pub fn new_run(
         identifiers: IdFields<i64>,
         user_requested_uuid: String,
         agent: Option<Agent>,
-        command_payload: CommandPayload,
+        run_payload: RunPayload,
     ) -> Self {
         Self::new(
             identifiers,
             user_requested_uuid,
             agent,
-            SignalType::Command,
-            Some(serde_json::to_value(command_payload).unwrap_or(Value::Null)),
+            SignalType::Run,
+            Some(serde_json::to_value(run_payload).unwrap_or(Value::Null)),
         )
     }
 
@@ -217,13 +219,13 @@ impl Signal {
         )
     }
 
-    pub fn parse_command_payload(&self) -> Result<CommandPayload> {
+    pub fn parse_run_payload(&self) -> Result<RunPayload> {
         match &self.initial_data {
-            Some(data) if self.signal_type == SignalType::Command => {
+            Some(data) if self.signal_type == SignalType::Run => {
                 serde_json::from_value(data.clone())
-                    .map_err(|e| anyhow!("Invalid command payload: {}", e))
+                    .map_err(|e| anyhow!("Invalid run payload: {}", e))
             }
-            _ => Err(anyhow!("Not a command signal or missing data")),
+            _ => Err(anyhow!("Not a run signal or missing data")),
         }
     }
 
@@ -267,7 +269,7 @@ impl Signal {
             }
             None => {
                 let error_msg = match self.signal_type {
-                    SignalType::Command => "Cannot process command signal with no associated agent",
+                    SignalType::Run => "Cannot process run signal with no associated agent",
                     SignalType::Sync => "Cannot process sync signal with no associated agent",
                     SignalType::Fyi => "FYI signal requires an agent to process",
                 };
