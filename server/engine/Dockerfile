@@ -1,14 +1,26 @@
 FROM rust:latest AS builder
 
-# Install Python in builder stage
+# Install Python and protobuf compiler in builder stage
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-dev \
     python3-pip \
+    protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /usr/src/app
-COPY . .
+# Set up the workspace structure
+WORKDIR /usr/src/workspace
+# Copy the shared crate first
+COPY shared/ /usr/src/workspace/shared/
+# Copy the proto files
+COPY server/proto/ /usr/src/workspace/server/proto/
+# Also copy proto files to workspace/proto for the build script
+COPY server/proto/ /workspace/server/proto/
+# Copy the engine crate
+COPY server/engine/ /usr/src/workspace/server/engine/
+
+# Build from the engine directory
+WORKDIR /usr/src/workspace/server/engine
 RUN cargo build --release
 
 FROM debian:bookworm-slim
@@ -21,7 +33,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the built binary from the builder stage
-COPY --from=builder /usr/src/app/target/release/portico-engine /usr/local/bin/
+COPY --from=builder /usr/src/workspace/server/engine/target/release/portico-engine /usr/local/bin/
 
 # Create a directory for any runtime files
 WORKDIR /app

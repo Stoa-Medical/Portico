@@ -1,38 +1,31 @@
 services:
-  # Use Supabase CLI to start all Supabase services based on config.toml
-  supabase:
-    image: supabase/cli:latest
-    volumes:
-      - ./supabase:/supabase
-    ports:
-      - "54321:54321" # API
-      - "54322:54322" # DB
-      - "54323:54323" # Studio
-      - "54324:54324" # Inbucket
-      - "54327:54327" # Analytics
-    command: start
-    networks:
-      - portico-network
-
+  # NOTE: Expect supabase to be running locally (with `supabase start`)
   # Bridge service connects to Supabase and forwards signals to the engine
   bridge:
-    build: ./bridge
+    build:
+      context: ..
+      dockerfile: ./server/bridge/Dockerfile
+    # No volumes needed as files are copied in the Dockerfile
     depends_on:
       - engine
     networks:
       - portico-network
     restart: unless-stopped
+    env_file:
+      - ./bridge/.env
 
   # Engine service processes signals from the bridge
   engine:
-    build: ./engine
-    depends_on:
-      - supabase
+    build:
+      context: ..
+      dockerfile: ./server/engine/Dockerfile
     ports:
       - "50051:50051"
     networks:
       - portico-network
     restart: unless-stopped
+    env_file:
+      - ./engine/.env
 
 networks:
   portico-network:
