@@ -36,27 +36,50 @@ impl Default for ScraperConfig {
     }
 }
 
-/// Validate a URL
+/// Validate and normalize a URL string
 pub fn validate_url(url_str: &str) -> Result<Url> {
-    // Check if the URL is not empty
-    if url_str.trim().is_empty() {
+    let trimmed_url = url_str.trim();
+
+    // Check if URL is empty
+    if trimmed_url.is_empty() {
         return Err(anyhow!("URL cannot be empty"));
     }
 
-    // Parse the URL
-    let url = Url::parse(url_str).map_err(|e| anyhow!("Invalid URL format: {}", e))?;
+    // Try to parse as-is first
+    let url_result = Url::parse(trimmed_url);
 
-    // Check if the URL has a scheme
+    // If parsing failed, check if it's missing a scheme
+    if let Err(url::ParseError::RelativeUrlWithoutBase) = url_result {
+        // Try prepending http:// and see if that works
+        let with_scheme = format!("http://{}", trimmed_url);
+        match Url::parse(&with_scheme) {
+            Ok(url) => {
+                // Success - return the URL with the added scheme
+                return Ok(url);
+            }
+            Err(e) => {
+                // Still failed - return detailed error
+                return Err(anyhow!("Invalid URL '{}': {}. Try including 'http://' or 'https://' prefix.", trimmed_url, e));
+            }
+        }
+    }
+
+    // Handle other parse errors
+    let url = url_result.map_err(|e| {
+        anyhow!("Invalid URL '{}': {}", trimmed_url, e)
+    })?;
+
+    // Validate scheme
     if url.scheme() != "http" && url.scheme() != "https" {
         return Err(anyhow!(
-            "Invalid URL scheme: {}. Only http and https are supported",
+            "Unsupported URL scheme '{}'. Only http:// and https:// are supported.",
             url.scheme()
         ));
     }
 
-    // Check if the URL has a host
-    if url.host().is_none() {
-        return Err(anyhow!("URL must have a host"));
+    // Validate host
+    if url.host_str().is_none() {
+        return Err(anyhow!("URL '{}' is missing a host", trimmed_url));
     }
 
     Ok(url)
@@ -157,11 +180,15 @@ pub async fn scrape_webpage(url_str: &str) -> Result<Value> {
         .build()?;
 
     // Fetch the webpage content
-    let response = client.get(url.as_str()).send().await?;
+    let response = match client.get(url.as_str()).send().await {
+        Ok(resp) => resp,
+        Err(e) => return Err(anyhow!("Failed to fetch URL '{}': {}", url_str, e)),
+    };
 
     if !response.status().is_success() {
         return Err(anyhow!(
-            "Failed to fetch webpage: HTTP status {}",
+            "Failed to fetch webpage '{}': HTTP status {}",
+            url_str,
             response.status()
         ));
     }
@@ -175,7 +202,8 @@ pub async fn scrape_webpage(url_str: &str) -> Result<Value> {
 
     if !content_type.contains("text/html") {
         return Err(anyhow!(
-            "Unsupported content type: {}. Only HTML is supported",
+            "Unsupported content type for '{}': {}. Only HTML is supported",
+            url_str,
             content_type
         ));
     }
@@ -190,18 +218,23 @@ pub async fn scrape_webpage(url_str: &str) -> Result<Value> {
 
     if content_length > config.max_content_length && content_length > 0 {
         return Err(anyhow!(
-            "Content too large: {} bytes (max: {} bytes)",
+            "Content too large for '{}': {} bytes (max: {} bytes)",
+            url_str,
             content_length,
             config.max_content_length
         ));
     }
 
-    let html_content = response.text().await?;
+    let html_content = match response.text().await {
+        Ok(text) => text,
+        Err(e) => return Err(anyhow!("Failed to get HTML text from '{}': {}", url_str, e)),
+    };
 
     // Check actual content length
     if html_content.len() > config.max_content_length {
         return Err(anyhow!(
-            "Content too large: {} bytes (max: {} bytes)",
+            "Content too large for '{}': {} bytes (max: {} bytes)",
+            url_str,
             html_content.len(),
             config.max_content_length
         ));

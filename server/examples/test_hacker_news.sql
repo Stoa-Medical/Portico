@@ -2,7 +2,7 @@
 -- This file demonstrates how to create a signal that will trigger the agent to run
 
 -- First, let's make sure we have the correct agent ID for the Hacker News Scraper
--- In the seed.sql file, it's agent_id = 4, but let's verify with a query
+-- In the seed.sql file, it's agent_id = 1, but let's verify with a query
 -- Uncomment the following line if you need to verify the agent ID:
 -- SELECT id, name FROM agents WHERE name = 'Hacker News Scraper';
 
@@ -14,7 +14,7 @@ INSERT INTO signals (
     initial_data
 )
 VALUES (
-    1, -- Agent ID for Hacker News Scraper (updated to match actual ID in database)
+    1, -- Agent ID for Hacker News Scraper
     gen_random_uuid(), -- Generate a random UUID for this request
     'run', -- Signal type 'run' to execute the agent
     '{"custom_output_path": "/tmp/hacker_news_custom.json"}' -- Custom output path for results
@@ -46,8 +46,8 @@ LIMIT 1;
 -- The workflow of this test:
 -- 1. Signal triggers the Hacker News Scraper agent to run
 -- 2. The agent's steps will:
---    a. Scrape Hacker News website (via webscrape step)
---    b. Save the scraped data to a JSON file (via Python step)
---    c. Summarize the news using an LLM (via prompt step)
---    d. Append the summary to the JSON file (via Python step)
+--    a. Scrape Hacker News website (via webscrape step) - returns standardized dict with "data" key
+--    b. Save the scraped data to a JSON file (via Python step) - gets data from the standardized output
+--    c. Summarize the news using an LLM (via prompt step) - returns standardized dict with "response" key
+--    d. Append the summary to the JSON file (via Python step) - gets response from the standardized output
 -- 3. The final result will be stored in the runtime_sessions table

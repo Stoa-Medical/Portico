@@ -1,7 +1,15 @@
 use super::types::{Step, StepType};
 use crate::PythonRuntime;
 use anyhow::{anyhow, Result};
-use serde_json::Value;
+use serde_json::{Value, Map};
+
+// Define standard output keys for all step types
+pub const STEP_OUTPUT_RESPONSE_KEY: &str = "response";
+pub const STEP_OUTPUT_DATA_KEY: &str = "data";
+pub const STEP_OUTPUT_STATUS_KEY: &str = "status";
+pub const STEP_OUTPUT_ERROR_KEY: &str = "error";
+pub const STEP_OUTPUT_TYPE_KEY: &str = "output_type";
+pub const STEP_OUTPUT_SOURCE_KEY: &str = "source_step";
 
 impl Step {
     /// Generates a Python function with the standardized signature for execution in a PythonRuntime
@@ -37,6 +45,79 @@ impl Step {
         format!("step_{}", self.identifiers.global_uuid.replace("-", "_"))
     }
 
+    /// Ensures the output is in standardized dictionary format
+    fn standardize_output(&self, output: Value) -> Value {
+        match output {
+            // Already a dictionary/object, add standard fields if missing
+            Value::Object(mut map) => {
+                // Add source step info if not present
+                if !map.contains_key(STEP_OUTPUT_SOURCE_KEY) {
+                    map.insert(
+                        STEP_OUTPUT_SOURCE_KEY.to_string(),
+                        Value::String(self.identifiers.global_uuid.clone()),
+                    );
+                }
+
+                // Add step type info if not present
+                if !map.contains_key(STEP_OUTPUT_TYPE_KEY) {
+                    map.insert(
+                        STEP_OUTPUT_TYPE_KEY.to_string(),
+                        Value::String(self.step_type.as_str().to_string()),
+                    );
+                }
+
+                // Add status if not present
+                if !map.contains_key(STEP_OUTPUT_STATUS_KEY) {
+                    map.insert(
+                        STEP_OUTPUT_STATUS_KEY.to_string(),
+                        Value::String("success".to_string()),
+                    );
+                }
+
+                Value::Object(map)
+            }
+            // String output (typically from prompt steps)
+            Value::String(text) => {
+                let mut map = Map::new();
+                map.insert(
+                    STEP_OUTPUT_RESPONSE_KEY.to_string(),
+                    Value::String(text),
+                );
+                map.insert(
+                    STEP_OUTPUT_SOURCE_KEY.to_string(),
+                    Value::String(self.identifiers.global_uuid.clone()),
+                );
+                map.insert(
+                    STEP_OUTPUT_TYPE_KEY.to_string(),
+                    Value::String(self.step_type.as_str().to_string()),
+                );
+                map.insert(
+                    STEP_OUTPUT_STATUS_KEY.to_string(),
+                    Value::String("success".to_string()),
+                );
+                Value::Object(map)
+            }
+            // Arrays or other non-dictionary values
+            other => {
+                let mut map = Map::new();
+                map.insert(STEP_OUTPUT_DATA_KEY.to_string(), other);
+                map.insert(
+                    STEP_OUTPUT_SOURCE_KEY.to_string(),
+                    Value::String(self.identifiers.global_uuid.clone()),
+                );
+                map.insert(
+                    STEP_OUTPUT_TYPE_KEY.to_string(),
+                    Value::String(self.step_type.as_str().to_string()),
+                );
+                map.insert(
+                    STEP_OUTPUT_STATUS_KEY.to_string(),
+                    Value::String("success".to_string()),
+                );
+                Value::Object(map)
+            }
+        }
+    }
+
     /// Runs the step with fresh context
     pub async fn run(
         &self,
@@ -44,19 +125,19 @@ impl Step {
         step_idx: usize,
         runtime: Option<&PythonRuntime>,
     ) -> Result<Value> {
-        match &self.step_type {
+        let raw_result = match &self.step_type {
             StepType::Prompt(llm_model) => {
-                match crate::call_llm(&self.step_content, source_data, Some(llm_model.clone()))
+                match crate::call_llm(&self.step_content, source_data.clone(), Some(llm_model.clone()))
                     .await
                 {
                     Ok(res_str) => Ok(Value::String(res_str)),
-                    Err(err) => Err(anyhow!("Step {} failed: {}", step_idx, err)),
+                    Err(err) => Err(anyhow!("Step {} failed: {}", step_idx, err))
                 }
             }
             StepType::Python => {
                 // For Python steps, require a runtime
                 if let Some(rt) = runtime {
-                    rt.execute_step(&self.identifiers.global_uuid, source_data)
+                    rt.execute_step(&self.identifiers.global_uuid, source_data.clone())
                 } else {
                     Err(anyhow!(
                         "Python step {} requires a runtime to execute",
@@ -68,14 +149,47 @@ impl Step {
                 // For WebScrape steps, the step_content should contain the URL to scrape
                 let url = self.step_content.trim();
                 if url.is_empty() {
-                    return Err(anyhow!("WebScrape step {} has empty URL", step_idx));
+                    return Err(anyhow!("WebScrape step {} (UUID: {}) has empty URL",
+                                       step_idx,
+                                       self.identifiers.global_uuid));
                 }
 
                 // Call the web scraping function
                 match crate::scrape_webpage(url).await {
                     Ok(result) => Ok(result),
-                    Err(err) => Err(anyhow!("WebScrape step {} failed: {}", step_idx, err)),
+                    Err(err) => Err(anyhow!("WebScrape step {} (UUID: {}) failed: {}",
+                                            step_idx,
+                                            self.identifiers.global_uuid,
+                                            err.to_string()))
                 }
+            }
+        };
+
+        // Standardize the output format for all step types
+        match raw_result {
+            Ok(output) => Ok(self.standardize_output(output)),
+            Err(err) => {
+                // Create standardized error output
+                let mut error_map = Map::new();
+                error_map.insert(
+                    STEP_OUTPUT_ERROR_KEY.to_string(),
+                    Value::String(err.to_string())
+                );
+                error_map.insert(
+                    STEP_OUTPUT_STATUS_KEY.to_string(),
+                    Value::String("error".to_string()),
+                );
+                error_map.insert(
+                    STEP_OUTPUT_SOURCE_KEY.to_string(),
+                    Value::String(self.identifiers.global_uuid.clone()),
+                );
+                error_map.insert(
+                    STEP_OUTPUT_TYPE_KEY.to_string(),
+                    Value::String(self.step_type.as_str().to_string()),
+                );
+
+                // Still propagate the original error
+                Err(err)
             }
         }
     }

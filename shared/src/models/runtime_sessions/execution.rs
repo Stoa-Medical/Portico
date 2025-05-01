@@ -68,7 +68,10 @@ impl RuntimeSession {
 
                     // Update status to cancelled
                     self.status = RunningStatus::Cancelled;
-                    return Err(anyhow!("Step execution failed: {}", e));
+
+                    // Include step index and UUID in the error message for better debugging
+                    let step_uuid = &step.identifiers.global_uuid;
+                    return Err(anyhow!("Step execution failed: Step {} (UUID: {}) failed: {}", idx + 1, step_uuid, e));
                 }
             }
         }

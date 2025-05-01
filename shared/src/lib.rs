@@ -386,8 +386,8 @@ impl std::fmt::Display for JsonModeLLMs {
 
 // Call the LLM with a specific model or use the default
 pub async fn call_llm(prompt: &str, context: Value, model: Option<String>) -> Result<String> {
-    let api_key = env::var("LLM_API_KEY").unwrap();
-    let api_endpoint = env::var("LLM_API_ENDPOINT").unwrap();
+    let api_key = env::var("LLM_API_KEY").map_err(|_| anyhow!("Missing LLM_API_KEY environment variable"))?;
+    let api_endpoint = env::var("LLM_API_ENDPOINT").map_err(|_| anyhow!("Missing LLM_API_ENDPOINT environment variable"))?;
 
     // Determine which model to use
     let model_name = if let Some(model_str) = model {
@@ -411,18 +411,33 @@ pub async fn call_llm(prompt: &str, context: Value, model: Option<String>) -> Re
     });
 
     let response: Value = Client::new()
-        .post(api_endpoint)
+        .post(&api_endpoint)
         .header("Authorization", format!("Bearer {}", api_key))
         .json(&request)
         .send()
-        .await?
+        .await
+        .map_err(|e| anyhow!("LLM API request failed: {}", e))?
         .json()
-        .await?;
+        .await
+        .map_err(|e| anyhow!("Failed to parse LLM API response: {}", e))?;
 
-    response["choices"][0]["message"]["content"]
-        .as_str()
+    // Check if there's an error in the response
+    if let Some(error) = response.get("error") {
+        return Err(anyhow!("LLM API returned an error: {}", error));
+    }
+
+    // Extract completion text with better error handling
+    response.get("choices")
+        .and_then(|choices| choices.get(0))
+        .and_then(|choice| choice.get("message"))
+        .and_then(|message| message.get("content"))
+        .and_then(|content| content.as_str())
         .map(String::from)
-        .ok_or_else(|| anyhow::anyhow!("No completion found"))
+        .ok_or_else(|| {
+            // Debug log the response structure for troubleshooting
+            eprintln!("Unexpected LLM API response structure: {:?}", response);
+            anyhow!("No completion found in LLM response. Check API endpoint and model configuration.")
+        })
 }
 
 /// Loads steps for an agent by ID
