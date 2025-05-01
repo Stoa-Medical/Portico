@@ -17,7 +17,7 @@ VALUES (
     4, -- Agent ID for Hacker News Scraper (adjust if different in your database)
     gen_random_uuid(), -- Generate a random UUID for this request
     'run', -- Signal type 'run' to execute the agent
-    '{"date": "2025-04-30", "custom_output_path": "/tmp/hacker_news_custom.json"}' -- Initial data with today's date
+    '{"custom_output_path": "/tmp/hacker_news_custom.json"}' -- Custom output path for results
 );
 
 -- Verify that the signal was created
@@ -37,5 +37,17 @@ ORDER BY
     s.created_at DESC
 LIMIT 1;
 
--- Note: After running this signal, you can check for runtime sessions created for this agent:
+-- After running this test, you can check if a runtime session was created:
 -- SELECT * FROM runtime_sessions WHERE requested_by_agent_id = 4 ORDER BY created_at DESC LIMIT 1;
+
+-- And you can check if the file was created (you would need to do this manually on the server):
+-- The file should be located at: /tmp/hacker_news_custom.json
+
+-- The workflow of this test:
+-- 1. Signal triggers the Hacker News Scraper agent to run
+-- 2. The agent's steps will:
+--    a. Scrape Hacker News website (via webscrape step)
+--    b. Save the scraped data to a JSON file (via Python step)
+--    c. Summarize the news using an LLM (via prompt step)
+--    d. Append the summary to the JSON file (via Python step)
+-- 3. The final result will be stored in the runtime_sessions table

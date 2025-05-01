@@ -17,51 +17,24 @@ VALUES
 INSERT INTO steps (agent_id, name, description, step_type, step_content)
 VALUES
   -- File Processor steps
-  (1, 'Read File', 'Reads the content of the input file', 'python', 'file_path = source.get("file_path", "")\nif file_path:\n    with open(file_path, "r") as f:\n        content = f.read()\n    result = {"content": content}\nelse:\n    result = {"error": "No file path provided"}'),
-  (1, 'Parse Content', 'Parses the file content into structured data', 'python', 'content = source.get("content", "")\n# Parsing logic here\nresult = {"parsed": content}'),
+  (1, 'Read File', 'Reads the content of the input file', 'python', E'file_path = source.get("file_path", "")\nif file_path:\n    try:\n        with open(file_path, "r") as f:\n            content = f.read()\n        result = {"content": content, "status": "success"}\n    except Exception as e:\n        result = {"error": str(e), "status": "error"}\nelse:\n    result = {"error": "No file path provided", "status": "error"}'),
+  (1, 'Parse Content', 'Parses the file content into structured data', 'python', E'content = source.get("content", "")\n# Parse the content based on its structure\nif content:\n    # Simple example: Split by lines and count\n    lines = content.split("\\n")\n    result = {\n        "parsed": content,\n        "line_count": len(lines),\n        "status": "success"\n    }\nelse:\n    result = {"error": "No content to parse", "status": "error"}'),
   (1, 'Generate Report', 'Creates a summary report of the file', 'prompt', 'Create a summary report of the parsed data (attached)'),
 
   -- Email Notifier steps
   (2, 'Format Message', 'Formats the notification message', 'prompt', 'Create an email message for {{recipient}} about {{subject}}'),
-  (2, 'Send Email', 'Sends the formatted email', 'python', 'recipient = source.get("recipient", "")\nsubject = source.get("subject", "")\nbody = source.get("body", "")\n# Email sending logic would go here\nresult = {"status": "sent", "to": recipient, "subject": subject}'),
+  (2, 'Send Email', 'Sends the formatted email', 'python', E'recipient = source.get("recipient", "")\nsubject = source.get("subject", "")\nbody = source.get("response", "")\n\nif not recipient or not subject or not body:\n    result = {\n        "error": "Missing required fields",\n        "status": "error"\n    }\nelse:\n    # In a real implementation, this would connect to an email service\n    # This is a simulation for the example\n    result = {\n        "status": "sent",\n        "to": recipient,\n        "subject": subject,\n        "message_length": len(body)\n    }'),
 
   -- Data Analyzer steps
-  (3, 'Load Dataset', 'Loads the dataset from the specified source', 'python', 'dataset_source = source.get("source", "")\n# In a real scenario, we would load from the source\n# For this example, we will create mock data\nresult = {"data": [1, 2, 3, 4, 5]}'),
-  (3, 'Run Analysis', 'Performs statistical analysis on the dataset', 'python', 'dataset = source.get("data", [])\nif dataset:\n    mean_value = sum(dataset) / len(dataset)\n    result = {"mean": mean_value}\nelse:\n    result = {"error": "No dataset provided"}'),
-  (3, 'Visualize Results', 'Creates visualizations of the analysis results', 'python', 'analysis_results = source\n# Visualization logic would go here\n# In a real scenario, we might generate chart data\nresult = {"chart_data": analysis_results, "visualization_type": "bar_chart"}'),
+  (3, 'Load Dataset', 'Loads the dataset from the specified source', 'python', E'dataset_source = source.get("source", "")\n\n# In a real scenario, we would load from the source\n# For this example, we create mock data\nif dataset_source:\n    # Simulate loading different datasets based on source\n    if "sales" in dataset_source:\n        data = [10, 25, 30, 15, 20]\n    elif "users" in dataset_source:\n        data = [100, 150, 120, 200, 180]\n    else:\n        data = [1, 2, 3, 4, 5]\n    \n    result = {\n        "data": data,\n        "source": dataset_source,\n        "status": "success"\n    }\nelse:\n    result = {\n        "data": [1, 2, 3, 4, 5],  # Default dataset\n        "source": "default",\n        "status": "warning"\n    }'),
+  (3, 'Run Analysis', 'Performs statistical analysis on the dataset', 'python', E'dataset = source.get("data", [])\n\nif not dataset:\n    result = {"error": "No dataset provided", "status": "error"}\n    return result\n\ntry:\n    # Calculate basic statistics\n    mean_value = sum(dataset) / len(dataset)\n    min_value = min(dataset)\n    max_value = max(dataset)\n    \n    result = {\n        "mean": mean_value,\n        "min": min_value,\n        "max": max_value,\n        "count": len(dataset),\n        "source": source.get("source", "unknown"),\n        "status": "success"\n    }\nexcept Exception as e:\n    result = {"error": str(e), "status": "error"}'),
+  (3, 'Visualize Results', 'Creates visualizations of the analysis results', 'python', E'analysis_results = source\n\n# Check if we have valid analysis results\nif "mean" not in analysis_results:\n    result = {"error": "Missing analysis data", "status": "error"}\n    return result\n\n# In a real scenario, we would generate actual visualization data\n# Here we just prepare the data structure for visualization\nresult = {\n    "chart_data": {\n        "labels": ["Mean", "Min", "Max"],\n        "values": [\n            analysis_results.get("mean", 0),\n            analysis_results.get("min", 0),\n            analysis_results.get("max", 0)\n        ]\n    },\n    "visualization_type": "bar_chart",\n    "title": f"Analysis of {analysis_results.get(\'source\', \'unknown\')} Dataset",\n    "status": "success"\n}'),
 
   -- Hacker News Scraper steps
-  (4, 'Scrape Hacker News', 'Grabs information from news.ycombinator.com and identifies main topics', 'webscrape', 'url: https://news.ycombinator.com\nselector: .athing\nextract:\n  - title: .titleline a\n  - points: .score\n  - comments: .subtext a:last-child\noutput_format: json'),
-  (4, 'Save News Data', 'Saves the scraped news data to a file', 'python', 'import json\nimport os\n\n# Get the scraped data from the previous step\nnews_data = source.get("data", [])\n\n# Define the output file path\noutput_file = "/tmp/hacker_news_data.json"\n\n# Save the data to a file\nwith open(output_file, "w") as f:\n    json.dump(news_data, f, indent=2)\n\nresult = {\n    "file_path": output_file,\n    "item_count": len(news_data),\n    "status": "success"\n}'),
+  (4, 'Scrape Hacker News', 'Grabs information from news.ycombinator.com and identifies main topics', 'webscrape', 'https://news.ycombinator.com'),
+  (4, 'Save News Data', 'Saves the scraped news data to a file', 'python', E'import json\nimport os\n\n# Get the scraped data from the previous step\nnews_data = source\n\n# Define the output file path\ncustom_output_path = source.get("custom_output_path", None)\noutput_file = custom_output_path if custom_output_path else "/tmp/hacker_news_data.json"\n\ntry:\n    # Create directory if it doesn\'t exist\n    os.makedirs(os.path.dirname(output_file), exist_ok=True)\n    \n    # Save the data to a file\n    with open(output_file, "w") as f:\n        json.dump(news_data, f, indent=2)\n    \n    result = {\n        "file_path": output_file,\n        "item_count": len(news_data) if isinstance(news_data, list) else 1,\n        "status": "success"\n    }\nexcept Exception as e:\n    result = {\n        "error": str(e),\n        "status": "error"\n    }'),
   (4, 'Summarize News', 'Generates a summary of the key updates from Hacker News', 'prompt', 'You are a news analyst specializing in technology trends.\n\nI have scraped the top stories from Hacker News. Please analyze the data and provide a concise summary of the key updates and trends. Focus on identifying the main topics, any emerging patterns, and highlight the most significant stories based on points and discussion activity.\n\nFormat your response as a brief executive summary that could be shared with a technology team.'),
-  (4, 'Append Summary', 'Appends the generated summary to the news data file', 'python', 'import json
-
-# Get the summary from the previous step
-summary = source.get("response", "No summary generated")
-
-# Get the file path from step 2
-file_path = "/tmp/hacker_news_data.json"
-
-# Check if a custom output path was provided in the initial data
-custom_output_path = source.get("custom_output_path", None)
-
-# Load the existing data
-with open(file_path, "r") as f:
-    data = json.load(f)
-
-# Create a new file with both data and summary
-output_file = custom_output_path if custom_output_path else "/tmp/hacker_news_report.json"
-with open(output_file, "w") as f:
-    json.dump({
-        "data": data,
-        "summary": summary
-    }, f, indent=2)
-
-result = {
-    "original_file": file_path,
-    "report_file": output_file,
-    "status": "success"
-}');
+  (4, 'Append Summary', 'Appends the generated summary to the news data file', 'python', E'import json\n\n# Get the summary from the previous step\nsummary = source.get("response", "No summary generated")\n\n# Get the file path from step 2\nfile_path = source.get("file_path", "/tmp/hacker_news_data.json")\n\n# Check if a custom output path was provided in the initial data\ncustom_output_path = source.get("custom_output_path", None)\n\ntry:\n    # Load the existing data\n    with open(file_path, "r") as f:\n        data = json.load(f)\n    \n    # Create a new file with both data and summary\n    output_file = custom_output_path if custom_output_path else "/tmp/hacker_news_report.json"\n    with open(output_file, "w") as f:\n        json.dump({\n            "data": data,\n            "summary": summary\n        }, f, indent=2)\n    \n    result = {\n        "original_file": file_path,\n        "report_file": output_file,\n        "status": "success"\n    }\nexcept Exception as e:\n    result = {\n        "error": str(e),\n        "status": "error"\n    }');
 
 -- Update agent step_ids array
 UPDATE agents
@@ -101,3 +74,7 @@ SELECT 'Agents: ' || COUNT(*) FROM agents;
 SELECT 'Steps: ' || COUNT(*) FROM steps;
 SELECT 'Signals: ' || COUNT(*) FROM signals;
 SELECT 'Runtime Sessions: ' || COUNT(*) FROM runtime_sessions;
+
+-- Add Supabase realtime tables
+ALTER PUBLICATION supabase_realtime ADD TABLE signals;
+ALTER PUBLICATION supabase_realtime ADD TABLE agents;
