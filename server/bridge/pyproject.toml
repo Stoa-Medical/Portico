@@ -5,7 +5,7 @@ description = "Python bridge for Portico engine"
 authors = [
     {name = "Eric Pan", email= "epan@stoamedical.io"}
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "asyncio>=3.4.3",
     "dotenv>=0.9.9",
@@ -22,6 +22,7 @@ dependencies = [
     "grpcio-tools>=1.62.1",
     "protobuf>=4.25.3",
     "result>=0.17.0",
+    "pydian>=0.4.3",
 ]
 
 [build-system]
