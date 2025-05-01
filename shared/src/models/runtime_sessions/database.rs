@@ -1,51 +1,31 @@
-use crate::Step;
-use crate::{DatabaseItem, IdFields, PythonRuntime, RunningStatus, TimestampFields};
-use anyhow::{anyhow, Result};
+use super::types::RuntimeSession;
+use crate::{DatabaseItem, IdFields, RunningStatus, Step, TimestampFields};
+use anyhow::Result;
 use async_trait::async_trait;
 use serde_json::Value;
 use sqlx::types::BigDecimal;
 use sqlx::{PgPool, Row};
 use std::str::FromStr;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use uuid::Uuid;
 
-#[derive(Debug)]
-pub struct RuntimeSession {
-    pub identifiers: IdFields<i64>,
-    pub timestamps: TimestampFields,
-    pub steps: Vec<Step>,
-    pub status: RunningStatus,
-    pub source_data: Value,
-    pub last_step_idx: Option<i32>,
-    pub last_successful_result: Option<Value>,
-    pub step_execution_times: Vec<Duration>, // Stores duration for each step
-    pub total_execution_time: Duration,      // Stores total runtime
-    pub requested_by_agent_id: Option<i32>,  // The local ID of the agent that requested this session
+#[derive(Debug, sqlx::FromRow)]
+struct RuntimeSessionRow {
+    id: i64,
+    global_uuid: Uuid,
+    rts_status: RunningStatus,
+    initial_data: Value,
+    latest_step_idx: Option<i32>,
+    latest_result: Option<Value>,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+    step_execution_times: Option<Vec<f64>>,
+    total_execution_time: Option<f64>,
+    steps: Value, // JSON aggregation result
+    requested_by_agent_id: Option<i32>,
 }
 
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
-    // Expect a SQL query like:
-    // ```sql
-    // SELECT
-    // rs.*,
-    // COALESCE(
-    //     (
-    //         SELECT json_agg(json_build_object(
-    //             'id', s.id,
-    //             'global_uuid', s.global_uuid,
-    //             'created_at', s.created_at,
-    //             'updated_at', s.updated_at,
-    //             'agent_id', s.agent_id,
-    //             'description', s.description,
-    //             'step_type', s.step_type,
-    //             'step_content', s.step_content
-    //         ))
-    //         FROM steps s
-    //         WHERE s.runtime_session_id = rs.id
-    //     ),
-    //     '[]'::json
-    // ) as steps
-    // FROM runtime_sessions rs
     fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
         // Get the steps JSON array from the row
         let steps_json: Value = row.try_get("steps")?;
@@ -100,128 +80,6 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
             requested_by_agent_id: row.try_get("requested_by_agent_id")?,
         })
     }
-}
-
-impl RuntimeSession {
-    pub fn new(source_data: Value, steps: Vec<Step>, requested_by_agent_id: Option<i32>) -> Self {
-        Self {
-            identifiers: IdFields::new(),
-            timestamps: TimestampFields::new(),
-            steps,
-            status: RunningStatus::Waiting,
-            source_data,
-            last_step_idx: None,
-            last_successful_result: None,
-            step_execution_times: Vec::new(),
-            total_execution_time: Duration::ZERO,
-            requested_by_agent_id,
-        }
-    }
-
-    /// Start executing the session with an optional Python runtime
-    /// This is a unified method that works with or without a runtime.
-    /// If no runtime is provided, only Prompt steps can be executed.
-    pub async fn unified_start(&mut self, runtime: Option<&PythonRuntime>) -> Result<Value> {
-        // Set status to Running
-        self.status = RunningStatus::Running;
-
-        // Check if a runtime is required but not provided
-        if runtime.is_none() && self.steps.iter().any(|step| step.is_python_step()) {
-            self.status = RunningStatus::Cancelled;
-            return Err(anyhow!(
-                "Python steps require a runtime but none was provided"
-            ));
-        }
-
-        // Initialize timing fields
-        self.step_execution_times = Vec::with_capacity(self.steps.len());
-        self.total_execution_time = Duration::ZERO;
-        let start_time = Instant::now();
-
-        // Execute each step in order, passing the result of each step to the next
-        let mut current_value = self.source_data.clone();
-
-        // Track step execution
-        for (idx, step) in self.steps.iter().enumerate() {
-            // Update latest step index before execution
-            self.last_step_idx = Some(idx as i32);
-
-            // Track this step's execution time
-            let step_start = Instant::now();
-
-            // Use step.run which will handle the runtime appropriately for each step type
-            let result = step.run(current_value.clone(), idx, runtime).await;
-
-            match result {
-                Ok(value) => {
-                    // Record execution time for this step
-                    let step_duration = step_start.elapsed();
-                    self.step_execution_times.push(step_duration);
-
-                    // Update current value for next step
-                    current_value = value.clone();
-
-                    // Store the intermediate result
-                    self.last_successful_result = Some(value);
-                }
-                Err(e) => {
-                    // Still record execution time for the failed step
-                    let step_duration = step_start.elapsed();
-                    self.step_execution_times.push(step_duration);
-
-                    // Calculate total time before returning
-                    self.total_execution_time = start_time.elapsed();
-
-                    // Update status to cancelled
-                    self.status = RunningStatus::Cancelled;
-                    return Err(anyhow!("Step execution failed: {}", e));
-                }
-            }
-        }
-
-        // All steps completed successfully
-        self.status = RunningStatus::Completed;
-
-        // Record total execution time
-        self.total_execution_time = start_time.elapsed();
-
-        // Store the final result and return it
-        self.last_successful_result = Some(current_value.clone());
-        Ok(current_value)
-    }
-
-    /// Start executing the session with a Python runtime
-    pub async fn start_with_runtime(&mut self, runtime: &PythonRuntime) -> Result<Value> {
-        self.unified_start(Some(runtime)).await
-    }
-
-    /// Start the session without a Python runtime.
-    /// This method can only execute sessions that have no Python steps.
-    /// Use start_with_runtime for sessions with Python steps.
-    pub async fn start(&mut self) -> Result<Value> {
-        // Check if this session has any Python steps
-        if self.steps.iter().any(|step| step.is_python_step()) {
-            return Err(anyhow!("This session contains Python steps which require a runtime. Use start_with_runtime() instead."));
-        }
-
-        self.unified_start(None).await
-    }
-}
-
-#[derive(Debug, sqlx::FromRow)]
-struct RuntimeSessionRow {
-    id: i64,
-    global_uuid: Uuid,
-    rts_status: RunningStatus,
-    initial_data: Value,
-    latest_step_idx: Option<i32>,
-    latest_result: Option<Value>,
-    created_at: chrono::DateTime<chrono::Utc>,
-    updated_at: chrono::DateTime<chrono::Utc>,
-    step_execution_times: Option<Vec<f64>>,
-    total_execution_time: Option<f64>,
-    steps: Value, // JSON aggregation result
-    requested_by_agent_id: Option<i32>, // The local ID of the agent that requested this session
 }
 
 #[async_trait]
