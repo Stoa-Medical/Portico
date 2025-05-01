@@ -386,6 +386,9 @@ impl std::fmt::Display for JsonModeLLMs {
 
 // Call the LLM with a specific model or use the default
 pub async fn call_llm(prompt: &str, context: Value, model: Option<String>) -> Result<String> {
+    const MAX_RETRIES: usize = 3;
+    const INITIAL_RETRY_DELAY_MS: u64 = 500;
+
     let api_key = env::var("LLM_API_KEY").map_err(|_| anyhow!("Missing LLM_API_KEY environment variable"))?;
     let api_endpoint = env::var("LLM_API_ENDPOINT").map_err(|_| anyhow!("Missing LLM_API_ENDPOINT environment variable"))?;
 
@@ -410,10 +413,37 @@ pub async fn call_llm(prompt: &str, context: Value, model: Option<String>) -> Re
         "temperature": 0.7
     });
 
+    let mut last_error = None;
+
+    // Implement retry logic with exponential backoff
+    for attempt in 0..MAX_RETRIES {
+        match attempt_llm_call(&api_endpoint, &api_key, &request).await {
+            Ok(result) => return Ok(result),
+            Err(err) => {
+                last_error = Some(err);
+
+                // Don't sleep on the last attempt
+                if attempt < MAX_RETRIES - 1 {
+                    // Exponential backoff: delay * 2^attempt
+                    let backoff_ms = INITIAL_RETRY_DELAY_MS * (1 << attempt);
+                    eprintln!("LLM API call failed (attempt {}/{}), retrying after {}ms: {}",
+                        attempt + 1, MAX_RETRIES, backoff_ms, last_error.as_ref().unwrap());
+                    tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
+                }
+            }
+        }
+    }
+
+    // If we got here, all retries failed
+    Err(last_error.unwrap_or_else(|| anyhow!("All LLM API call attempts failed")))
+}
+
+// Helper function to perform a single LLM API call attempt
+async fn attempt_llm_call(api_endpoint: &str, api_key: &str, request: &Value) -> Result<String> {
     let response: Value = Client::new()
-        .post(&api_endpoint)
+        .post(api_endpoint)
         .header("Authorization", format!("Bearer {}", api_key))
-        .json(&request)
+        .json(request)
         .send()
         .await
         .map_err(|e| anyhow!("LLM API request failed: {}", e))?
