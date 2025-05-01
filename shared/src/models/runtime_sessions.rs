@@ -20,6 +20,7 @@ pub struct RuntimeSession {
     pub last_successful_result: Option<Value>,
     pub step_execution_times: Vec<Duration>, // Stores duration for each step
     pub total_execution_time: Duration,      // Stores total runtime
+    pub requested_by_agent_id: Option<i32>,  // The local ID of the agent that requested this session
 }
 
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
@@ -96,12 +97,13 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
             last_successful_result: row.try_get("latest_result")?,
             step_execution_times,
             total_execution_time,
+            requested_by_agent_id: row.try_get("requested_by_agent_id")?,
         })
     }
 }
 
 impl RuntimeSession {
-    pub fn new(source_data: Value, steps: Vec<Step>) -> Self {
+    pub fn new(source_data: Value, steps: Vec<Step>, requested_by_agent_id: Option<i32>) -> Self {
         Self {
             identifiers: IdFields::new(),
             timestamps: TimestampFields::new(),
@@ -112,6 +114,7 @@ impl RuntimeSession {
             last_successful_result: None,
             step_execution_times: Vec::new(),
             total_execution_time: Duration::ZERO,
+            requested_by_agent_id,
         }
     }
 
@@ -218,6 +221,7 @@ struct RuntimeSessionRow {
     step_execution_times: Option<Vec<f64>>,
     total_execution_time: Option<f64>,
     steps: Value, // JSON aggregation result
+    requested_by_agent_id: Option<i32>, // The local ID of the agent that requested this session
 }
 
 #[async_trait]
@@ -263,9 +267,9 @@ impl DatabaseItem for RuntimeSession {
             INSERT INTO runtime_sessions (
                 global_uuid, rts_status, initial_data,
                 latest_step_idx, latest_result, created_at, updated_at,
-                step_execution_times, step_ids, total_execution_time
+                step_execution_times, step_ids, total_execution_time, requested_by_agent_id
             )
-            VALUES ($1, $2::running_status, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES ($1, $2::running_status, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             "#,
             parsed_uuid,
             &self.status as &RunningStatus,
@@ -277,6 +281,7 @@ impl DatabaseItem for RuntimeSession {
             &step_times_secs as &[BigDecimal],
             &step_ids,
             total_time_secs,
+            self.requested_by_agent_id,
         )
         .execute(pool)
         .await?;
@@ -316,8 +321,9 @@ impl DatabaseItem for RuntimeSession {
                 updated_at = $5,
                 step_execution_times = $6,
                 step_ids = $7,
-                total_execution_time = $8
-            WHERE global_uuid = $9
+                total_execution_time = $8,
+                requested_by_agent_id = $9
+            WHERE global_uuid = $10
             "#,
             &self.status as &RunningStatus,
             &self.source_data,
@@ -327,6 +333,7 @@ impl DatabaseItem for RuntimeSession {
             &step_times_secs as &[BigDecimal],
             &step_ids,
             total_time_secs,
+            self.requested_by_agent_id,
             parsed_uuid
         )
         .execute(pool)
@@ -412,6 +419,7 @@ impl DatabaseItem for RuntimeSession {
                         Duration::new(secs_int, nanos)
                     })
                     .unwrap_or_default(),
+                requested_by_agent_id: row.requested_by_agent_id,
             })
             .collect();
 
@@ -512,6 +520,7 @@ impl DatabaseItem for RuntimeSession {
                     Duration::new(secs_int, nanos)
                 })
                 .unwrap_or_default(),
+            requested_by_agent_id: row.requested_by_agent_id,
         }))
     }
 }

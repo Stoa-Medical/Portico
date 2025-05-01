@@ -140,8 +140,8 @@ impl Agent {
         // Create a Python runtime for this agent
         let runtime = self.create_python_runtime()?;
 
-        // Create a new RuntimeSession with the agent's steps
-        let mut session = RuntimeSession::new(source, self.steps.clone());
+        // Create a new RuntimeSession with the agent's steps and local_id
+        let mut session = RuntimeSession::new(source, self.steps.clone(), self.identifiers.local_id);
 
         // Start the RuntimeSession with the Python runtime
         let result = session.start_with_runtime(&runtime).await;

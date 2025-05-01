@@ -34,7 +34,34 @@ VALUES
   (4, 'Scrape Hacker News', 'Grabs information from news.ycombinator.com and identifies main topics', 'webscrape', 'url: https://news.ycombinator.com\nselector: .athing\nextract:\n  - title: .titleline a\n  - points: .score\n  - comments: .subtext a:last-child\noutput_format: json'),
   (4, 'Save News Data', 'Saves the scraped news data to a file', 'python', 'import json\nimport os\n\n# Get the scraped data from the previous step\nnews_data = source.get("data", [])\n\n# Define the output file path\noutput_file = "/tmp/hacker_news_data.json"\n\n# Save the data to a file\nwith open(output_file, "w") as f:\n    json.dump(news_data, f, indent=2)\n\nresult = {\n    "file_path": output_file,\n    "item_count": len(news_data),\n    "status": "success"\n}'),
   (4, 'Summarize News', 'Generates a summary of the key updates from Hacker News', 'prompt', 'You are a news analyst specializing in technology trends.\n\nI have scraped the top stories from Hacker News. Please analyze the data and provide a concise summary of the key updates and trends. Focus on identifying the main topics, any emerging patterns, and highlight the most significant stories based on points and discussion activity.\n\nFormat your response as a brief executive summary that could be shared with a technology team.'),
-  (4, 'Append Summary', 'Appends the generated summary to the news data file', 'python', 'import json\n\n# Get the summary from the previous step\nsummary = source.get("response", "No summary generated")\n\n# Get the file path from step 2\nfile_path = "/tmp/hacker_news_data.json"\n\n# Load the existing data\nwith open(file_path, "r") as f:\n    data = json.load(f)\n\n# Create a new file with both data and summary\noutput_file = "/tmp/hacker_news_report.json"\nwith open(output_file, "w") as f:\n    json.dump({\n        "data": data,\n        "summary": summary\n    }, f, indent=2)\n\nresult = {\n    "original_file": file_path,\n    "report_file": output_file,\n    "status": "success"\n}');
+  (4, 'Append Summary', 'Appends the generated summary to the news data file', 'python', 'import json
+
+# Get the summary from the previous step
+summary = source.get("response", "No summary generated")
+
+# Get the file path from step 2
+file_path = "/tmp/hacker_news_data.json"
+
+# Check if a custom output path was provided in the initial data
+custom_output_path = source.get("custom_output_path", None)
+
+# Load the existing data
+with open(file_path, "r") as f:
+    data = json.load(f)
+
+# Create a new file with both data and summary
+output_file = custom_output_path if custom_output_path else "/tmp/hacker_news_report.json"
+with open(output_file, "w") as f:
+    json.dump({
+        "data": data,
+        "summary": summary
+    }, f, indent=2)
+
+result = {
+    "original_file": file_path,
+    "report_file": output_file,
+    "status": "success"
+}');
 
 -- Update agent step_ids array
 UPDATE agents

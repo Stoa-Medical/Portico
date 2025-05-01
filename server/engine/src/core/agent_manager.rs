@@ -162,13 +162,18 @@ impl AgentManager {
                                                 let steps = agent.steps.clone();
 
                                                 // Create a new RuntimeSession with failed status
+                                                // Pass the agent's local_id as the requested_by_agent_id
                                                 let mut failed_session = RuntimeSession::new(
                                                     run_data_json,
                                                     steps,
+                                                    Some(agent.identifiers.local_id.unwrap_or(0)),
                                                 );
 
                                                 // Set the status to Cancelled
                                                 failed_session.status = RunningStatus::Cancelled;
+
+                                                // Set the last_step_idx to 0 to avoid database constraint violation
+                                                failed_session.last_step_idx = Some(0);
 
                                                 // Set the last result to include the error message
                                                 failed_session.last_successful_result = Some(json!({
