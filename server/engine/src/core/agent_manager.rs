@@ -14,6 +14,8 @@ use uuid;
 // Agent manager handles message queuing and processing
 pub struct AgentManager {
     pub agents: SharedAgentMap,
+    // Map from local ID (as string) to global UUID for quick lookups
+    pub local_id_map: HashMap<String, String>,
     pub message_queues: HashMap<String, mpsc::Sender<SignalRequest>>,
     pub db_pool: PgPool,
 }
@@ -22,6 +24,7 @@ impl AgentManager {
     pub fn new(agents: SharedAgentMap, db_pool: PgPool) -> Self {
         Self {
             agents,
+            local_id_map: HashMap::new(),
             message_queues: HashMap::new(),
             db_pool,
         }
@@ -29,17 +32,30 @@ impl AgentManager {
 
     // Set up message queues for all existing agents
     pub async fn init_agent_queues(&mut self) -> Result<(), Status> {
-        // Collect all agent UUIDs first to avoid borrowing conflicts
-        let agent_uuids: Vec<String> = {
+        // Collect all agent UUIDs and their local IDs first to avoid borrowing conflicts
+        let agent_data: Vec<(String, Option<i32>)> = {
             let agents = self.agents.read().await;
             println!(
                 "[INFO] Initializing message queues for {} existing agents",
                 agents.len()
             );
-            agents.keys().cloned().collect()
+            agents
+                .iter()
+                .map(|(uuid, agent)| (uuid.clone(), agent.identifiers.local_id))
+                .collect()
         };
 
-        for agent_uuid in agent_uuids {
+        // Populate the local_id_map
+        for (agent_uuid, maybe_local_id) in &agent_data {
+            if let Some(local_id) = maybe_local_id {
+                let local_id_str = local_id.to_string();
+                println!("[INFO] Mapping local ID {} to UUID {}", local_id_str, agent_uuid);
+                self.local_id_map.insert(local_id_str, agent_uuid.clone());
+            }
+        }
+
+        // Set up queues for all agents
+        for (agent_uuid, _) in agent_data {
             if let Err(e) = self.setup_agent_queue(agent_uuid.clone()).await {
                 eprintln!(
                     "[ERROR] Failed to initialize queue for agent {}: {}",
@@ -59,9 +75,9 @@ impl AgentManager {
         let runtime_session_uuid = uuid::Uuid::new_v4().to_string();
 
         println!(
-            "[INFO] Processing signal: type={:?}, signal_uuid={}",
+            "[INFO] Processing signal: type={:?}, signal_id={}",
             signal.signal_type(),
-            signal.signal_uuid
+            signal.signal_id
         );
 
         match signal.signal_type() {
@@ -97,9 +113,9 @@ impl AgentManager {
 
             while let Some(signal) = rx.recv().await {
                 println!(
-                    "[INFO] Agent {} worker processing signal: signal_uuid={}, type={:?}",
+                    "[INFO] Agent {} worker processing signal: signal_id={}, type={:?}",
                     agent_uuid,
-                    signal.signal_uuid,
+                    signal.signal_id,
                     signal.signal_type()
                 );
 
@@ -118,7 +134,7 @@ impl AgentManager {
                                         println!(
                                             "[INFO] Running agent {} with data from signal {}",
                                             agent_uuid,
-                                            signal.signal_uuid
+                                            signal.signal_id
                                         );
 
                                         // Call agent.run() which creates a RuntimeSession internally
@@ -157,7 +173,7 @@ impl AgentManager {
                                                 // Set the last result to include the error message
                                                 failed_session.last_successful_result = Some(json!({
                                                     "error": e.to_string(),
-                                                    "signal_uuid": signal.signal_uuid,
+                                                    "signal_uuid": signal.signal_id,
                                                     "agent_uuid": agent_uuid
                                                 }));
 

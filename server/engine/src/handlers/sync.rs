@@ -13,7 +13,7 @@ pub async fn handle_sync(
 ) -> Result<SignalResponse, Status> {
     println!(
         "[INFO] Processing sync operation for signal: {}",
-        signal.signal_uuid
+        signal.signal_id
     );
 
     if let Some(crate::proto::signal_request::Payload::Sync(sync)) = &signal.payload {

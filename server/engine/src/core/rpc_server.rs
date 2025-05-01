@@ -66,9 +66,9 @@ impl BridgeService for RpcServer {
         let signal = request.into_inner();
 
         println!(
-            "[INFO] Received signal: type={:?}, signal_uuid={}",
+            "[INFO] Received signal: type={:?}, signal_id={}",
             signal.signal_type(),
-            signal.signal_uuid
+            signal.signal_id
         );
 
         // Process the signal using the agent manager
@@ -112,22 +112,22 @@ impl BridgeService for RpcServer {
         request: Request<DeleteAgentRequest>,
     ) -> Result<Response<GeneralResponse>, Status> {
         let delete_request = request.into_inner();
-        let agent_uuid = delete_request.agent_uuid;
+        let agent_id = delete_request.agent_id;
 
         println!(
-            "[INFO] Received delete_agent request for UUID: {}",
-            agent_uuid
+            "[INFO] Received delete_agent request for ID: {}",
+            agent_id
         );
 
-        if agent_uuid.is_empty() {
+        if agent_id == 0 {
             return Err(Status::invalid_argument(
-                "Missing agent_uuid in DeleteAgentRequest",
+                "Missing agent_id in DeleteAgentRequest",
             ));
         }
 
         // Use the delete_agent handler directly
         let mut manager = self.agent_manager.lock().await;
-        match crate::handlers::delete::handle_delete_agent(&mut *manager, agent_uuid).await {
+        match crate::handlers::delete::handle_delete_agent(&mut *manager, agent_id).await {
             Ok(response) => {
                 println!("[INFO] Agent deleted successfully");
                 Ok(Response::new(response))

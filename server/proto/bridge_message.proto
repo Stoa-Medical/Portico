@@ -29,8 +29,8 @@ message GeneralResponse {
 
 // Signal request structure
 message SignalRequest {
-  string signal_uuid = 1;
-  string agent_uuid = 2;
+  int32 signal_id = 1;
+  int32 agent_id = 2;
   SignalType signal_type = 3;
 
   // Optional payload based on signal type
@@ -54,7 +54,7 @@ message CreateAgentRequest {
 }
 
 message DeleteAgentRequest {
-  string agent_uuid = 1;
+  int32 agent_id = 1;
 }
 
 // === Sub definitions ===

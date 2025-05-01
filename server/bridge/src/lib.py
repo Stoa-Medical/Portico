@@ -85,7 +85,7 @@ class BridgeClient:
 
                 # In a real implementation, you might want to update the database with this UUID
                 # to link the signal with the runtime session
-                # Example: update_signal_with_session_uuid(signal_request.signal_uuid, response.runtime_session_uuid)
+                # Example: update_signal_with_rts_id(signal_request.signal_id, response.runtime_session_uuid)
 
             return response
         except Exception as e:
@@ -144,17 +144,16 @@ async def create_signal_request(data: dict[str, Any]) -> Any:
             return None
 
         # Extract the necessary fields from the record
-        signal_uuid = str(get(record, "global_uuid", uuid.uuid4()))
+        # Get the signal ID directly from the record
+        signal_id = get(record, "id", 0)
 
-        # Get the agent_id from the record and fetch the corresponding agent's global_uuid
-        agent_id = get(record, "agent_id")
-        agent_uuid = ""
+        # Get the agent ID directly from the record
+        agent_id = get(record, "agent_id", 0)
+
         if agent_id:
-            # In a real implementation, you would fetch the agent's global_uuid from the database
-            # For now, we'll use the agent_id as a placeholder
-            agent_uuid = str(agent_id)
+            logger.info(f"Processing signal for agent_id: {agent_id}")
         else:
-            logger.warning("No agent_id found in record, using empty agent_uuid")
+            logger.warning("No agent_id found in record")
 
         # Determine signal type
         signal_type_str = get(record, "signal_type", "").upper()
@@ -180,8 +179,8 @@ async def create_signal_request(data: dict[str, Any]) -> Any:
 
         # Create the base request via pb2 namespace using the correct field names
         request = pb2.SignalRequest(
-            signal_uuid=signal_uuid,
-            agent_uuid=agent_uuid,
+            signal_id=signal_id,
+            agent_id=agent_id,
             signal_type=signal_type,
         )
 
@@ -322,10 +321,10 @@ async def handle_agent_delete(payload: dict[str, Any], client: BridgeClient) -> 
             logger.error("No record found in agent delete payload")
             return
 
-        # Get the agent UUID from the record
-        agent_uuid = str(get(record, "id", ""))
-        if not agent_uuid:
-            logger.error("No agent UUID found in delete record")
+        # Get the agent ID from the record
+        agent_id = get(record, "id", 0)
+        if not agent_id:
+            logger.error("No agent ID found in delete record")
             return
 
         # Create the DeleteAgentRequest
@@ -334,7 +333,7 @@ async def handle_agent_delete(payload: dict[str, Any], client: BridgeClient) -> 
             return
 
         # Create request
-        request = pb2.DeleteAgentRequest(agent_uuid=agent_uuid)
+        request = pb2.DeleteAgentRequest(agent_id=agent_id)
 
         # Send request
         try:

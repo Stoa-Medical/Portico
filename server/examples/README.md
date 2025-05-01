@@ -13,10 +13,10 @@ The `test_hacker_news.sql` file creates a new signal to trigger the Hacker News 
 
 ### Running the Script
 
-Execute the following command from the project root directory:
+Execute the following command from the examples directory:
 
 ```bash
-psql postgresql://postgres:postgres@localhost:54322/postgres -f server/examples/test_hacker_news.sql
+psql postgresql://postgres:postgres@localhost:54322/postgres -f test_hacker_news.sql
 ```
 
 ### What This Does

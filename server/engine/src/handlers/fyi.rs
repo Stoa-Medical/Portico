@@ -11,14 +11,14 @@ pub async fn handle_fyi(
 ) -> Result<SignalResponse, Status> {
     if let Some(crate::proto::signal_request::Payload::FyiData(fyi_data)) = &signal.payload {
         // Handle the FYI data
-        println!("[INFO] Received FYI data signal: {}", signal.signal_uuid);
+        println!("[INFO] Received FYI data signal: {}", signal.signal_id);
 
         // Convert the data to JSON for processing
         let fyi_json = proto_struct_to_json(fyi_data);
 
         // Log any associated agent info
-        if !signal.agent_uuid.is_empty() {
-            println!("[INFO] FYI related to agent: {}", signal.agent_uuid);
+        if signal.agent_id != 0 {
+            println!("[INFO] FYI related to agent: {}", signal.agent_id);
         }
 
         // For now, we'll just log the data and return success

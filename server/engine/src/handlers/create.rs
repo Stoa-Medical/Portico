@@ -40,6 +40,13 @@ pub async fn handle_create_agent(
                 }
             }
 
+            // Add to local_id_map if the agent has a local_id
+            if let Some(local_id) = agent.identifiers.local_id {
+                let local_id_str = local_id.to_string();
+                println!("[INFO] Adding mapping from local ID {} to UUID {}", local_id_str, agent_uuid);
+                manager.local_id_map.insert(local_id_str, agent_uuid.clone());
+            }
+
             Ok(GeneralResponse {
                 success: true,
                 message: format!("Agent {} created successfully", agent_uuid),

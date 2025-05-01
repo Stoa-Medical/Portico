@@ -22,7 +22,7 @@ from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x14\x62ridge_message.proto\x12\x07portico\x1a\x1cgoogle/protobuf/struct.proto"(\n\x11ServerInitRequest\x12\x13\n\x0bserver_init\x18\x01 \x01(\x08"3\n\x0fGeneralResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t"\xed\x01\n\rSignalRequest\x12\x13\n\x0bsignal_uuid\x18\x01 \x01(\t\x12\x12\n\nagent_uuid\x18\x02 \x01(\t\x12(\n\x0bsignal_type\x18\x03 \x01(\x0e\x32\x13.portico.SignalType\x12+\n\x08run_data\x18\x04 \x01(\x0b\x32\x17.google.protobuf.StructH\x00\x12$\n\x04sync\x18\x05 \x01(\x0b\x32\x14.portico.SyncPayloadH\x00\x12+\n\x08\x66yi_data\x18\x06 \x01(\x0b\x32\x17.google.protobuf.StructH\x00\x42\t\n\x07payload"~\n\x0eSignalResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x1c\n\x14runtime_session_uuid\x18\x03 \x01(\t\x12,\n\x0bresult_data\x18\x04 \x01(\x0b\x32\x17.google.protobuf.Struct"A\n\x12\x43reateAgentRequest\x12+\n\nagent_json\x18\x01 \x01(\x0b\x32\x17.google.protobuf.Struct"(\n\x12\x44\x65leteAgentRequest\x12\x12\n\nagent_uuid\x18\x01 \x01(\t"E\n\x0bSyncPayload\x12!\n\x05scope\x18\x01 \x01(\x0e\x32\x12.portico.SyncScope\x12\x13\n\x0b\x61gent_uuids\x18\x02 \x03(\t*(\n\nSignalType\x12\x07\n\x03RUN\x10\x00\x12\x08\n\x04SYNC\x10\x01\x12\x07\n\x03\x46YI\x10\x02*"\n\tSyncScope\x12\x07\n\x03\x41LL\x10\x00\x12\x0c\n\x08SPECIFIC\x10\x01\x32\xa1\x02\n\rBridgeService\x12\x42\n\nInitServer\x12\x1a.portico.ServerInitRequest\x1a\x18.portico.GeneralResponse\x12@\n\rProcessSignal\x12\x16.portico.SignalRequest\x1a\x17.portico.SignalResponse\x12\x44\n\x0b\x43reateAgent\x12\x1b.portico.CreateAgentRequest\x1a\x18.portico.GeneralResponse\x12\x44\n\x0b\x44\x65leteAgent\x12\x1b.portico.DeleteAgentRequest\x1a\x18.portico.GeneralResponseb\x06proto3'
+    b'\n\x14\x62ridge_message.proto\x12\x07portico\x1a\x1cgoogle/protobuf/struct.proto"(\n\x11ServerInitRequest\x12\x13\n\x0bserver_init\x18\x01 \x01(\x08"3\n\x0fGeneralResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t"\xe9\x01\n\rSignalRequest\x12\x11\n\tsignal_id\x18\x01 \x01(\x05\x12\x10\n\x08\x61gent_id\x18\x02 \x01(\x05\x12(\n\x0bsignal_type\x18\x03 \x01(\x0e\x32\x13.portico.SignalType\x12+\n\x08run_data\x18\x04 \x01(\x0b\x32\x17.google.protobuf.StructH\x00\x12$\n\x04sync\x18\x05 \x01(\x0b\x32\x14.portico.SyncPayloadH\x00\x12+\n\x08\x66yi_data\x18\x06 \x01(\x0b\x32\x17.google.protobuf.StructH\x00\x42\t\n\x07payload"~\n\x0eSignalResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x1c\n\x14runtime_session_uuid\x18\x03 \x01(\t\x12,\n\x0bresult_data\x18\x04 \x01(\x0b\x32\x17.google.protobuf.Struct"A\n\x12\x43reateAgentRequest\x12+\n\nagent_json\x18\x01 \x01(\x0b\x32\x17.google.protobuf.Struct"&\n\x12\x44\x65leteAgentRequest\x12\x10\n\x08\x61gent_id\x18\x01 \x01(\x05"E\n\x0bSyncPayload\x12!\n\x05scope\x18\x01 \x01(\x0e\x32\x12.portico.SyncScope\x12\x13\n\x0b\x61gent_uuids\x18\x02 \x03(\t*(\n\nSignalType\x12\x07\n\x03RUN\x10\x00\x12\x08\n\x04SYNC\x10\x01\x12\x07\n\x03\x46YI\x10\x02*"\n\tSyncScope\x12\x07\n\x03\x41LL\x10\x00\x12\x0c\n\x08SPECIFIC\x10\x01\x32\xa1\x02\n\rBridgeService\x12\x42\n\nInitServer\x12\x1a.portico.ServerInitRequest\x1a\x18.portico.GeneralResponse\x12@\n\rProcessSignal\x12\x16.portico.SignalRequest\x1a\x17.portico.SignalResponse\x12\x44\n\x0b\x43reateAgent\x12\x1b.portico.CreateAgentRequest\x1a\x18.portico.GeneralResponse\x12\x44\n\x0b\x44\x65leteAgent\x12\x1b.portico.DeleteAgentRequest\x1a\x18.portico.GeneralResponseb\x06proto3'
 )
 
 _globals = globals()
@@ -30,24 +30,24 @@ _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "bridge_message_pb2", _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
     DESCRIPTOR._loaded_options = None
-    _globals["_SIGNALTYPE"]._serialized_start = 706
-    _globals["_SIGNALTYPE"]._serialized_end = 746
-    _globals["_SYNCSCOPE"]._serialized_start = 748
-    _globals["_SYNCSCOPE"]._serialized_end = 782
+    _globals["_SIGNALTYPE"]._serialized_start = 700
+    _globals["_SIGNALTYPE"]._serialized_end = 740
+    _globals["_SYNCSCOPE"]._serialized_start = 742
+    _globals["_SYNCSCOPE"]._serialized_end = 776
     _globals["_SERVERINITREQUEST"]._serialized_start = 63
     _globals["_SERVERINITREQUEST"]._serialized_end = 103
     _globals["_GENERALRESPONSE"]._serialized_start = 105
     _globals["_GENERALRESPONSE"]._serialized_end = 156
     _globals["_SIGNALREQUEST"]._serialized_start = 159
-    _globals["_SIGNALREQUEST"]._serialized_end = 396
-    _globals["_SIGNALRESPONSE"]._serialized_start = 398
-    _globals["_SIGNALRESPONSE"]._serialized_end = 524
-    _globals["_CREATEAGENTREQUEST"]._serialized_start = 526
-    _globals["_CREATEAGENTREQUEST"]._serialized_end = 591
-    _globals["_DELETEAGENTREQUEST"]._serialized_start = 593
-    _globals["_DELETEAGENTREQUEST"]._serialized_end = 633
-    _globals["_SYNCPAYLOAD"]._serialized_start = 635
-    _globals["_SYNCPAYLOAD"]._serialized_end = 704
-    _globals["_BRIDGESERVICE"]._serialized_start = 785
-    _globals["_BRIDGESERVICE"]._serialized_end = 1074
+    _globals["_SIGNALREQUEST"]._serialized_end = 392
+    _globals["_SIGNALRESPONSE"]._serialized_start = 394
+    _globals["_SIGNALRESPONSE"]._serialized_end = 520
+    _globals["_CREATEAGENTREQUEST"]._serialized_start = 522
+    _globals["_CREATEAGENTREQUEST"]._serialized_end = 587
+    _globals["_DELETEAGENTREQUEST"]._serialized_start = 589
+    _globals["_DELETEAGENTREQUEST"]._serialized_end = 627
+    _globals["_SYNCPAYLOAD"]._serialized_start = 629
+    _globals["_SYNCPAYLOAD"]._serialized_end = 698
+    _globals["_BRIDGESERVICE"]._serialized_start = 779
+    _globals["_BRIDGESERVICE"]._serialized_end = 1068
 # @@protoc_insertion_point(module_scope)
