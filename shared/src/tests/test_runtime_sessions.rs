@@ -9,7 +9,7 @@ fn create_test_session() -> RuntimeSession {
     let source_data = json!({"value": 5});
     let steps = vec![];
 
-    RuntimeSession::new(source_data, steps)
+    RuntimeSession::new(source_data, steps, None)
 }
 
 #[test]
@@ -46,7 +46,7 @@ fn test_session_with_steps() {
 
     // Create session with our test step
     let source_data = json!({"value": 5});
-    let _session = RuntimeSession::new(source_data, vec![step]);
+    let _session = RuntimeSession::new(source_data, vec![step], None);
 
     // Since we can't directly access private fields, we'll test
     // the session through its public API in a real test
