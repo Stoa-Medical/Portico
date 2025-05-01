@@ -14,7 +14,7 @@ INSERT INTO signals (
     initial_data
 )
 VALUES (
-    4, -- Agent ID for Hacker News Scraper (adjust if different in your database)
+    1, -- Agent ID for Hacker News Scraper (updated to match actual ID in database)
     gen_random_uuid(), -- Generate a random UUID for this request
     'run', -- Signal type 'run' to execute the agent
     '{"custom_output_path": "/tmp/hacker_news_custom.json"}' -- Custom output path for results
@@ -38,7 +38,7 @@ ORDER BY
 LIMIT 1;
 
 -- After running this test, you can check if a runtime session was created:
--- SELECT * FROM runtime_sessions WHERE requested_by_agent_id = 4 ORDER BY created_at DESC LIMIT 1;
+-- SELECT * FROM runtime_sessions WHERE requested_by_agent_id = 1 ORDER BY created_at DESC LIMIT 1;
 
 -- And you can check if the file was created (you would need to do this manually on the server):
 -- The file should be located at: /tmp/hacker_news_custom.json

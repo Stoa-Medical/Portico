@@ -379,6 +379,11 @@ table "runtime_sessions" {
         null = true
         comment = "Total execution time in seconds with microsecond precision"
     }
+    column "step_results" {
+        type = sql("json[]")
+        null = true
+        comment = "Array of JSON results for each step, in execution order"
+    }
 }
 
 

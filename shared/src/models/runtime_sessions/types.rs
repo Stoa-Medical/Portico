@@ -14,6 +14,7 @@ pub struct RuntimeSession {
     pub step_execution_times: Vec<Duration>, // Stores duration for each step
     pub total_execution_time: Duration,      // Stores total runtime
     pub requested_by_agent_id: Option<i32>, // The local ID of the agent that requested this session
+    pub step_results: Vec<Option<Value>>,   // Stores result for each step (None if failed)
 }
 
 impl RuntimeSession {
@@ -29,6 +30,7 @@ impl RuntimeSession {
             step_execution_times: Vec::new(),
             total_execution_time: Duration::ZERO,
             requested_by_agent_id,
+            step_results: Vec::new(),
         }
     }
 }

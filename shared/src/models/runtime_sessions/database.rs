@@ -23,6 +23,7 @@ struct RuntimeSessionRow {
     total_execution_time: Option<f64>,
     steps: Value, // JSON aggregation result
     requested_by_agent_id: Option<i32>,
+    step_results: Option<Vec<Value>>, // Array of step results
 }
 
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
@@ -61,6 +62,12 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
             _ => Duration::ZERO,
         };
 
+        // Get step results as array of JSON values, converting to Option<Value>
+        let step_results = match row.try_get::<Option<Vec<Value>>, _>("step_results") {
+            Ok(Some(results)) => results.into_iter().map(Some).collect(),
+            _ => Vec::new(),
+        };
+
         Ok(Self {
             identifiers: IdFields {
                 local_id: row.try_get("id")?,
@@ -78,6 +85,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for RuntimeSession {
             step_execution_times,
             total_execution_time,
             requested_by_agent_id: row.try_get("requested_by_agent_id")?,
+            step_results,
         })
     }
 }
@@ -119,15 +127,23 @@ impl DatabaseItem for RuntimeSession {
         // Parse UUID once for all operations
         let parsed_uuid = Uuid::parse_str(&self.identifiers.global_uuid)?;
 
+        // Prepare step_results for database by filtering out None values
+        let filtered_step_results: Vec<Value> = self
+            .step_results
+            .iter()
+            .filter_map(|v| v.clone())
+            .collect();
+
         // Create the session record using query! macro
         sqlx::query!(
             r#"
             INSERT INTO runtime_sessions (
                 global_uuid, rts_status, initial_data,
                 latest_step_idx, latest_result, created_at, updated_at,
-                step_execution_times, step_ids, total_execution_time, requested_by_agent_id
+                step_execution_times, step_ids, total_execution_time, requested_by_agent_id,
+                step_results
             )
-            VALUES ($1, $2::running_status, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            VALUES ($1, $2::running_status, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             "#,
             parsed_uuid,
             &self.status as &RunningStatus,
@@ -140,6 +156,7 @@ impl DatabaseItem for RuntimeSession {
             &step_ids,
             total_time_secs,
             self.requested_by_agent_id,
+            &filtered_step_results as &[Value]
         )
         .execute(pool)
         .await?;
@@ -169,6 +186,13 @@ impl DatabaseItem for RuntimeSession {
         // Parse UUID once
         let parsed_uuid = Uuid::parse_str(&self.identifiers.global_uuid)?;
 
+        // Prepare step_results for database by filtering out None values
+        let filtered_step_results: Vec<Value> = self
+            .step_results
+            .iter()
+            .filter_map(|v| v.clone())
+            .collect();
+
         sqlx::query!(
             r#"
             UPDATE runtime_sessions
@@ -180,7 +204,8 @@ impl DatabaseItem for RuntimeSession {
                 step_execution_times = $6,
                 step_ids = $7,
                 total_execution_time = $8,
-                requested_by_agent_id = $9
+                requested_by_agent_id = $9,
+                step_results = $11
             WHERE global_uuid = $10
             "#,
             &self.status as &RunningStatus,
@@ -192,7 +217,8 @@ impl DatabaseItem for RuntimeSession {
             &step_ids,
             total_time_secs,
             self.requested_by_agent_id,
-            parsed_uuid
+            parsed_uuid,
+            &filtered_step_results as &[Value]
         )
         .execute(pool)
         .await?;
@@ -232,6 +258,7 @@ impl DatabaseItem for RuntimeSession {
                 rs.step_execution_times,
                 rs.step_ids,
                 rs.total_execution_time,
+                rs.step_results,
                 {} as "steps!: Value"
             FROM runtime_sessions rs
             "#,
@@ -278,6 +305,12 @@ impl DatabaseItem for RuntimeSession {
                     })
                     .unwrap_or_default(),
                 requested_by_agent_id: row.requested_by_agent_id,
+                step_results: row
+                    .step_results
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(Some)
+                    .collect(),
             })
             .collect();
 
@@ -305,6 +338,7 @@ impl DatabaseItem for RuntimeSession {
                     rs.step_execution_times,
                     rs.step_ids,
                     rs.total_execution_time,
+                    rs.step_results,
                     {} as "steps!: Value"
                 FROM runtime_sessions rs
                 WHERE rs.id = $1
@@ -333,6 +367,7 @@ impl DatabaseItem for RuntimeSession {
                     rs.step_execution_times,
                     rs.step_ids,
                     rs.total_execution_time,
+                    rs.step_results,
                     {} as "steps!: Value"
                 FROM runtime_sessions rs
                 WHERE rs.global_uuid = $1
@@ -379,6 +414,12 @@ impl DatabaseItem for RuntimeSession {
                 })
                 .unwrap_or_default(),
             requested_by_agent_id: row.requested_by_agent_id,
+            step_results: row
+                .step_results
+                .unwrap_or_default()
+                .into_iter()
+                .map(Some)
+                .collect(),
         }))
     }
 }

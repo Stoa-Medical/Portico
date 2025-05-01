@@ -23,6 +23,10 @@ impl RuntimeSession {
         // Initialize timing fields
         self.step_execution_times = Vec::with_capacity(self.steps.len());
         self.total_execution_time = std::time::Duration::ZERO;
+
+        // Initialize step_results with None values for each step
+        self.step_results = vec![None; self.steps.len()];
+
         let start_time = Instant::now();
 
         // Execute each step in order, passing the result of each step to the next
@@ -49,7 +53,10 @@ impl RuntimeSession {
                     current_value = value.clone();
 
                     // Store the intermediate result
-                    self.last_successful_result = Some(value);
+                    self.last_successful_result = Some(value.clone());
+
+                    // Store the step result
+                    self.step_results[idx] = Some(value);
                 }
                 Err(e) => {
                     // Still record execution time for the failed step
