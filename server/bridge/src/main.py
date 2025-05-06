@@ -126,7 +126,7 @@ async def main():
     await channel_agents.subscribe()
     channel_agents_deletes = client.channel("agent-deletes")
     channel_agents.on_postgres_changes(
-        event="INSERT",
+        event="DELETE",
         callback=lambda payload: asyncio.create_task(
             handle_agent_delete(payload, grpc_client)
         ),
