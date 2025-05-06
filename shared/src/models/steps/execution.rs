@@ -165,9 +165,9 @@ impl Step {
             }
         };
 
-        // Standardize the output format for all step types
+        // Return raw output
         match raw_result {
-            Ok(output) => Ok(self.standardize_output(output)),
+            Ok(output) => Ok(output),
             Err(err) => {
                 // Create standardized error output
                 let mut error_map = Map::new();

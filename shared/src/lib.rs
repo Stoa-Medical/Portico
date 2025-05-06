@@ -1,6 +1,5 @@
 /// Lib module (access with `crate::`)
 ///   Enums + traits go here (stylistic choice)!
-
 /// Tests
 #[cfg(test)]
 mod tests;
@@ -21,7 +20,7 @@ use pyo3::prelude::*;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sqlx::postgres::{PgArgumentBuffer, PgPool};
+use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Row};
 use std::collections::HashMap;
 use std::env;
@@ -29,69 +28,15 @@ use std::ffi::CString;
 use uuid::Uuid;
 
 // === Shared Enum definitions ===
-#[derive(Debug, PartialEq, Deserialize, Serialize, Clone, Default)]
+#[cfg_attr(feature = "strum", derive(EnumString, AsRefStr, Display))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(type_name = "running_status", rename_all = "lowercase")]
+#[cfg_attr(feature = "strum", strum(serialize_all = "lowercase"))]
 pub enum RunningStatus {
-    #[default]
     Waiting,
     Running,
     Completed,
     Cancelled,
-}
-
-impl RunningStatus {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            RunningStatus::Waiting => "waiting",
-            RunningStatus::Running => "running",
-            RunningStatus::Completed => "completed",
-            RunningStatus::Cancelled => "cancelled",
-        }
-    }
-}
-
-impl sqlx::Type<Postgres> for RunningStatus {
-    fn type_info() -> sqlx::postgres::PgTypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("running_status")
-    }
-}
-
-impl<'r> sqlx::Decode<'r, Postgres> for RunningStatus {
-    fn decode(
-        value: sqlx::postgres::PgValueRef<'r>,
-    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        match value.as_str()? {
-            "waiting" => Ok(RunningStatus::Waiting),
-            "running" => Ok(RunningStatus::Running),
-            "completed" => Ok(RunningStatus::Completed),
-            "cancelled" => Ok(RunningStatus::Cancelled),
-            _ => Err("Invalid running status".into()),
-        }
-    }
-}
-
-impl<'q> sqlx::Encode<'q, Postgres> for RunningStatus {
-    fn encode_by_ref(
-        &self,
-        buf: &mut PgArgumentBuffer,
-    ) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Send + Sync>> {
-        let s = self.as_str();
-        buf.extend_from_slice(s.as_bytes());
-        Ok(sqlx::encode::IsNull::No)
-    }
-}
-
-impl std::str::FromStr for RunningStatus {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "waiting" => Ok(RunningStatus::Waiting),
-            "running" => Ok(RunningStatus::Running),
-            "completed" => Ok(RunningStatus::Completed),
-            "cancelled" => Ok(RunningStatus::Cancelled),
-            _ => Err(format!("Invalid running status: {}", s)),
-        }
-    }
 }
 
 // ============ Struct definitions =============

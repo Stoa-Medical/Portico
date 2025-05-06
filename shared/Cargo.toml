@@ -17,6 +17,9 @@ url = "2.5.0"
 sqlx = { version = "0.8.3", features = ["postgres", "runtime-tokio", "tls-native-tls", "macros", "uuid", "chrono", "json", "bigdecimal"] }
 tokio = { version = "1.0", features = ["full"] }
 async-trait = "0.1.88"
+strum = { version = "0.24", optional = true, features = ["derive"] }
+typed-builder = { version = "0.10", optional = true }
+thiserror = { version = "1.0", optional = true }
 
 [dev-dependencies]
 tokio-test = "0.4.3"
