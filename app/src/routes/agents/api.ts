@@ -1,4 +1,5 @@
 import supabase from "$lib/supabase";
+import { getUserId } from "$lib/user";
 
 // TODO: Should be connected to a prompt step rather than the agent:
 type AgentLLMConfig = {
@@ -60,7 +61,11 @@ export type UpdateStepPayload = Partial<Step> & {
 export type UpdateAgentPayload = Partial<Agent> & { id: number };
 
 export const getAgents = async (): Promise<Agent[]> => {
-  const { data, error } = await supabase.from("agents").select("*");
+  const userId = await getUserId();
+  const { data, error } = await supabase
+    .from("agents")
+    .select("*")
+    .eq("owner_id", userId);
   if (error) throw error;
   return data;
 };
@@ -68,18 +73,10 @@ export const getAgents = async (): Promise<Agent[]> => {
 export const saveAgent = async (
   agent: CreateAgentPayload,
 ): Promise<Agent[]> => {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError) throw authError;
-  if (!user) throw new Error("User must be logged in to create an agent");
-
+  const userId = await getUserId();
   const { error } = await supabase
     .from("agents")
-    .insert([{ ...agent, owner_id: user.id, agent_state: "stable" }]);
-
+    .insert([{ ...agent, owner_id: userId, agent_state: "stable" }]);
   if (error) throw error;
   return getAgents();
 };
@@ -169,7 +166,6 @@ export const getRuntimeSessions = async (
     .select("*")
     .eq("requested_by_agent_id", agentId)
     .order("created_at", { ascending: false });
-
   if (error) throw error;
   return data;
 };

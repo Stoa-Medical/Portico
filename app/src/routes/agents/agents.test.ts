@@ -5,9 +5,11 @@ import {
   fireEvent,
   waitForElementToBeRemoved,
 } from "@testing-library/svelte";
+import { deleteAgent, saveAgent, updateAgent } from "./api";
 import AgentsPage from "./+page.svelte";
 
 beforeEach(() => {
+  vi.clearAllMocks();
   window.history.pushState({}, "", "/agents"); // Reset to base state
 });
 
@@ -57,44 +59,18 @@ function getMockRuntimeSessions() {
   ];
 }
 
-export const deleteEqMock = vi.fn(() => ({ data: null, error: null }));
-export const deleteMock = vi.fn(() => ({ eq: deleteEqMock }));
-export const insertAgentMock = vi.fn(() => ({ data: null, error: null }));
-export const updateEqMock = vi.fn(() => ({ data: null, error: null }));
-export const updateAgentMock = vi.fn(() => ({
-  eq: updateEqMock,
-  data: null,
-  error: null,
-}));
+const saveAgentMock = vi.mocked(saveAgent);
+const deleteAgentMock = vi.mocked(deleteAgent);
+const updateAgentMock = vi.mocked(updateAgent);
 
-vi.mock("$lib/supabase", () => {
-  return {
-    default: {
-      from: vi.fn(() => ({
-        select: vi.fn(() => ({ data: [], error: null })),
-        insert: insertAgentMock,
-        update: updateAgentMock,
-        delete: deleteMock,
-      })),
-      auth: {
-        getUser: vi.fn(() => ({
-          data: { user: { id: "test-user-id", email: "test@example.com" } },
-          error: null,
-        })),
-      },
-    },
-  };
-});
-
-vi.mock("./api", async () => {
-  const originalModule = await vi.importActual("./api");
+vi.mock("./api", () => {
   return {
     getAgents: vi.fn(() => Promise.resolve(getMockAgents())),
     getSteps: vi.fn(() => Promise.resolve(getMockSteps())),
     getRuntimeSessions: vi.fn(() => Promise.resolve(getMockRuntimeSessions())),
-    deleteAgent: originalModule.deleteAgent,
-    saveAgent: originalModule.saveAgent,
-    updateAgent: originalModule.updateAgent,
+    deleteAgent: vi.fn(() => Promise.resolve({ data: null, error: null })),
+    saveAgent: vi.fn(() => Promise.resolve({ data: null, error: null })),
+    updateAgent: vi.fn(() => Promise.resolve({ data: null, error: null })),
   };
 });
 
@@ -148,9 +124,9 @@ describe("agents.test.ts - Agents Page", () => {
     const deleteButton = await screen.findByText("Delete");
     await fireEvent.click(deleteButton);
 
-    // Then the agent remove API is called
-    expect(deleteMock).toHaveBeenCalled();
-    expect(deleteEqMock).toHaveBeenCalledWith("agent_id", 1);
+    // Then the agent remove API is called with the correct agent ID
+    expect(deleteAgentMock).toHaveBeenCalled();
+    expect(deleteAgentMock).toHaveBeenCalledWith(1);
   });
 
   it("allows a user to create a new agent", async () => {
@@ -174,17 +150,14 @@ describe("agents.test.ts - Agents Page", () => {
     await fireEvent.click(submitButton);
 
     // Then the create agent API is called
-    expect(insertAgentMock).toHaveBeenCalled();
-    expect(insertAgentMock.mock.calls[0]).toMatchObject([
-      [
-        {
-          agent_state: "stable",
-          description: "",
-          name: "New Agent Test",
-          type: "Assistant",
-          owner_id: "test-user-id",
-        },
-      ],
+    expect(saveAgentMock).toHaveBeenCalled();
+    expect(saveAgentMock.mock.calls[0]).toMatchObject([
+      {
+        agent_state: "inactive",
+        description: "",
+        name: "New Agent Test",
+        type: "Assistant",
+      },
     ]);
   });
 

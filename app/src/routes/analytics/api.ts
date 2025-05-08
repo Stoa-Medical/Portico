@@ -1,5 +1,6 @@
 import supabase from "$lib/supabase";
 import { getStartDateFromTimePeriod } from "$lib/date";
+import { getUserId } from "$lib/user";
 
 const DEFAULT_TIME_PERIOD = "30d";
 
@@ -7,18 +8,39 @@ export const getAnalyticsCounts = async (
   timePeriod: string = DEFAULT_TIME_PERIOD,
 ) => {
   const fromDate = getStartDateFromTimePeriod(timePeriod);
+  const userId = await getUserId();
+
+  const { data: agentsData, error: agentsError } = await supabase
+    .from("agents")
+    .select("id")
+    .eq("owner_id", userId);
+
+  if (agentsError) throw agentsError;
+
+  const agentIds = agentsData?.map((a) => a.id) ?? [];
+
+  if (agentIds.length === 0) {
+    return { agentCount: 0, runtimeSessionCount: 0, stepCount: 0 };
+  }
 
   const [
     { count: agentCount, error: agentError },
     { count: sessionCount, error: sessionError },
     { count: stepCount, error: stepError },
   ] = await Promise.all([
-    supabase.from("agents").select("*", { count: "exact", head: true }),
+    supabase
+      .from("agents")
+      .select("id", { count: "exact", head: true })
+      .eq("owner_id", userId),
     supabase
       .from("runtime_sessions")
-      .select("*", { count: "exact", head: true })
-      .gte("created_at", fromDate),
-    supabase.from("steps").select("*", { count: "exact", head: true }),
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", fromDate)
+      .in("requested_by_agent_id", agentIds),
+    supabase
+      .from("steps")
+      .select("id", { count: "exact", head: true })
+      .in("agent_id", agentIds),
   ]);
 
   if (agentError) throw agentError;
@@ -36,15 +58,25 @@ export const getAgentPerformance = async (
   timePeriod: string = DEFAULT_TIME_PERIOD,
 ) => {
   const fromDate = getStartDateFromTimePeriod(timePeriod);
+  const userId = await getUserId();
+
+  const { data: agentData, error: agentError } = await supabase
+    .from("agents")
+    .select("id")
+    .eq("owner_id", userId);
+
+  if (agentError) throw agentError;
+  const agentIds = agentData.map((a) => a.id);
+
   const { data, error } = await supabase
     .from("runtime_sessions")
     .select("requested_by_agent_id, rts_status, total_execution_time")
-    .gte("created_at", fromDate);
+    .gte("created_at", fromDate)
+    .in("requested_by_agent_id", agentIds);
 
   if (error) throw error;
 
   const grouped = new Map();
-
   data.forEach(
     ({ requested_by_agent_id, rts_status, total_execution_time }) => {
       const group = grouped.get(requested_by_agent_id) || {
@@ -75,16 +107,26 @@ export const getStepPerformance = async (
   timePeriod: string = DEFAULT_TIME_PERIOD,
 ) => {
   const fromDate = getStartDateFromTimePeriod(timePeriod);
-  const { data, error } = await supabase
+  const userId = await getUserId();
+
+  const { data: agentData, error: agentError } = await supabase
+    .from("agents")
+    .select("id")
+    .eq("owner_id", userId);
+
+  if (agentError) throw agentError;
+  const agentIds = agentData.map((a) => a.id);
+
+  const { data: sessionData, error: sessionError } = await supabase
     .from("runtime_sessions")
     .select("step_ids, step_execution_times")
-    .gte("created_at", fromDate);
+    .gte("created_at", fromDate)
+    .in("requested_by_agent_id", agentIds);
 
-  if (error) throw error;
+  if (sessionError) throw sessionError;
 
   const stepStats = new Map();
-
-  data.forEach(({ step_ids, step_execution_times }) => {
+  sessionData.forEach(({ step_ids, step_execution_times }) => {
     if (!step_ids || !step_execution_times) return;
     step_ids.forEach((stepId, idx) => {
       const time = parseFloat(step_execution_times[idx] ?? 0);
@@ -95,16 +137,20 @@ export const getStepPerformance = async (
     });
   });
 
-  const stepsResponse = await supabase
+  const { data: stepsData } = await supabase
     .from("steps")
-    .select("id, name, step_type, agent_id");
+    .select("id, name, step_type, agent_id")
+    .in("agent_id", agentIds);
 
-  const agentsResponse = await supabase.from("agents").select("id, name");
+  const { data: agentsData } = await supabase
+    .from("agents")
+    .select("id, name")
+    .eq("owner_id", userId);
 
-  const agentMap = new Map(agentsResponse.data?.map((a) => [a.id, a.name]));
+  const agentMap = new Map(agentsData?.map((a) => [a.id, a.name]));
 
   return (
-    stepsResponse.data?.map((step) => {
+    stepsData?.map((step) => {
       const stat = stepStats.get(step.id) || { runs: 0, totalTime: 0 };
       return {
         id: step.id,
@@ -124,10 +170,21 @@ export const getErrorDistribution = async (
   timePeriod: string = DEFAULT_TIME_PERIOD,
 ) => {
   const fromDate = getStartDateFromTimePeriod(timePeriod);
+  const userId = await getUserId();
+
+  const { data: agentData, error: agentError } = await supabase
+    .from("agents")
+    .select("id")
+    .eq("owner_id", userId);
+
+  if (agentError) throw agentError;
+  const agentIds = agentData.map((a) => a.id);
+
   const { data, error } = await supabase
     .from("runtime_sessions")
     .select("rts_status")
-    .gte("created_at", fromDate);
+    .gte("created_at", fromDate)
+    .in("requested_by_agent_id", agentIds);
 
   if (error) throw error;
 
