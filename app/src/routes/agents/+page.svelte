@@ -401,19 +401,21 @@
                       bind:value={selectedAgent.description}
                     />
                   </div>
-                  <div>
-                    <span
-                      class="text-sm font-medium text-gray-700 dark:text-gray-300"
-                      >Created At:</span
-                    >
-                    <DateTimeRow datetime={selectedAgent.created_at} />
-                  </div>
-                  <div>
-                    <span
-                      class="text-sm font-medium text-gray-700 dark:text-gray-300"
-                      >Last Updated:</span
-                    >
-                    <DateTimeRow datetime={selectedAgent.updated_at} />
+                  <div class="grid grid-cols-6">
+                    <div>
+                      <span
+                        class="text-sm font-medium text-gray-700 dark:text-gray-300"
+                        >Created At:</span
+                      >
+                      <DateTimeRow datetime={selectedAgent.created_at} />
+                    </div>
+                    <div>
+                      <span
+                        class="text-sm font-medium text-gray-700 dark:text-gray-300"
+                        >Last Updated:</span
+                      >
+                      <DateTimeRow datetime={selectedAgent.updated_at} />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -463,6 +465,16 @@
                               <Button
                                 size="xs"
                                 color="alternative"
+                                on:click={() =>
+                                  (selectedStep =
+                                    selectedStep?.id === step.id ? null : step)}
+                              >
+                                {selectedStep?.id === step.id ? "Hide" : "View"}
+                              </Button>
+                              <Button
+                                size="xs"
+                                color="blue"
+                                class="ml-2"
                                 href={`/steps/${step.id}?agentId=${selectedAgent.id}`}
                               >
                                 Edit
