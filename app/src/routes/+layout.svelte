@@ -15,8 +15,9 @@
     { href: "/steps", icon: "/tree-icon.svg", label: "Steps" },
   ];
 
-  let checkingAuth = true;
-  let user;
+  let checkingAuth = $state(true);
+  let user = $state<any>(undefined); // Using any for user type, adjust if you have a specific user type
+  let showLogoutTooltip = $state(false);
 
   const allowedPages = ["/login", "/register"];
 
@@ -72,7 +73,7 @@
           {#each links as { href, icon, label }}
             <a
               {href}
-              class={`w-10 h-10 p-2 rounded-full flex items-center justify-center transition 
+              class={`w-10 h-10 p-2 rounded-full flex items-center justify-center transition
       hover:scale-110
       ${
         $currentPath === href
@@ -88,11 +89,22 @@
         <div class="flex-grow"></div>
 
         <!-- Avatar Placeholder -->
-        <div
-          class="w-8 h-8 bg-cyan-800 text-white flex items-center justify-center mb-2 rounded-full cursor-pointer uppercase font-semibold"
-          on:click={() => supabase.auth.signOut()}
-        >
-          {user?.email?.[0] ?? "?"}
+        <div class="relative">
+          <div
+            class="w-8 h-8 bg-cyan-800 text-white flex items-center justify-center mb-2 rounded-full cursor-pointer uppercase font-semibold"
+            on:click={() => supabase.auth.signOut()}
+            on:mouseenter={() => (showLogoutTooltip = true)}
+            on:mouseleave={() => (showLogoutTooltip = false)}
+          >
+            {user?.email?.[0] ?? "?"}
+          </div>
+          {#if showLogoutTooltip}
+            <div
+              class="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 bg-gray-700 text-white text-xs rounded shadow-md whitespace-nowrap z-10"
+            >
+              Click to logout
+            </div>
+          {/if}
         </div>
       </aside>
     {/if}
