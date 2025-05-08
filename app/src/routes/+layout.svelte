@@ -111,7 +111,7 @@
 
     <!-- Main content -->
     <div class="flex-1 overflow-auto">
-      <main class="p-6">
+      <main class="p-6 h-full flex flex-col">
         <slot />
       </main>
     </div>

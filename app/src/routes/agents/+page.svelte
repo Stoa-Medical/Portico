@@ -283,72 +283,84 @@
   });
 </script>
 
-<main class="container mx-auto p-4">
-  <PageHeader title="Agents" {breadcrumbs} actionBar={getActions()} />
+<main class="flex flex-col h-full">
+  <div class="flex-shrink-0">
+    <PageHeader title="Agents" {breadcrumbs} actionBar={getActions()} />
+  </div>
 
-  <div class="flex gap-6 mt-6">
+  <div class="flex mt-6 flex-grow min-h-0">
     <!-- Agent List Pane -->
     <div
-      class={`transition-all duration-300 ease-in-out ${selectedAgent ? "w-1/3" : "w-full"}`}
+      class={`transition-all duration-300 ease-in-out pr-4 ${selectedAgent ? "w-2/5" : "w-full"}`}
     >
       <Card class="max-w-full">
-        <Table hoverable={true}>
-          <TableHead>
-            <TableHeadCell>Name</TableHeadCell>
-            <TableHeadCell>Type</TableHeadCell>
-            <TableHeadCell>Description</TableHeadCell>
-            <TableHeadCell>Status</TableHeadCell>
-            <TableHeadCell>Last Updated</TableHeadCell>
-          </TableHead>
-          <TableBody>
-            {#if agents}
-              {#each agents as agent (agent.id)}
-                <TableBodyRow
-                  on:click={() => selectAgent(agent)}
-                  class={`cursor-pointer ${selectedAgent?.id === agent.id ? "bg-sea/20" : "hover:bg-gray-50 dark:hover:bg-gray-700"}`}
-                >
-                  <TableBodyCell>{agent.name}</TableBodyCell>
-                  <TableBodyCell>{agent.type}</TableBodyCell>
-                  <TableBodyCell class="truncate max-w-xs"
-                    >{agent.description}</TableBodyCell
+        <div>
+          <Table hoverable={true}>
+            <TableHead>
+              <TableHeadCell>Name</TableHeadCell>
+              <TableHeadCell>Type</TableHeadCell>
+              <TableHeadCell>Description</TableHeadCell>
+              <TableHeadCell>Status</TableHeadCell>
+              <TableHeadCell>Last Updated</TableHeadCell>
+            </TableHead>
+            <TableBody>
+              {#if agents}
+                {#each agents as agent (agent.id)}
+                  <TableBodyRow
+                    on:click={() => selectAgent(agent)}
+                    class={`cursor-pointer transition-all duration-200 ${
+                      selectedAgent?.id === agent.id
+                        ? "bg-gradient-to-r from-sea/40 to-sea/20 border-l-4 border-sea font-medium shadow-sm"
+                        : "hover:bg-gray-50 dark:hover:bg-gray-700 border-l-4 border-transparent"
+                    }`}
                   >
-                  <TableBodyCell>
-                    <Badge
-                      color={agent.agent_state === "stable"
-                        ? "green"
-                        : "yellow"}
+                    <TableBodyCell
+                      class={selectedAgent?.id === agent.id ? "text-sea" : ""}
+                      >{agent.name}</TableBodyCell
                     >
-                      {agent.agent_state}
-                    </Badge>
+                    <TableBodyCell>{agent.type}</TableBodyCell>
+                    <TableBodyCell class="truncate max-w-xs"
+                      >{agent.description}</TableBodyCell
+                    >
+                    <TableBodyCell>
+                      <Badge
+                        color={agent.agent_state === "stable"
+                          ? "green"
+                          : "yellow"}
+                      >
+                        {agent.agent_state}
+                      </Badge>
+                    </TableBodyCell>
+                    <TableBodyCell
+                      >{readableDate(agent.updated_at)}</TableBodyCell
+                    >
+                  </TableBodyRow>
+                {/each}
+              {/if}
+              {#if !agents || agents.length === 0}
+                <TableBodyRow>
+                  <TableBodyCell colspan="5" class="text-center py-10">
+                    <Heading tag="h4" class="mb-2">No agents found.</Heading>
+                    <p class="mb-4 text-gray-500 dark:text-gray-400">
+                      Get started by creating a new agent.
+                    </p>
+                    <Button on:click={() => (showModal = true)} color="blue">
+                      <PlusOutline class="mr-2 h-5 w-5" />
+                      New Agent
+                    </Button>
                   </TableBodyCell>
-                  <TableBodyCell>{readableDate(agent.updated_at)}</TableBodyCell
-                  >
                 </TableBodyRow>
-              {/each}
-            {/if}
-            {#if !agents || agents.length === 0}
-              <TableBodyRow>
-                <TableBodyCell colspan="5" class="text-center py-10">
-                  <Heading tag="h4" class="mb-2">No agents found.</Heading>
-                  <p class="mb-4 text-gray-500 dark:text-gray-400">
-                    Get started by creating a new agent.
-                  </p>
-                  <Button on:click={() => (showModal = true)} color="blue">
-                    <PlusOutline class="mr-2 h-5 w-5" />
-                    New Agent
-                  </Button>
-                </TableBodyCell>
-              </TableBodyRow>
-            {/if}
-          </TableBody>
-        </Table>
+              {/if}
+            </TableBody>
+          </Table>
+        </div>
       </Card>
     </div>
 
     <!-- Agent Detail Pane -->
     {#if selectedAgent}
-      <div class="w-2/3" transition:fly={{ x: 200, duration: 300 }}>
-        <Card>
+      <div class="w-3/5" transition:fly={{ x: 200, duration: 300 }}>
+        <Card class="max-w-full">
           <div class="flex justify-between items-center mb-4">
             <div class="flex items-center gap-2">
               <Button on:click={backToList} color="light" size="sm">
@@ -357,7 +369,6 @@
               </Button>
               <Heading tag="h3">{selectedAgent.name}</Heading>
             </div>
-            <!-- Action buttons for selected agent can go here if needed -->
           </div>
 
           <Tabs style="underline">
@@ -366,31 +377,45 @@
               title="General"
               on:click={() => changeTab("General")}
             >
-              <div class="space-y-6 py-4">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <Label for="name" class="mb-2">Agent Name</Label>
-                    <Input id="name" bind:value={selectedAgent.name} />
+              <div class="py-4">
+                <div class="space-y-6">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <Label for="name" class="mb-2">Agent Name</Label>
+                      <Input id="name" bind:value={selectedAgent.name} />
+                    </div>
+                    <div>
+                      <Label for="type" class="mb-2">Agent Type</Label>
+                      <Select
+                        id="type"
+                        items={agentTypes}
+                        bind:value={selectedAgent.type}
+                      />
+                    </div>
                   </div>
                   <div>
-                    <Label for="type" class="mb-2">Agent Type</Label>
-                    <Select
-                      id="type"
-                      items={agentTypes}
-                      bind:value={selectedAgent.type}
+                    <Label for="description" class="mb-2">Description</Label>
+                    <Textarea
+                      id="description"
+                      rows="4"
+                      bind:value={selectedAgent.description}
                     />
                   </div>
+                  <div>
+                    <span
+                      class="text-sm font-medium text-gray-700 dark:text-gray-300"
+                      >Created At:</span
+                    >
+                    <DateTimeRow datetime={selectedAgent.created_at} />
+                  </div>
+                  <div>
+                    <span
+                      class="text-sm font-medium text-gray-700 dark:text-gray-300"
+                      >Last Updated:</span
+                    >
+                    <DateTimeRow datetime={selectedAgent.updated_at} />
+                  </div>
                 </div>
-                <div>
-                  <Label for="description" class="mb-2">Description</Label>
-                  <Textarea
-                    id="description"
-                    rows="4"
-                    bind:value={selectedAgent.description}
-                  />
-                </div>
-                <DateTimeRow datetime={selectedAgent.created_at} />
-                <DateTimeRow datetime={selectedAgent.updated_at} />
               </div>
             </TabItem>
 
@@ -399,99 +424,101 @@
               title="Steps"
               on:click={() => changeTab("Steps")}
             >
-              <div class="space-y-4 py-4">
-                <div class="flex justify-between items-center">
-                  <Heading tag="h4">Agent Steps</Heading>
-                  <Button
-                    size="sm"
-                    href={`/steps/new?agentId=${selectedAgent.id}&agentName=${encodeURIComponent(selectedAgent.name)}`}
-                    class="bg-sea text-black"
-                  >
-                    <PlusOutline class="mr-2 h-5 w-5" />
-                    Add Step
-                  </Button>
-                </div>
-                {#if steps && steps.length > 0}
-                  <Table hoverable={true}>
-                    <TableHead>
-                      <TableHeadCell>Step Name</TableHeadCell>
-                      <TableHeadCell>Type</TableHeadCell>
-                      <TableHeadCell>Last Edited</TableHeadCell>
-                      <TableHeadCell>Actions</TableHeadCell>
-                    </TableHead>
-                    <TableBody>
-                      {#each steps as step (step.id)}
-                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
-                          <TableBodyCell>{step.name}</TableBodyCell>
-                          <TableBodyCell>
-                            <Badge
-                              color={step.step_type === "python"
-                                ? "blue"
-                                : "purple"}>{step.step_type}</Badge
-                            >
-                          </TableBodyCell>
-                          <TableBodyCell
-                            >{readableDate(step.updated_at)}</TableBodyCell
-                          >
-                          <TableBodyCell>
-                            <Button
-                              size="xs"
-                              color="alternative"
-                              href={`/steps/${step.id}?agentId=${selectedAgent.id}`}
-                            >
-                              Edit
-                            </Button>
-                            <Button
-                              size="xs"
-                              color="red"
-                              class="ml-2"
-                              on:click={async () => {
-                                if (
-                                  confirm(
-                                    "Are you sure you want to delete this step?",
-                                  )
-                                ) {
-                                  await deleteStep(step.id);
-                                  await loadSteps(selectedAgent.id);
-                                }
-                              }}
-                            >
-                              <TrashBinOutline class="w-4 h-4" />
-                            </Button>
-                          </TableBodyCell>
-                        </tr>
-                        {#if selectedStep?.id === step.id}
-                          <tr>
-                            <td
-                              colspan="4"
-                              class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg"
-                            >
-                              <StepConfig
-                                bind:step={selectedStep}
-                                {agents}
-                                on:save={saveStepData}
-                              />
-                            </td>
-                          </tr>
-                        {/if}
-                      {/each}
-                    </TableBody>
-                  </Table>
-                {:else}
-                  <div
-                    class="text-center py-8 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800"
-                  >
-                    <p class="text-gray-500 dark:text-gray-400 mb-4">
-                      No steps found for this agent.
-                    </p>
+              <div class="py-4">
+                <div class="space-y-4">
+                  <div class="flex justify-between items-center">
+                    <Heading tag="h4">Agent Steps</Heading>
                     <Button
-                      class="bg-sea text-black"
+                      size="sm"
                       href={`/steps/new?agentId=${selectedAgent.id}&agentName=${encodeURIComponent(selectedAgent.name)}`}
+                      class="bg-sea text-black"
                     >
-                      <PlusOutline class="mr-2 h-5 w-5" /> Create First Step
+                      <PlusOutline class="mr-2 h-5 w-5" />
+                      Add Step
                     </Button>
                   </div>
-                {/if}
+                  {#if steps && steps.length > 0}
+                    <Table hoverable={true}>
+                      <TableHead>
+                        <TableHeadCell>Step Name</TableHeadCell>
+                        <TableHeadCell>Type</TableHeadCell>
+                        <TableHeadCell>Last Edited</TableHeadCell>
+                        <TableHeadCell>Actions</TableHeadCell>
+                      </TableHead>
+                      <TableBody>
+                        {#each steps as step (step.id)}
+                          <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                            <TableBodyCell>{step.name}</TableBodyCell>
+                            <TableBodyCell>
+                              <Badge
+                                color={step.step_type === "python"
+                                  ? "blue"
+                                  : "purple"}>{step.step_type}</Badge
+                              >
+                            </TableBodyCell>
+                            <TableBodyCell
+                              >{readableDate(step.updated_at)}</TableBodyCell
+                            >
+                            <TableBodyCell>
+                              <Button
+                                size="xs"
+                                color="alternative"
+                                href={`/steps/${step.id}?agentId=${selectedAgent.id}`}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                size="xs"
+                                color="red"
+                                class="ml-2"
+                                on:click={async () => {
+                                  if (
+                                    confirm(
+                                      "Are you sure you want to delete this step?",
+                                    )
+                                  ) {
+                                    await deleteStep(step.id);
+                                    await loadSteps(selectedAgent.id);
+                                  }
+                                }}
+                              >
+                                <TrashBinOutline class="w-4 h-4" />
+                              </Button>
+                            </TableBodyCell>
+                          </tr>
+                          {#if selectedStep?.id === step.id}
+                            <tr>
+                              <td
+                                colspan="4"
+                                class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg"
+                              >
+                                <StepConfig
+                                  bind:step={selectedStep}
+                                  {agents}
+                                  on:save={saveStepData}
+                                />
+                              </td>
+                            </tr>
+                          {/if}
+                        {/each}
+                      </TableBody>
+                    </Table>
+                  {:else}
+                    <div
+                      class="text-center py-8 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800"
+                    >
+                      <p class="text-gray-500 dark:text-gray-400 mb-4">
+                        No steps found for this agent.
+                      </p>
+                      <Button
+                        class="bg-sea text-black"
+                        href={`/steps/new?agentId=${selectedAgent.id}&agentName=${encodeURIComponent(selectedAgent.name)}`}
+                      >
+                        <PlusOutline class="mr-2 h-5 w-5" /> Create First Step
+                      </Button>
+                    </div>
+                  {/if}
+                </div>
               </div>
             </TabItem>
 
@@ -500,46 +527,48 @@
               title="Runtime Sessions"
               on:click={() => changeTab("Sessions")}
             >
-              <div class="space-y-4 py-4">
-                <Heading tag="h4">Runtime Sessions</Heading>
-                {#if runtimeSessions && runtimeSessions.length > 0}
-                  <Table hoverable={true}>
-                    <TableHead>
-                      <TableHeadCell>Session ID</TableHeadCell>
-                      <TableHeadCell>Status</TableHeadCell>
-                      <TableHeadCell>Started At</TableHeadCell>
-                      <TableHeadCell>Last Activity</TableHeadCell>
-                    </TableHead>
-                    <TableBody>
-                      {#each runtimeSessions as session (session.id)}
-                        <tr>
-                          <TableBodyCell>{session.id}</TableBodyCell>
-                          <TableBodyCell>
-                            <Badge
-                              color={session.status === "completed"
-                                ? "green"
-                                : session.status === "running"
-                                  ? "blue"
-                                  : "yellow"}
+              <div class="py-4">
+                <div class="space-y-4">
+                  <Heading tag="h4">Runtime Sessions</Heading>
+                  {#if runtimeSessions && runtimeSessions.length > 0}
+                    <Table hoverable={true}>
+                      <TableHead>
+                        <TableHeadCell>Session ID</TableHeadCell>
+                        <TableHeadCell>Status</TableHeadCell>
+                        <TableHeadCell>Started At</TableHeadCell>
+                        <TableHeadCell>Last Activity</TableHeadCell>
+                      </TableHead>
+                      <TableBody>
+                        {#each runtimeSessions as session (session.id)}
+                          <tr>
+                            <TableBodyCell>{session.id}</TableBodyCell>
+                            <TableBodyCell>
+                              <Badge
+                                color={session.status === "completed"
+                                  ? "green"
+                                  : session.status === "running"
+                                    ? "blue"
+                                    : "yellow"}
+                              >
+                                {session.status}
+                              </Badge>
+                            </TableBodyCell>
+                            <TableBodyCell
+                              >{readableDate(session.created_at)}</TableBodyCell
                             >
-                              {session.status}
-                            </Badge>
-                          </TableBodyCell>
-                          <TableBodyCell
-                            >{readableDate(session.created_at)}</TableBodyCell
-                          >
-                          <TableBodyCell
-                            >{readableDate(session.updated_at)}</TableBodyCell
-                          >
-                        </tr>
-                      {/each}
-                    </TableBody>
-                  </Table>
-                {:else}
-                  <div class="text-center py-6 text-gray-500">
-                    No runtime sessions found for this agent.
-                  </div>
-                {/if}
+                            <TableBodyCell
+                              >{readableDate(session.updated_at)}</TableBodyCell
+                            >
+                          </tr>
+                        {/each}
+                      </TableBody>
+                    </Table>
+                  {:else}
+                    <div class="text-center py-6 text-gray-500">
+                      No runtime sessions found for this agent.
+                    </div>
+                  {/if}
+                </div>
               </div>
             </TabItem>
           </Tabs>
