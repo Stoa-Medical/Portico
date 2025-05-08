@@ -2,9 +2,10 @@
   import supabase from "$lib/supabase";
   import { goto } from "$app/navigation";
 
-  let email = "";
-  let password = "";
-  let error = "";
+  let email = $state("");
+  let password = $state("");
+  let error = $state("");
+  let showPassword = $state(false);
 
   async function login() {
     error = "";
@@ -64,11 +65,21 @@
       <label for="password">Password</label>
       <input
         name="password"
-        type="password"
+        type={showPassword ? "text" : "password"}
         bind:value={password}
         class="border w-full p-2 rounded text-black"
         required
       />
+    </div>
+
+    <div class="flex items-center">
+      <input
+        type="checkbox"
+        id="showPasswordCheckbox"
+        bind:checked={showPassword}
+        class="mr-2"
+      />
+      <label for="showPasswordCheckbox" class="text-sm">Show Password</label>
     </div>
 
     {#if error}
