@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import {
     Card,
     Button,
@@ -36,30 +36,75 @@
     deleteStep,
   } from "./api";
   import { onMount } from "svelte";
+  import { fly } from "svelte/transition";
 
   // Selected resources for detail views
-  let selectedAgent = null;
-  let selectedStep = null;
-  let selectedRuntimeSession = null;
-  let currentTab = null;
+  let selectedAgent = $state<any | null>(null);
+  let selectedStep = $state<any | null>(null);
+  let selectedRuntimeSession = $state<any | null>(null);
+  let currentTab = $state<string | null>(null);
 
-  // Load agents data
-  let agents;
-  let steps;
-  let originalAgent = null;
-  let hasAgentChanges = false;
+  // Data stores
+  let agents = $state<any[] | undefined>(undefined);
+  let steps = $state<any[] | undefined>(undefined);
+  let originalAgent = $state<any | null>(null);
+  let runtimeSessions = $state<any[]>([]);
 
-  const loadAgents = async () => {
+  const hasAgentChanges = $derived(
+    selectedAgent && originalAgent
+      ? JSON.stringify(selectedAgent) !== JSON.stringify(originalAgent)
+      : false,
+  );
+
+  $effect(() => {
+    if (selectedAgent) {
+      loadSteps(selectedAgent.id);
+      loadRuntimeSessions(selectedAgent.id);
+    }
+  });
+
+  $effect(() => {
+    if (selectedAgent && currentTab) {
+      updateUrl(selectedAgent.id, currentTab);
+    }
+  });
+
+  let showModal = $state(false);
+
+  let agentFormData = $state({
+    name: "",
+    type: "Assistant",
+    description: "",
+    isActive: true,
+  });
+
+  const agentTypes = [
+    { value: "Assistant", name: "Assistant" },
+    { value: "Researcher", name: "Researcher" },
+    { value: "Analyst", name: "Analyst" },
+    { value: "Custom", name: "Custom" },
+  ];
+
+  async function loadAgents() {
     try {
       agents = await getAgents();
     } catch (err) {
       console.error("Failed to load agents");
     }
-  };
+  }
 
-  async function loadSteps(agentId) {
+  async function loadSteps(agentIdInput: string | number) {
     try {
-      steps = await getSteps(agentId);
+      const id =
+        typeof agentIdInput === "string"
+          ? parseInt(agentIdInput, 10)
+          : agentIdInput;
+      if (isNaN(id)) {
+        console.error("Invalid agentId for loadSteps:", agentIdInput);
+        steps = [];
+        return;
+      }
+      steps = await getSteps(id);
     } catch (err) {
       console.error("Failed to load steps", err);
       steps = [];
@@ -71,74 +116,29 @@
 
     try {
       await updateStep(selectedStep);
-      await loadSteps(selectedAgent.id);
+      if (selectedAgent) await loadSteps(selectedAgent.id);
       selectedStep = null;
     } catch (err) {
       console.error("Failed to save step", err);
     }
   }
 
-  let runtimeSessions = [];
-
-  async function loadRuntimeSessions(agentId) {
+  async function loadRuntimeSessions(agentIdInput: string | number) {
     try {
-      runtimeSessions = await getRuntimeSessions(agentId);
+      const id =
+        typeof agentIdInput === "string"
+          ? parseInt(agentIdInput, 10)
+          : agentIdInput;
+      if (isNaN(id)) {
+        console.error("Invalid agentId for loadRuntimeSessions:", agentIdInput);
+        runtimeSessions = [];
+        return;
+      }
+      runtimeSessions = await getRuntimeSessions(id);
     } catch (err) {
       console.error("Failed to load runtime sessions", err);
       runtimeSessions = [];
     }
-  }
-
-  $: if (selectedAgent && originalAgent) {
-    hasAgentChanges =
-      JSON.stringify(selectedAgent) !== JSON.stringify(originalAgent);
-  }
-
-  $: if (selectedAgent) {
-    loadSteps(selectedAgent.id);
-    loadRuntimeSessions(selectedAgent.id);
-  }
-
-  $: if (selectedAgent && currentTab) {
-    updateUrl(selectedAgent.id, currentTab);
-  }
-
-  let showModal = false;
-
-  let agentFormData = {
-    name: "",
-    type: "Assistant",
-    description: "",
-  };
-
-  const agentTypes = [
-    { value: "Assistant", name: "Assistant" },
-    { value: "Researcher", name: "Researcher" },
-    { value: "Analyst", name: "Analyst" },
-    { value: "Custom", name: "Custom" },
-  ];
-
-  async function handleSubmit() {
-    const newAgent = {
-      description: agentFormData.description,
-      agent_state: agentFormData.isActive ? "stable" : "inactive",
-      name: agentFormData.name,
-      type: agentFormData.type,
-    };
-
-    agents = await saveAgent(newAgent);
-    resetForm();
-    showModal = false;
-    selectAgent(newAgent);
-  }
-
-  function resetForm() {
-    agentFormData = {
-      name: "",
-      type: "Assistant",
-      description: "",
-      isActive: true,
-    };
   }
 
   function updateUrl(agentId, tab) {
@@ -156,17 +156,27 @@
     window.history.replaceState({}, "", url);
   }
 
-  function selectAgent(agent) {
-    if (selectedAgent && selectedAgent?.id === agent.id) {
+  function selectAgent(agentProxy: any) {
+    if (selectedAgent && selectedAgent?.id === agentProxy.id) {
       selectedAgent = null;
       originalAgent = null;
       currentTab = null;
       updateUrl(null, null);
     } else {
-      originalAgent = structuredClone(agent);
-      selectedAgent = structuredClone(agent);
+      const agentToClone = {
+        id: agentProxy.id,
+        name: agentProxy.name,
+        type: agentProxy.type,
+        description: agentProxy.description,
+        agent_state: agentProxy.agent_state,
+        created_at: agentProxy.created_at,
+        updated_at: agentProxy.updated_at,
+      };
+
+      originalAgent = structuredClone(agentToClone);
+      selectedAgent = structuredClone(agentToClone);
       currentTab = "General";
-      updateUrl(agent.id, currentTab);
+      updateUrl(agentProxy.id, currentTab);
     }
   }
 
@@ -228,6 +238,29 @@
           },
         ];
 
+  async function handleSubmit() {
+    const newAgent = {
+      description: agentFormData.description,
+      agent_state: agentFormData.isActive ? "stable" : "inactive",
+      name: agentFormData.name,
+      type: agentFormData.type,
+    };
+
+    agents = await saveAgent(newAgent);
+    resetForm();
+    showModal = false;
+    selectAgent(newAgent);
+  }
+
+  function resetForm() {
+    agentFormData = {
+      name: "",
+      type: "Assistant",
+      description: "",
+      isActive: true,
+    };
+  }
+
   onMount(async () => {
     await loadAgents();
 
@@ -251,55 +284,59 @@
 </script>
 
 <main class="container mx-auto p-4">
-  <!-- Page Header with Breadcrumb -->
   <PageHeader title="Agents" {breadcrumbs} actionBar={getActions()} />
 
-  <!-- Master-Detail View -->
-  <div class="grid grid-cols-2 gap-6 mt-6">
-    <!-- Agents List (Master View) -->
-    <div class={selectedAgent ? "hidden lg:block" : "block"}>
+  <div class="flex gap-6 mt-6">
+    <!-- Agent List Pane -->
+    <div
+      class={`transition-all duration-300 ease-in-out ${selectedAgent ? "w-1/3" : "w-full"}`}
+    >
       <Card class="max-w-full">
-        <Table hoverable={true} data-testid="agents-table">
+        <Table hoverable={true}>
           <TableHead>
-            <TableHeadCell>Id</TableHeadCell>
             <TableHeadCell>Name</TableHeadCell>
             <TableHeadCell>Type</TableHeadCell>
+            <TableHeadCell>Description</TableHeadCell>
             <TableHeadCell>Status</TableHeadCell>
             <TableHeadCell>Last Updated</TableHeadCell>
           </TableHead>
           <TableBody>
-            {#each agents as agent}
-              <TableBodyRow
-                on:click={() => selectAgent(agent)}
-                data-testid={`agent-row-${agent.name}`}
-                class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 {selectedAgent?.id ===
-                agent.id
-                  ? 'bg-blue-50 dark:bg-blue-900/20'
-                  : ''}"
-              >
-                <TableBodyCell>{agent.id}</TableBodyCell>
-                <TableBodyCell>{agent.name}</TableBodyCell>
-                <TableBodyCell>{agent.type}</TableBodyCell>
-                <TableBodyCell>
-                  <span
-                    class={agent.agent_state === "stable"
-                      ? "text-green-500"
-                      : "text-gray-500"}
-                  >
-                    {agent.agent_state}
-                  </span>
-                </TableBodyCell>
-                <DateTimeRow datetime={agent.updated_at} />
-              </TableBodyRow>
-            {/each}
-
-            {#if agents?.length === 0}
-              <TableBodyRow>
-                <TableBodyCell
-                  colspan="5"
-                  class="text-center py-4 text-gray-500"
+            {#if agents}
+              {#each agents as agent (agent.id)}
+                <TableBodyRow
+                  on:click={() => selectAgent(agent)}
+                  class={`cursor-pointer ${selectedAgent?.id === agent.id ? "bg-sea/20" : "hover:bg-gray-50 dark:hover:bg-gray-700"}`}
                 >
-                  No agents found. Click "Add Agent" to create one.
+                  <TableBodyCell>{agent.name}</TableBodyCell>
+                  <TableBodyCell>{agent.type}</TableBodyCell>
+                  <TableBodyCell class="truncate max-w-xs"
+                    >{agent.description}</TableBodyCell
+                  >
+                  <TableBodyCell>
+                    <Badge
+                      color={agent.agent_state === "stable"
+                        ? "green"
+                        : "yellow"}
+                    >
+                      {agent.agent_state}
+                    </Badge>
+                  </TableBodyCell>
+                  <TableBodyCell>{readableDate(agent.updated_at)}</TableBodyCell
+                  >
+                </TableBodyRow>
+              {/each}
+            {/if}
+            {#if !agents || agents.length === 0}
+              <TableBodyRow>
+                <TableBodyCell colspan="5" class="text-center py-10">
+                  <Heading tag="h4" class="mb-2">No agents found.</Heading>
+                  <p class="mb-4 text-gray-500 dark:text-gray-400">
+                    Get started by creating a new agent.
+                  </p>
+                  <Button on:click={() => (showModal = true)} color="blue">
+                    <PlusOutline class="mr-2 h-5 w-5" />
+                    New Agent
+                  </Button>
                 </TableBodyCell>
               </TableBodyRow>
             {/if}
@@ -308,28 +345,19 @@
       </Card>
     </div>
 
-    <!-- Agent Details (Detail View) -->
+    <!-- Agent Detail Pane -->
     {#if selectedAgent}
-      <div class="col-span-1">
-        <Card class="max-w-full">
-          <div class="mb-4 flex items-center gap-3">
-            <Button
-              color="light"
-              size="sm"
-              class="lg:hidden"
-              on:click={backToList}
-            >
-              <ArrowLeftOutline class="mr-2 h-4 w-4" />
-              Back
-            </Button>
-            <Heading tag="h2" class="text-xl font-bold"
-              >{selectedAgent.name}</Heading
-            >
-            <Badge
-              color={selectedAgent.agent_state === "stable" ? "green" : "none"}
-            >
-              {selectedAgent.agent_state}
-            </Badge>
+      <div class="w-2/3" transition:fly={{ x: 200, duration: 300 }}>
+        <Card>
+          <div class="flex justify-between items-center mb-4">
+            <div class="flex items-center gap-2">
+              <Button on:click={backToList} color="light" size="sm">
+                <ArrowLeftOutline class="mr-2 h-4 w-4" />
+                Back to List
+              </Button>
+              <Heading tag="h3">{selectedAgent.name}</Heading>
+            </div>
+            <!-- Action buttons for selected agent can go here if needed -->
           </div>
 
           <Tabs style="underline">
@@ -344,7 +372,6 @@
                     <Label for="name" class="mb-2">Agent Name</Label>
                     <Input id="name" bind:value={selectedAgent.name} />
                   </div>
-
                   <div>
                     <Label for="type" class="mb-2">Agent Type</Label>
                     <Select
@@ -354,7 +381,6 @@
                     />
                   </div>
                 </div>
-
                 <div>
                   <Label for="description" class="mb-2">Description</Label>
                   <Textarea
@@ -363,18 +389,8 @@
                     bind:value={selectedAgent.description}
                   />
                 </div>
-
-                <!-- <div class="flex items-center gap-2">
-                  <Toggle bind:checked={selectedAgent.isActive} />
-                  <Label>Active Status</Label>
-                </div> -->
-
-                <div>
-                  <Label class="mb-2 font-bold inline-block">Created At:</Label>
-                  <span class="text-gray-700 text-sm dark:text-gray-300">
-                    {readableDate(selectedAgent.created_at)}
-                  </span>
-                </div>
+                <DateTimeRow datetime={selectedAgent.created_at} />
+                <DateTimeRow datetime={selectedAgent.updated_at} />
               </div>
             </TabItem>
 
@@ -383,94 +399,78 @@
               title="Steps"
               on:click={() => changeTab("Steps")}
             >
-              <div class="space-y-6 py-4">
-                <div class="flex justify-between items-center mb-4">
-                  <p class="text-gray-700 dark:text-gray-300">
-                    Each step can be a Python script or a Prompt Template.
-                  </p>
+              <div class="space-y-4 py-4">
+                <div class="flex justify-between items-center">
+                  <Heading tag="h4">Agent Steps</Heading>
                   <Button
-                    class="bg-sea text-black"
+                    size="sm"
                     href={`/steps/new?agentId=${selectedAgent.id}&agentName=${encodeURIComponent(selectedAgent.name)}`}
+                    class="bg-sea text-black"
                   >
                     <PlusOutline class="mr-2 h-5 w-5" />
                     Add Step
                   </Button>
                 </div>
-
                 {#if steps && steps.length > 0}
-                  <Table hoverable={true} data-testid="steps-table">
+                  <Table hoverable={true}>
                     <TableHead>
-                      <TableHeadCell>Id</TableHeadCell>
-                      <TableHeadCell>Name</TableHeadCell>
+                      <TableHeadCell>Step Name</TableHeadCell>
                       <TableHeadCell>Type</TableHeadCell>
-                      <!-- <TableHeadCell>Last Edited</TableHeadCell> -->
+                      <TableHeadCell>Last Edited</TableHeadCell>
                       <TableHeadCell>Actions</TableHeadCell>
                     </TableHead>
                     <TableBody>
-                      {#each steps as step}
-                        <TableBodyRow>
-                          <TableBodyCell>{step.id}</TableBodyCell>
+                      {#each steps as step (step.id)}
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
                           <TableBodyCell>{step.name}</TableBodyCell>
                           <TableBodyCell>
                             <Badge
-                              color={step.step_type === "Python"
+                              color={step.step_type === "python"
                                 ? "blue"
-                                : "purple"}
+                                : "purple"}>{step.step_type}</Badge
                             >
-                              {step.step_type}
-                            </Badge>
                           </TableBodyCell>
-                          <!-- <TableBodyCell>{step.lastEdited}</TableBodyCell> -->
+                          <TableBodyCell
+                            >{readableDate(step.updated_at)}</TableBodyCell
+                          >
                           <TableBodyCell>
-                            <div class="flex gap-2">
-                              {#if selectedStep?.id === step.id}
-                                <Button
-                                  size="xs"
-                                  color="light"
-                                  on:click={() => (selectedStep = null)}
-                                >
-                                  Close
-                                </Button>
-                                <Button
-                                  size="xs"
-                                  color="light"
-                                  on:click={async () => {
-                                    await saveStepData();
-                                    selectedStep = null;
-                                  }}
-                                >
-                                  Save
-                                </Button>
-                                <Button
-                                  size="xs"
-                                  class="bg-[#CE5A5A]"
-                                  on:click={async () => {
-                                    await deleteStep(selectedStep.id);
-                                    await loadSteps(selectedAgent.id);
-                                    selectedStep = null;
-                                  }}
-                                >
-                                  Delete
-                                </Button>
-                              {:else}
-                                <Button
-                                  size="xs"
-                                  color="light"
-                                  on:click={() => (selectedStep = step)}
-                                >
-                                  View
-                                </Button>
-                              {/if}
-                            </div>
+                            <Button
+                              size="xs"
+                              color="alternative"
+                              href={`/steps/${step.id}?agentId=${selectedAgent.id}`}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              size="xs"
+                              color="red"
+                              class="ml-2"
+                              on:click={async () => {
+                                if (
+                                  confirm(
+                                    "Are you sure you want to delete this step?",
+                                  )
+                                ) {
+                                  await deleteStep(step.id);
+                                  await loadSteps(selectedAgent.id);
+                                }
+                              }}
+                            >
+                              <TrashBinOutline class="w-4 h-4" />
+                            </Button>
                           </TableBodyCell>
-                        </TableBodyRow>
+                        </tr>
                         {#if selectedStep?.id === step.id}
                           <tr>
                             <td
                               colspan="4"
                               class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg"
                             >
-                              <StepConfig bind:step={selectedStep} {agents} />
+                              <StepConfig
+                                bind:step={selectedStep}
+                                {agents}
+                                on:save={saveStepData}
+                              />
                             </td>
                           </tr>
                         {/if}
@@ -482,105 +482,56 @@
                     class="text-center py-8 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800"
                   >
                     <p class="text-gray-500 dark:text-gray-400 mb-4">
-                      No steps found for this agent
+                      No steps found for this agent.
                     </p>
                     <Button
                       class="bg-sea text-black"
                       href={`/steps/new?agentId=${selectedAgent.id}&agentName=${encodeURIComponent(selectedAgent.name)}`}
                     >
-                      <PlusOutline class="mr-2 h-5 w-5" />
-                      Create First Step
+                      <PlusOutline class="mr-2 h-5 w-5" /> Create First Step
                     </Button>
                   </div>
                 {/if}
               </div>
             </TabItem>
+
             <TabItem
               open={currentTab === "Sessions"}
               title="Runtime Sessions"
               on:click={() => changeTab("Sessions")}
             >
-              <div class="space-y-6 py-4">
-                {#if runtimeSessions.length > 0}
+              <div class="space-y-4 py-4">
+                <Heading tag="h4">Runtime Sessions</Heading>
+                {#if runtimeSessions && runtimeSessions.length > 0}
                   <Table hoverable={true}>
                     <TableHead>
-                      <TableHeadCell>ID</TableHeadCell>
+                      <TableHeadCell>Session ID</TableHeadCell>
                       <TableHeadCell>Status</TableHeadCell>
-                      <TableHeadCell>Created</TableHeadCell>
-                      <TableHeadCell>Last Updated</TableHeadCell>
-                      <TableHeadCell>Actions</TableHeadCell>
+                      <TableHeadCell>Started At</TableHeadCell>
+                      <TableHeadCell>Last Activity</TableHeadCell>
                     </TableHead>
                     <TableBody>
-                      {#each runtimeSessions as session}
-                        <TableBodyRow>
+                      {#each runtimeSessions as session (session.id)}
+                        <tr>
                           <TableBodyCell>{session.id}</TableBodyCell>
                           <TableBodyCell>
-                            <Badge color="green">{session.rts_status}</Badge>
-                          </TableBodyCell>
-                          <DateTimeRow datetime={session.created_at} />
-                          <DateTimeRow datetime={session.updated_at} />
-                          <TableBodyCell>
-                            <div class="flex gap-2">
-                              {#if selectedRuntimeSession?.id === session.id}
-                                <Button
-                                  size="xs"
-                                  color="none"
-                                  on:click={() =>
-                                    (selectedRuntimeSession = null)}
-                                >
-                                  Close
-                                </Button>
-                              {:else}
-                                <Button
-                                  size="xs"
-                                  color="light"
-                                  on:click={() =>
-                                    (selectedRuntimeSession = session)}
-                                >
-                                  View
-                                </Button>
-                              {/if}
-                            </div>
-                          </TableBodyCell>
-                        </TableBodyRow>
-
-                        {#if selectedRuntimeSession?.id === session.id}
-                          <tr>
-                            <td
-                              colspan="6"
-                              class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg"
+                            <Badge
+                              color={session.status === "completed"
+                                ? "green"
+                                : session.status === "running"
+                                  ? "blue"
+                                  : "yellow"}
                             >
-                              <div class="space-y-4">
-                                <h3
-                                  class="text-lg font-semibold text-gray-800 dark:text-white"
-                                >
-                                  Runtime Session ID: {session.id}
-                                </h3>
-
-                                {#if session.initial_data}
-                                  <div>
-                                    <Label class="font-bold">Initial Data</Label
-                                    >
-                                    <pre
-                                      class="border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-3 rounded-md overflow-x-auto text-sm mt-2">
-{JSON.stringify(session.initial_data, null, 2)}</pre>
-                                  </div>
-                                {/if}
-
-                                {#if session.latest_result}
-                                  <div class="mt-6">
-                                    <Label class="font-bold"
-                                      >Latest Result</Label
-                                    >
-                                    <pre
-                                      class="border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-3 rounded-md overflow-x-auto text-sm mt-2">
-{JSON.stringify(session.latest_result, null, 2)}</pre>
-                                  </div>
-                                {/if}
-                              </div>
-                            </td>
-                          </tr>
-                        {/if}
+                              {session.status}
+                            </Badge>
+                          </TableBodyCell>
+                          <TableBodyCell
+                            >{readableDate(session.created_at)}</TableBodyCell
+                          >
+                          <TableBodyCell
+                            >{readableDate(session.updated_at)}</TableBodyCell
+                          >
+                        </tr>
                       {/each}
                     </TableBody>
                   </Table>
@@ -599,37 +550,33 @@
 
   <!-- Add Agent Modal -->
   <Modal title="Add New Agent" bind:open={showModal} autoclose>
-    <form on:submit={handleSubmit} class="space-y-4">
+    <form on:submit|preventDefault={handleSubmit} class="space-y-4">
       <div>
-        <Label for="name" class="mb-2">Agent Name</Label>
+        <Label for="modalAgentName" class="mb-2">Agent Name</Label>
         <Input
-          id="name"
+          id="modalAgentName"
           placeholder="Enter agent name"
           required
           bind:value={agentFormData.name}
         />
       </div>
-
       <div>
-        <Label for="type" class="mb-2">Agent Type</Label>
-        <Select id="type" items={agentTypes} bind:value={agentFormData.type} />
+        <Label for="modalAgentType" class="mb-2">Agent Type</Label>
+        <Select
+          id="modalAgentType"
+          items={agentTypes}
+          bind:value={agentFormData.type}
+        />
       </div>
-
       <div>
-        <Label for="description" class="mb-2">Description</Label>
+        <Label for="modalAgentDescription" class="mb-2">Description</Label>
         <Textarea
-          id="description"
+          id="modalAgentDescription"
           placeholder="Enter agent description"
           rows="3"
           bind:value={agentFormData.description}
         />
       </div>
-
-      <!-- <div class="flex items-center gap-2">
-        <Checkbox id="isActive" bind:checked={agentFormData.isActive} />
-        <Label for="isActive">Active</Label>
-      </div> -->
-
       <div class="flex justify-end gap-4">
         <Button
           color="alternative"
@@ -638,9 +585,7 @@
             resetForm();
           }}>Cancel</Button
         >
-        <Button type="submit" on:click={handleSubmit} color="blue"
-          >Create</Button
-        >
+        <Button type="submit" color="blue">Create</Button>
       </div>
     </form>
   </Modal>
