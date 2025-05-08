@@ -1,6 +1,6 @@
 # Portico SQL Examples
 
-This directory contains example SQL scripts for interacting with the Portico database.
+This directory contains example SQL scripts for interacting with the Portico database. Some "dummy data" is provided in `seed.sql` to get started and give an idea of what's possible.
 
 ## Running the Hacker News Scraper Test
 
