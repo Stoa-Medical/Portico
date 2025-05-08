@@ -18,15 +18,35 @@
       return;
     }
 
-    const { error: authError } = await supabase.auth.signUp({
+    const { data, error: authError } = await supabase.auth.signUp({
       email,
       password,
     });
 
     if (authError) {
-      error = authError.message;
+      if (
+        authError.message.includes("User already registered") ||
+        authError.message.includes("already exists")
+      ) {
+        error =
+          "This email address is already in use. Try logging in or use a different email.";
+      } else {
+        error = authError.message;
+      }
+    } else if (data.user && !data.session) {
+      // This case usually means email confirmation is required and has been sent,
+      // or it's an existing user being re-sent a confirmation (Supabase's default for confirmed users with email confirmation enabled).
+      success =
+        "Registration initiated! Please check your email to confirm your account. If you've registered before, this will re-send the confirmation.";
+    } else if (data.user && data.session) {
+      // This case means email confirmation might be off, or it's an OAuth/magic link scenario where session is immediate.
+      success = "Registration successful! You are now logged in.";
+      // Optionally, redirect to a different page if login is immediate
+      // await goto('/');
     } else {
-      success = "Registration successful! Please check your email to confirm.";
+      // Fallback, should ideally not be reached if data.user is the primary indicator
+      error =
+        "An unexpected issue occurred during registration. Please try again.";
     }
   }
 </script>
