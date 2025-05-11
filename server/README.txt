@@ -1,37 +1,59 @@
-This is the server code.
+This is the server code: Supabase configuration, a Python bridge service that forwards Supabase Realtime events, and a Rust gRPC engine that executes workflow steps.
 
-To check compilation: `cargo check` or `cargo build`
-To run with database: `docker compose up`
+To run full stack:
+- `docker compose up`
+- OR `supabase start` + `tmuxinator start .`
+
+To run components independently:
+
+1. Supabase (local dev only)
+   - cd supabase
+   - Review `config.toml` (API: 54321, DB: 54322, Studio: 54323)
+   - Start: `supabase start`
+   - Reset schema & seed data: `../reset_db.sh`
+
+2. Python Bridge
+   - cd bridge
+   - Install uv & create venv: `uv venv`
+   - Activate venv: `source .venv/bin/activate`
+   - Install deps: `uv pip install -e .`
+   - Copy & configure env: `cp .env-example .env` (set SUPABASE_URL, SUPABASE_KEY, ENGINE_URL)
+   - Run: `python -m src.main`
+
+3. Rust Engine
+   - cd engine
+   - Copy & configure env: `cp .env-example .env` (set DATABASE_URL)
+   - Check & build: `cargo check` or `cargo build`
+   - Run: `cargo run`
 
 REPO STRUCTURE
-- `engine` is the core server (Rust)
-- `supabase` is config for Supabase instance
-- `bridge` is lightweight middle service for handling Supabase stuff, e.g.:
-    1. Forwarding Supabase Realtime changes
-    2. Handling Supabase auth
+- `supabase/` – Supabase local instance config
+- `bridge/`   – Python middleware forwarding Realtime events to engine
+- `engine/`   – Rust gRPC server executing multi-step workflows
+- `proto/`    – shared protobuf definitions
+- `scheme.hcl`– database schema (source of truth)
+- `examples/` – SQL scripts for seeding and test scenarios
+- `reset_db.sh`– reset schema & seed script (uses supabase db reset & atlas)
+- `docker-compose.yml`– Compose file for bridge & engine
 
 TESTS
-- Unit tests are either in:
-    - `src/lib.rs`
-    - or `src/*/mod.rs` (for submodules)
-- Integration tests are in `tests/`
-- Run tests with `cargo test`
+- Engine (Rust)
+  - Unit: `engine/src/lib.rs` & submodules
+  - Integration: `engine/tests/`
+  - Run: `cargo test`
+- Bridge (Python)
+  - Tests: `bridge/tests/`
+  - Run: `python -m pytest`
 
-The database schema is maintained in `scheme.hcl`. This file should be considered the source-of-truth for the schema
+LOCAL TOOLKIT
+- Docker & Docker Compose
+- supabase CLI
+- Python >=3.10 & uv (https://astral.sh/uv)
+- Rust & Cargo (`cargo install cargo-audit --features=fix`)
+- Atlas CLI (https://atlasgo.io)
+- psql (PostgreSQL client)
 
-The `seed.sql` file contains sample data for development and testing purposes (NOT prod). This data includes:
-- Sample agents with different states and types
-- Steps associated with each agent
-- Signals with various statuses
-- Runtime sessions in different states
-
-Local toolkit:
-- brew (MacOS)
-- cargo (Rust)
-    - `cargo install cargo-audit --features=fix`
-
-Dependencies:
-- Python >3.11
-- supabase
-- protobuf
-- Atlas (https://atlasgo.io)
+DEPENDENCIES
+- Python packages: see `bridge/pyproject.toml`
+- Rust crates: see `engine/Cargo.toml`
+- Supabase SDK, grpcio, protobuf, etc.
