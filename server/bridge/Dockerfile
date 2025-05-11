@@ -1,46 +1,58 @@
-# Use Python 3.9 or higher
-FROM python:3.13-slim
+# Use Python 3.12 or higher
+FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install uv and grpcio-tools
-RUN pip install --no-cache-dir uv grpcio-tools
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    netcat-traditional \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python tools
+RUN pip install --no-cache-dir uv==0.1.23
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    UV_SYSTEM_PYTHON=1
+    UV_SYSTEM_PYTHON=true
 
 # Create workspace structure
-RUN mkdir -p /workspace/server/bridge /workspace/server/proto
+WORKDIR /app
 
-# Copy proto files first
-COPY server/proto/ /workspace/server/proto/
+# Copy requirements first for better layer caching
+COPY server/bridge/pyproject.toml /app/server/bridge/
 
-# Copy bridge service files
-COPY server/bridge/pyproject.toml /workspace/server/bridge/
-COPY server/bridge/uv.lock* /workspace/server/bridge/
-COPY server/bridge/src/ /workspace/server/bridge/src/
+# Copy proto files
+COPY server/proto/ /app/server/proto/
 
-# Set working directory to bridge service
-WORKDIR /workspace/server/bridge
+# Set working directory to bridge
+WORKDIR /app/server/bridge
 
-# Create virtual environment and install dependencies
+# Install dependencies
 RUN --mount=type=cache,target=/root/.cache \
-    uv venv /workspace/server/bridge/.venv && \
-    # Install all dependencies directly from pyproject.toml
-    uv pip install -e . --no-cache-dir \
-    && echo "source /workspace/server/bridge/.venv/bin/activate" >> ~/.bashrc
+    uv pip install -e . --no-cache-dir
 
-# Generate gRPC code
-RUN . /workspace/server/bridge/.venv/bin/activate && \
-    python -m src.proto.build_proto
+# Copy source code
+COPY server/bridge/src/ /app/server/bridge/src/
 
-# Add the virtual environment to PATH
-ENV PATH="/workspace/server/bridge/.venv/bin:$PATH"
+# Generate protobuf files
+RUN python -m src.proto.build_proto
 
-# Expose port for gRPC communication with engine
+# Default environment variables
+ENV POSTGRES_USER=postgres \
+    POSTGRES_PASSWORD=postgres \
+    POSTGRES_HOST=postgres \
+    POSTGRES_PORT=5432 \
+    POSTGRES_DB=postgres \
+    ENGINE_HOST=engine \
+    ENGINE_PORT=50051
+
+# Add healthcheck
+HEALTHCHECK --interval=5s --timeout=5s --start-period=5s --retries=3 \
+    CMD python -c "import socket; s = socket.socket(); s.connect(('localhost', 50052))" || exit 1
+
+# Expose port for service
 EXPOSE 50052
 
-# Start the service
-CMD ["python", "-m", "src.main"]
+# Ensure engine is running before starting bridge
+CMD ["sh", "-c", "until nc -z $ENGINE_HOST $ENGINE_PORT; do echo 'Waiting for engine...'; sleep 1; done && python -m src.main"]
