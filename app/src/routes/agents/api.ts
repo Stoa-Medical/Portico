@@ -1,5 +1,5 @@
 import supabase from "$lib/supabase";
-import { getUserId } from "$lib/user";
+import { getUserId, getUserIdIfEnforced } from "$lib/user";
 
 // TODO: Should be connected to a prompt step rather than the agent:
 type AgentLLMConfig = {
@@ -61,11 +61,15 @@ export type UpdateStepPayload = Partial<Step> & {
 export type UpdateAgentPayload = Partial<Agent> & { id: number };
 
 export const getAgents = async (): Promise<Agent[]> => {
-  const userId = await getUserId();
-  const { data, error } = await supabase
-    .from("agents")
-    .select("*")
-    .eq("owner_id", userId);
+  const userId = await getUserIdIfEnforced();
+  const query = supabase.from("agents").select("*");
+
+  // Only filter by owner_id if enforceAgentOwnership is enabled
+  if (userId) {
+    query.eq("owner_id", userId);
+  }
+
+  const { data, error } = await query;
   if (error) throw error;
   return data;
 };
@@ -123,10 +127,25 @@ export const getStep = async (stepId): Promise<Step[]> => {
 };
 
 export const getSteps = async (agentId: number): Promise<Step[]> => {
-  const { data, error } = await supabase
-    .from("steps")
-    .select("*")
-    .eq("agent_id", agentId);
+  const userId = await getUserIdIfEnforced();
+  let query = supabase.from("steps").select("*").eq("agent_id", agentId);
+
+  // If enforceAgentOwnership is enabled, only show steps from agents owned by this user
+  if (userId) {
+    // First get the agent to verify ownership
+    const { data: agentData } = await supabase
+      .from("agents")
+      .select("id")
+      .eq("id", agentId)
+      .eq("owner_id", userId);
+
+    // If agent doesn't belong to user, return empty array
+    if (!agentData || agentData.length === 0) {
+      return [];
+    }
+  }
+
+  const { data, error } = await query;
   if (error) throw error;
   return data;
 };
@@ -161,11 +180,29 @@ export const deleteStep = async (stepIdToDelete: number): Promise<void> => {
 export const getRuntimeSessions = async (
   agentId: number,
 ): Promise<RuntimeSession[]> => {
-  const { data, error } = await supabase
+  const userId = await getUserIdIfEnforced();
+  let query = supabase
     .from("runtime_sessions")
     .select("*")
     .eq("requested_by_agent_id", agentId)
     .order("created_at", { ascending: false });
+
+  // If enforceAgentOwnership is enabled, verify the agent is owned by this user
+  if (userId) {
+    // First check if the agent belongs to the user
+    const { data: agentData } = await supabase
+      .from("agents")
+      .select("id")
+      .eq("id", agentId)
+      .eq("owner_id", userId);
+
+    // If agent doesn't belong to user, return empty array
+    if (!agentData || agentData.length === 0) {
+      return [];
+    }
+  }
+
+  const { data, error } = await query;
   if (error) throw error;
   return data;
 };
