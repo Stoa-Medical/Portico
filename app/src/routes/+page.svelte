@@ -71,7 +71,9 @@
           <div
             class="p-4 rounded-md text-[18px] leading-[24px] tracking-normal font-normal text-white/60 bg-white/5 backdrop-blur-sm shadow-sm font-sans"
           >
-            <span class="text-red-400 font-semibold">{errorRate}%</span> error rate
+            <span class="text-red-400 font-semibold"
+              >{errorRate.toFixed(4)}%</span
+            > error rate
           </div>
           <div
             class="p-4 rounded-md text-[18px] leading-[24px] tracking-normal font-normal text-white/60 bg-white/5 backdrop-blur-sm shadow-sm font-sans"
