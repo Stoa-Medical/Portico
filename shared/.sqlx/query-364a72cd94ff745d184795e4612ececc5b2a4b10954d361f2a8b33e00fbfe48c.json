@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT \n                    s.id, s.global_uuid, s.user_requested_uuid,\n                    s.created_at, s.updated_at,\n                    s.signal_type as \"signal_type: _\",\n                    s.initial_data as \"initial_data: serde_json::Value\",\n                    s.response_data as \"response_data: serde_json::Value\",\n                    s.error_message,\n                    s.rts_id,\n                    a.id as agent_id,\n                    a.global_uuid as agent_global_uuid,\n                    a.created_at as agent_created_at,\n                    a.updated_at as agent_updated_at,\n                    a.description as agent_description,\n                    a.agent_state as \"agent_state: AgentState\"\n                FROM signals s\n                LEFT JOIN agents a ON s.agent_id = a.id\n                WHERE s.global_uuid = $1\n                ",
+  "query": "\n            SELECT\n                s.id, s.global_uuid, s.user_requested_uuid,\n                s.created_at, s.updated_at,\n                s.signal_type as \"signal_type: _\",\n                s.initial_data as \"initial_data: serde_json::Value\",\n                s.response_data as \"response_data: serde_json::Value\",\n                s.error_message,\n                s.rts_id,\n                a.id as agent_id,\n                a.global_uuid as agent_global_uuid,\n                a.created_at as agent_created_at,\n                a.updated_at as agent_updated_at,\n                a.description as agent_description,\n                a.agent_state as \"agent_state: AgentState\"\n            FROM signals s\n            LEFT JOIN agents a ON s.agent_id = a.id\n            ",
   "describe": {
     "columns": [
       {
@@ -36,7 +36,7 @@
             "name": "signal_type",
             "kind": {
               "Enum": [
-                "command",
+                "run",
                 "sync",
                 "fyi"
               ]
@@ -107,9 +107,7 @@
       }
     ],
     "parameters": {
-      "Left": [
-        "Uuid"
-      ]
+      "Left": []
     },
     "nullable": [
       false,
@@ -122,13 +120,13 @@
       true,
       true,
       true,
-      false,
-      false,
-      false,
-      false,
       true,
-      false
+      true,
+      true,
+      true,
+      true,
+      true
     ]
   },
-  "hash": "1b0f5aa4a5fd641c6171a986473b819a47cea53bd91fd45a3caff1abc47c476e"
+  "hash": "364a72cd94ff745d184795e4612ececc5b2a4b10954d361f2a8b33e00fbfe48c"
 }

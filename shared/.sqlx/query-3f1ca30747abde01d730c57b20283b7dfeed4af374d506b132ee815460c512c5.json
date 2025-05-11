@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT \n                s.id, s.global_uuid, s.user_requested_uuid,\n                s.created_at, s.updated_at,\n                s.signal_type as \"signal_type: _\",\n                s.initial_data as \"initial_data: serde_json::Value\",\n                s.response_data as \"response_data: serde_json::Value\",\n                s.error_message,\n                s.rts_id,\n                a.id as agent_id,\n                a.global_uuid as agent_global_uuid,\n                a.created_at as agent_created_at,\n                a.updated_at as agent_updated_at,\n                a.description as agent_description,\n                a.agent_state as \"agent_state: AgentState\"\n            FROM signals s\n            LEFT JOIN agents a ON s.agent_id = a.id\n            ",
+  "query": "\n            SELECT\n                s.id, s.global_uuid, s.user_requested_uuid,\n                s.created_at, s.updated_at,\n                s.signal_type as \"signal_type!: crate::models::signals::SignalType\",\n                s.initial_data as \"initial_data: Value\",\n                s.response_data as \"response_data: Value\",\n                s.error_message,\n                a.id as \"agent_id?\",\n                a.global_uuid as \"agent_global_uuid?\",\n                a.created_at as \"agent_created_at?\",\n                a.updated_at as \"agent_updated_at?\",\n                a.description as \"agent_description?\",\n                a.agent_state as \"agent_state?: crate::models::agents::AgentState\"\n            FROM signals s\n            LEFT JOIN agents a ON s.agent_id = a.id\n            WHERE s.global_uuid = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -30,13 +30,13 @@
       },
       {
         "ordinal": 5,
-        "name": "signal_type: _",
+        "name": "signal_type!: crate::models::signals::SignalType",
         "type_info": {
           "Custom": {
             "name": "signal_type",
             "kind": {
               "Enum": [
-                "command",
+                "run",
                 "sync",
                 "fyi"
               ]
@@ -46,12 +46,12 @@
       },
       {
         "ordinal": 6,
-        "name": "initial_data: serde_json::Value",
+        "name": "initial_data: Value",
         "type_info": "Json"
       },
       {
         "ordinal": 7,
-        "name": "response_data: serde_json::Value",
+        "name": "response_data: Value",
         "type_info": "Json"
       },
       {
@@ -61,37 +61,32 @@
       },
       {
         "ordinal": 9,
-        "name": "rts_id",
-        "type_info": "Int8"
-      },
-      {
-        "ordinal": 10,
-        "name": "agent_id",
+        "name": "agent_id?",
         "type_info": "Int4"
       },
       {
-        "ordinal": 11,
-        "name": "agent_global_uuid",
+        "ordinal": 10,
+        "name": "agent_global_uuid?",
         "type_info": "Uuid"
       },
       {
+        "ordinal": 11,
+        "name": "agent_created_at?",
+        "type_info": "Timestamptz"
+      },
+      {
         "ordinal": 12,
-        "name": "agent_created_at",
+        "name": "agent_updated_at?",
         "type_info": "Timestamptz"
       },
       {
         "ordinal": 13,
-        "name": "agent_updated_at",
-        "type_info": "Timestamptz"
-      },
-      {
-        "ordinal": 14,
-        "name": "agent_description",
+        "name": "agent_description?",
         "type_info": "Text"
       },
       {
-        "ordinal": 15,
-        "name": "agent_state: AgentState",
+        "ordinal": 14,
+        "name": "agent_state?: crate::models::agents::AgentState",
         "type_info": {
           "Custom": {
             "name": "agent_state",
@@ -107,7 +102,9 @@
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Uuid"
+      ]
     },
     "nullable": [
       false,
@@ -119,14 +116,13 @@
       true,
       true,
       true,
+      false,
+      false,
+      false,
+      false,
       true,
-      true,
-      true,
-      true,
-      true,
-      true,
-      true
+      false
     ]
   },
-  "hash": "3d33386aea3304497b84987669edfa68badaacbb3203c64cda7529accfb8b7b6"
+  "hash": "3f1ca30747abde01d730c57b20283b7dfeed4af374d506b132ee815460c512c5"
 }

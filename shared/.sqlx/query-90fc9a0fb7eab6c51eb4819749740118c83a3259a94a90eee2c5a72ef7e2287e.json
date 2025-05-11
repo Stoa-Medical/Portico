@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE runtime_sessions\n            SET rts_status = $1::running_status,\n                initial_data = $2,\n                latest_step_idx = $3,\n                latest_result = $4,\n                updated_at = $5,\n                step_execution_times = $6,\n                step_ids = $7,\n                total_execution_time = $8,\n                requested_by_agent_id = $9,\n                step_results = $11\n            WHERE global_uuid = $10\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "running_status",
+            "kind": {
+              "Enum": [
+                "waiting",
+                "running",
+                "completed",
+                "cancelled"
+              ]
+            }
+          }
+        },
+        "Json",
+        "Int4",
+        "Json",
+        "Timestamptz",
+        "NumericArray",
+        "Int4Array",
+        "Numeric",
+        "Int4",
+        "Uuid",
+        "JsonArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "90fc9a0fb7eab6c51eb4819749740118c83a3259a94a90eee2c5a72ef7e2287e"
+}

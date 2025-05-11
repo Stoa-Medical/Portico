@@ -1,0 +1,69 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT\n                    a.id, a.global_uuid, a.description,\n                    a.agent_state as \"agent_state: _\",\n                    a.created_at, a.updated_at,\n                    COALESCE(\n                        (\n                            SELECT json_agg(json_build_object(\n                                'id', s.id,\n                                'global_uuid', s.global_uuid,\n                                'created_at', s.created_at,\n                                'updated_at', s.updated_at,\n                                'agent_id', s.agent_id,\n                                'description', s.description,\n                                'step_type', s.step_type::text,\n                                'step_content', s.step_content\n                            ))\n                            FROM steps s\n                            WHERE s.agent_id = a.id\n                        ),\n                        '[]'::json\n                    ) as \"steps: JsonValue\"\n                FROM agents a\n                WHERE a.id = $1\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "global_uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "agent_state: _",
+        "type_info": {
+          "Custom": {
+            "name": "agent_state",
+            "kind": {
+              "Enum": [
+                "inactive",
+                "stable",
+                "unstable"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "steps: JsonValue",
+        "type_info": "Json"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "11281e9db4b4b5b28ada389ca0130b587b29fb562cceca003a9fcca91da2a531"
+}

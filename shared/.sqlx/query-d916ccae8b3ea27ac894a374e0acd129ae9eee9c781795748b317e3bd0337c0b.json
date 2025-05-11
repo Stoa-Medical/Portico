@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO runtime_sessions (\n                global_uuid, rts_status, initial_data,\n                latest_step_idx, latest_result, created_at, updated_at,\n                step_execution_times, step_ids, total_execution_time\n            )\n            VALUES ($1, $2::running_status, $3, $4, $5, $6, $7, $8, $9, $10)\n            ",
+  "query": "\n            INSERT INTO runtime_sessions (\n                global_uuid, rts_status, initial_data,\n                latest_step_idx, latest_result, created_at, updated_at,\n                step_execution_times, step_ids, total_execution_time, requested_by_agent_id,\n                step_results\n            )\n            VALUES ($1, $2::running_status, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)\n            ",
   "describe": {
     "columns": [],
     "parameters": {
@@ -26,10 +26,12 @@
         "Timestamptz",
         "NumericArray",
         "Int4Array",
-        "Numeric"
+        "Numeric",
+        "Int4",
+        "JsonArray"
       ]
     },
     "nullable": []
   },
-  "hash": "f90430cc4aaad8aab23be7e45f81326fd948c8f5dd8799b541ac1bdcca04ea28"
+  "hash": "d916ccae8b3ea27ac894a374e0acd129ae9eee9c781795748b317e3bd0337c0b"
 }
