@@ -19,6 +19,9 @@ target/
 .windsurfrules
 .claude
 ai_docs/
+specs/
 
 # Quick testing stuff
 server/test.sql
+# SpecStory explanation file
+.specstory/.what-is-this.md
