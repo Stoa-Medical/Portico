@@ -20,6 +20,8 @@ target/
 .claude
 ai_docs/
 specs/
+.paic/
+CLAUDE.md
 
 # Quick testing stuff
 server/test.sql
