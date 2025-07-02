@@ -20,6 +20,16 @@ Requirements:
 4. SQLite CLI for standalone mode
 5. SUPABASE_URL and SUPABASE_ANON_KEY in .env
 
+## Quick Start (Local development)
+
+```bash
+cd app
+pnpm install
+pnpm tauri dev   # runs SvelteKit + Tauri with live reload
+```
+
+The app will attempt to connect to the Portico server specified in `.env`. If none is provided, it falls back to an embedded SQLite database for offline usage.
+
 Setup:
 1. pnpm install
 2. cp .env-example .env

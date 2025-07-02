@@ -1,8 +1,21 @@
 This is the server code: Supabase configuration, a Python bridge service that forwards Supabase Realtime events, and a Rust gRPC engine that executes workflow steps.
 
-To run full stack:
-- `docker compose up`
-- OR `supabase start` + `tmuxinator start .`
+## Quick Start (Docker Compose)
+
+From the repository root (or inside `server/`), run:
+
+```bash
+# build & start Supabase, Bridge, and Engine
+docker compose up --build
+```
+
+This command launches:
+
+- Supabase (API: 54321, DB: 54322, Studio: 54323)
+- Bridge service (Python, port 50051 inside network)
+- Engine service (Rust, port 50051 inside network)
+
+Use `Ctrl-C` to stop all services. For granular control continue with the sections below.
 
 To run components independently:
 

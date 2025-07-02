@@ -12,6 +12,37 @@ See the corresponding `README`s:
 - [server/README.txt](./server/README.txt)
 - [app/README.txt](./app/README.txt)
 
+## Quick Start
+
+Spin up the **entire Portico stack** locally with Docker Compose:
+
+```bash
+# clone & enter repository
+git clone https://github.com/<your-org>/Portico.git
+cd Portico
+
+# build & run all services (Supabase, Bridge, Engine)
+docker compose up --build
+```
+
+Services started by the Compose file:
+
+- **Supabase** – Postgres + Realtime (ports 54321 / 54322)
+- **Bridge** – Python service that converts Supabase events into gRPC calls
+- **Engine** – Rust gRPC service that executes workflow steps
+
+Once all containers are healthy you can:
+
+1. Open Supabase Studio at `http://localhost:54323` to inspect the database
+2. Start the desktop/web client:
+   ```bash
+   cd app
+   pnpm install
+   pnpm tauri dev   # or: pnpm dev for a browser-only preview
+   ```
+
+For running individual services, advanced configuration, and development workflows, check the directory-level READMEs linked above.
+
 ## Features
 
 ### Agent Ownership
