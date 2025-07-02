@@ -1,9 +1,7 @@
 # ~/.tmuxinator/portico.yml
 
 name: portico-server
-
-# TODO: For the user: configure to where your repo is!
-root: ~/GitHub-main/Portico/server
+root: .
 
 windows:
   - portico:
