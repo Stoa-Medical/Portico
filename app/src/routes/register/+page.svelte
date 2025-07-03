@@ -91,7 +91,13 @@
   {:else}
     <h1 class="text-2xl font-bold mb-4">Register</h1>
 
-    <form on:submit|preventDefault={register} class="space-y-4">
+    <form
+      onsubmit={(e) => {
+        e.preventDefault();
+        register();
+      }}
+      class="space-y-4"
+    >
       <div>
         <label for="email">Email</label>
         <input

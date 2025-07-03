@@ -714,7 +714,13 @@
 
   <!-- Add Agent Modal -->
   <Modal title="Add New Agent" bind:open={showModal} autoclose>
-    <form on:submit|preventDefault={handleSubmit} class="space-y-4">
+    <form
+      onsubmit={(e) => {
+        e.preventDefault();
+        handleSubmit();
+      }}
+      class="space-y-4"
+    >
       <div>
         <Label for="modalAgentName" class="mb-2">Agent Name</Label>
         <Input

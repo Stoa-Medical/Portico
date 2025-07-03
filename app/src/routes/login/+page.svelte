@@ -51,7 +51,13 @@
     />
   </svg>
 
-  <form on:submit|preventDefault={login} class="space-y-4">
+  <form
+    onsubmit={(e) => {
+      e.preventDefault();
+      login();
+    }}
+    class="space-y-4"
+  >
     <div>
       <label for="email">Email</label>
       <input

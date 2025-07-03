@@ -51,6 +51,9 @@
 
     checkingAuth = false;
   });
+
+  // Access default slot content in Svelte 5
+  let { children } = $props();
 </script>
 
 {#if checkingAuth}
@@ -64,8 +67,8 @@
     {#if user}
       <aside class="w-16 bg-gray-800 flex flex-col items-center py-4 space-y-6">
         <!-- Logo -->
-        <button class="w-10 h-12 mt-4">
-          <img src="/logo-icon.svg" class="w-full h-full" />
+        <button aria-label="Home" class="w-10 h-12 mt-4">
+          <img src="/logo-icon.svg" alt="Portico logo" class="w-full h-full" />
         </button>
 
         <div class="flex flex-col space-y-6">
@@ -89,14 +92,16 @@
 
         <!-- Avatar Placeholder -->
         <div class="relative">
-          <div
+          <button
+            type="button"
+            aria-label="Logout"
             class="w-8 h-8 bg-cyan-800 text-white flex items-center justify-center mb-2 rounded-full cursor-pointer uppercase font-semibold"
-            on:click={() => supabase.auth.signOut()}
-            on:mouseenter={() => (showLogoutTooltip = true)}
-            on:mouseleave={() => (showLogoutTooltip = false)}
+            onclick={() => supabase.auth.signOut()}
+            onmouseenter={() => (showLogoutTooltip = true)}
+            onmouseleave={() => (showLogoutTooltip = false)}
           >
             {user?.email?.[0] ?? "?"}
-          </div>
+          </button>
           {#if showLogoutTooltip}
             <div
               class="absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2 py-1 bg-gray-700 text-white text-xs rounded shadow-md whitespace-nowrap z-10"
@@ -111,7 +116,7 @@
     <!-- Main content -->
     <div class="flex-1 overflow-auto">
       <main class="p-6 h-full flex flex-col">
-        <slot />
+        {@render children?.()}
       </main>
     </div>
   </div>
