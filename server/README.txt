@@ -1,5 +1,21 @@
 This is the server code: Supabase configuration, a Python bridge service that forwards Supabase Realtime events, and a Rust gRPC engine that executes workflow steps.
 
+## Quick Start (tmuxinator)
+
+From inside `server/`, run:
+
+```bash
+tmuxinator start
+```
+
+This command launches a tmux session (defined in `.tmuxinator.yml`) with three panes:
+
+- Supabase (pane 1) – `supabase start`
+- Engine (pane 2)   – `cargo run` inside `engine/`
+- Bridge (pane 3)   – `python -m src.main` inside `bridge/` (after the engine is listening on port 50051)
+
+Detach with `Ctrl-b d` and re-attach anytime with `tmux attach -t portico-server`.
+
 ## Quick Start (Docker Compose)
 
 From the repository root (or inside `server/`), run:
