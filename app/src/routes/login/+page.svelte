@@ -22,10 +22,12 @@
   }
 </script>
 
-<main class="p-6 max-w-md mx-auto">
-  <h1 class="w-full text-6xl font-bold mb-4 text-center">Portico</h1>
+<main
+  class="min-h-screen flex flex-col items-center justify-center p-6 max-w-md mx-auto"
+>
+  <h1 class="w-full text-7xl text-center font-eb-garamond-medium">Portico</h1>
   <svg
-    class="mx-auto my-12"
+    class="mx-auto my-12 shrink min-w-32 min-h-32"
     width="170"
     height="310"
     viewBox="0 0 17 31"

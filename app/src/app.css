@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500&display=swap");
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -24,7 +25,7 @@
 @layer base {
   :root {
     --font-primary: "Helvetica", sans-serif;
-    --font-secondary: "Cormorant Garamond", serif;
+    --font-secondary: "EB Garamond", serif;
     /* Main colors */
     --ink: #262431;
     --papyrus: #ecd8a8;
@@ -84,5 +85,22 @@
   h2,
   h3 {
     @apply gradient-text;
+  }
+}
+
+@layer utilities {
+  .font-helvetica {
+    font-family: "Helvetica", sans-serif;
+    letter-spacing: -0.01em;
+  }
+  .font-eb-garamond-medium {
+    font-family: "EB Garamond", serif;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+  }
+  .font-eb-garamond-regular {
+    font-family: "EB Garamond", serif;
+    font-weight: 400;
+    letter-spacing: 0.01em;
   }
 }

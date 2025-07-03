@@ -47,7 +47,12 @@ export default {
       },
       fontFamily: {
         primary: ['"Helvetica"', "sans-serif"],
-        secondary: ['"Cormorant Garamond"', "serif"],
+        garamond: ['"EB Garamond"', "serif"],
+      },
+      letterSpacing: {
+        "neg-2": "-0.02em",
+        "neg-1": "-0.01em",
+        "pos-1": "0.01em",
       },
     },
   },
