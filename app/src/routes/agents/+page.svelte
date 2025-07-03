@@ -34,6 +34,8 @@
     updateAgent,
     getRuntimeSessions,
     deleteStep,
+    saveStep,
+    runAgent,
   } from "./api";
   import { onMount } from "svelte";
   import { fly } from "svelte/transition";
@@ -49,6 +51,11 @@
   let steps = $state<any[] | undefined>(undefined);
   let originalAgent = $state<any | null>(null);
   let runtimeSessions = $state<any[]>([]);
+  let isEditingStep = $state(false);
+  let editingStepData = $state<any>(null);
+  let showRunModal = $state(false);
+  let runInitialData = $state("");
+  let isRunning = $state(false);
 
   const hasAgentChanges = $derived(
     selectedAgent && originalAgent
@@ -73,15 +80,16 @@
 
   let agentFormData = $state({
     name: "",
-    type: "Assistant",
+    type: "Workflow",
     description: "",
     isActive: true,
   });
 
   const agentTypes = [
-    { value: "Assistant", name: "Assistant" },
-    { value: "Researcher", name: "Researcher" },
-    { value: "Analyst", name: "Analyst" },
+    { value: "Workflow", name: "Workflow" },
+    { value: "Information", name: "Information" },
+    { value: "Integration", name: "Integration" },
+    { value: "Transform", name: "Transform" },
     { value: "Custom", name: "Custom" },
   ];
 
@@ -205,6 +213,81 @@
     await loadAgents();
   }
 
+  function addNewStep() {
+    editingStepData = {
+      agent_id: selectedAgent.id,
+      name: "",
+      description: "",
+      step_content: "",
+      step_type: "prompt",
+    };
+    isEditingStep = true;
+    selectedStep = null;
+  }
+
+  function editStep(step) {
+    editingStepData = { ...step };
+    isEditingStep = true;
+    selectedStep = null;
+  }
+
+  async function saveStepChanges() {
+    if (!editingStepData) return;
+
+    try {
+      if (editingStepData.id) {
+        // Update existing step
+        await updateStep(editingStepData);
+      } else {
+        // Create new step
+        await saveStep(editingStepData);
+      }
+      await loadSteps(selectedAgent.id);
+      isEditingStep = false;
+      editingStepData = null;
+    } catch (err) {
+      console.error("Failed to save step", err);
+    }
+  }
+
+  function cancelStepEdit() {
+    isEditingStep = false;
+    editingStepData = null;
+  }
+
+  async function handleRunAgent() {
+    if (!selectedAgent) return;
+
+    try {
+      isRunning = true;
+      let initialData = {};
+
+      if (runInitialData.trim()) {
+        try {
+          initialData = JSON.parse(runInitialData);
+        } catch (e) {
+          // If it's not valid JSON, treat it as a simple string value
+          initialData = { input: runInitialData };
+        }
+      }
+
+      await runAgent(selectedAgent.id, initialData);
+
+      // Wait a moment then refresh runtime sessions to see the new execution
+      setTimeout(() => {
+        loadRuntimeSessions(selectedAgent.id);
+      }, 1000);
+
+      showRunModal = false;
+      runInitialData = "";
+    } catch (err) {
+      console.error("Failed to run agent", err);
+      alert("Failed to run agent: " + err.message);
+    } finally {
+      isRunning = false;
+    }
+  }
+
   const breadcrumbs = [
     { label: "Home", url: "/" },
     { label: "Agents", url: "/agents" },
@@ -214,10 +297,9 @@
     selectedAgent
       ? [
           {
-            label: "Delete",
-            onClick: deleteAgentClick,
-            icon: TrashBinOutline,
-            color: "red",
+            label: "Run Agent",
+            onClick: () => (showRunModal = true),
+            color: "green",
             type: "button",
           },
           {
@@ -225,6 +307,13 @@
             onClick: saveChanges,
             color: "blue",
             disabled: !hasAgentChanges,
+            type: "button",
+          },
+          {
+            label: "Delete",
+            onClick: deleteAgentClick,
+            icon: TrashBinOutline,
+            color: "red",
             type: "button",
           },
         ]
@@ -255,7 +344,7 @@
   function resetForm() {
     agentFormData = {
       name: "",
-      type: "Assistant",
+      type: "Workflow",
       description: "",
       isActive: true,
     };
@@ -283,12 +372,12 @@
   });
 </script>
 
-<main class="flex flex-col h-full">
+<main class="container mx-auto p-4">
   <div class="flex-shrink-0">
     <PageHeader title="Agents" {breadcrumbs} actionBar={getActions()} />
   </div>
 
-  <div class="flex mt-6 flex-grow min-h-0">
+  <div class="flex flex-grow min-h-0">
     <!-- Agent List Pane -->
     <div
       class={`transition-all duration-300 ease-in-out pr-4 ${selectedAgent ? "w-2/5" : "w-full"}`}
@@ -432,7 +521,7 @@
                     <Heading tag="h4">Agent Steps</Heading>
                     <Button
                       size="sm"
-                      href={`/steps/new?agentId=${selectedAgent.id}&agentName=${encodeURIComponent(selectedAgent.name)}`}
+                      on:click={() => addNewStep()}
                       class="bg-sea text-black"
                     >
                       <PlusOutline class="mr-2 h-5 w-5" />
@@ -455,7 +544,9 @@
                               <Badge
                                 color={step.step_type === "python"
                                   ? "blue"
-                                  : "purple"}>{step.step_type}</Badge
+                                  : step.step_type === "webscrape"
+                                    ? "green"
+                                    : "purple"}>{step.step_type}</Badge
                               >
                             </TableBodyCell>
                             <TableBodyCell
@@ -475,7 +566,7 @@
                                 size="xs"
                                 color="blue"
                                 class="ml-2"
-                                href={`/steps/${step.id}?agentId=${selectedAgent.id}`}
+                                on:click={() => editStep(step)}
                               >
                                 Edit
                               </Button>
@@ -506,7 +597,6 @@
                               >
                                 <StepConfig
                                   bind:step={selectedStep}
-                                  {agents}
                                   on:save={saveStepData}
                                 />
                               </td>
@@ -524,10 +614,43 @@
                       </p>
                       <Button
                         class="bg-sea text-black"
-                        href={`/steps/new?agentId=${selectedAgent.id}&agentName=${encodeURIComponent(selectedAgent.name)}`}
+                        on:click={() => addNewStep()}
                       >
                         <PlusOutline class="mr-2 h-5 w-5" /> Create First Step
                       </Button>
+                    </div>
+                  {/if}
+
+                  <!-- Step Editing Modal/Panel -->
+                  {#if isEditingStep && editingStepData}
+                    <div
+                      class="mt-6 p-4 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800"
+                    >
+                      <div class="flex justify-between items-center mb-4">
+                        <Heading tag="h5">
+                          {editingStepData.id ? "Edit Step" : "Create New Step"}
+                        </Heading>
+                        <div class="flex gap-2">
+                          <Button
+                            size="sm"
+                            color="blue"
+                            on:click={saveStepChanges}
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            size="sm"
+                            color="light"
+                            on:click={cancelStepEdit}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                      <StepConfig
+                        bind:step={editingStepData}
+                        stepTypes={["prompt", "python", "webscrape"]}
+                      />
                     </div>
                   {/if}
                 </div>
@@ -629,5 +752,50 @@
         <Button type="submit" color="blue">Create</Button>
       </div>
     </form>
+  </Modal>
+
+  <!-- Run Agent Modal -->
+  <Modal title="Run Agent" bind:open={showRunModal} autoclose>
+    <div class="space-y-4">
+      <div>
+        <Label for="runAgentName" class="mb-2">Agent</Label>
+        <Input
+          id="runAgentName"
+          value={selectedAgent?.name || ""}
+          readonly
+          class="bg-gray-50 dark:bg-gray-700"
+        />
+      </div>
+      <div>
+        <Label for="runInitialData" class="mb-2"
+          >Initial Data (JSON or text)</Label
+        >
+        <Textarea
+          id="runInitialData"
+          placeholder={`{"key": "value"} or just plain text`}
+          rows="4"
+          bind:value={runInitialData}
+        />
+        <p class="text-sm text-gray-500 mt-1">
+          Enter JSON data or plain text to pass to the agent. Leave empty for no
+          initial data.
+        </p>
+      </div>
+      <div class="flex justify-end gap-4">
+        <Button
+          color="alternative"
+          on:click={() => {
+            showRunModal = false;
+            runInitialData = "";
+          }}
+          disabled={isRunning}
+        >
+          Cancel
+        </Button>
+        <Button color="green" on:click={handleRunAgent} disabled={isRunning}>
+          {isRunning ? "Starting..." : "Run Agent"}
+        </Button>
+      </div>
+    </div>
   </Modal>
 </main>

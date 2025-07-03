@@ -28,8 +28,7 @@ def executeScript(source):
 `;
 
   export let step;
-  export let stepTypes = ["prompt", "python"];
-  export let agents = [];
+  export let stepTypes = ["prompt", "python", "webscrape"];
 
   let editorElement;
   let editorView;
@@ -199,7 +198,11 @@ def executeScript(source):
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div>
         <Label for="name">Step Name</Label>
-        <Input id="name" bind:value={step.name} />
+        <Input
+          id="name"
+          bind:value={step.name}
+          placeholder="Enter step name..."
+        />
       </div>
 
       <div>
@@ -213,23 +216,25 @@ def executeScript(source):
     </div>
 
     <div>
-      <Label for="agent">Associated Agent</Label>
-      <Select id="agent" bind:value={step.agent_id}>
-        {#each agents as agent}
-          <option value={agent.id}>{agent.name}</option>
-        {/each}
-      </Select>
+      <Label for="description">Description (optional)</Label>
+      <Input
+        id="description"
+        bind:value={step.description}
+        placeholder="Describe what this step does..."
+      />
     </div>
 
     <div>
       <div class="flex justify-between items-center mb-2">
         <Label for="content">
-          {step.step_type === "python" ? "Python Code" : "Prompt Template"}
+          {#if step.step_type === "python"}
+            Python Code
+          {:else if step.step_type === "webscrape"}
+            URL to Scrape
+          {:else}
+            Prompt Text
+          {/if}
         </Label>
-        <!-- <div class="flex items-center gap-2"> -->
-        <!-- <Toggle bind:checked={step.isActive} /> -->
-        <!-- <span class="text-sm">Active</span> -->
-        <!-- </div> -->
       </div>
 
       {#if step.step_type === "python"}
@@ -237,11 +242,19 @@ def executeScript(source):
           bind:this={editorElement}
           class="border border-gray-300 dark:border-gray-700 rounded-lg min-h-[300px] font-mono"
         ></div>
+      {:else if step.step_type === "webscrape"}
+        <Input
+          id="content"
+          bind:value={step.step_content}
+          placeholder="https://example.com"
+          type="url"
+        />
       {:else}
         <Textarea
           id="content"
-          rows="15"
+          rows="8"
           bind:value={step.step_content}
+          placeholder="Enter your prompt text here..."
           class="font-mono"
         />
       {/if}

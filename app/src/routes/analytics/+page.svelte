@@ -40,7 +40,12 @@
   let agentCount = 0;
   let runtimeSessionCount = 0;
   let stepCount = 0;
-  let agentPerformance = [];
+  let agentPerformance: Array<{
+    agentId: number;
+    successRate: number;
+    totalRuns: number;
+    avgResponseTime: string;
+  }> = [];
 
   let errorDistribution = {
     completed: 0,

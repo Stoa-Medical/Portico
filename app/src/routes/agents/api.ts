@@ -32,7 +32,7 @@ export type Step = {
   name: string;
   description?: string;
   step_content: string;
-  step_type: "python" | "prompt" | string;
+  step_type: "python" | "prompt" | "webscrape";
 };
 
 export type RuntimeSession = {
@@ -150,11 +150,10 @@ export const getSteps = async (agentId: number): Promise<Step[]> => {
   return data;
 };
 
-export const saveStep = async (step: Step): Promise<Step[]> => {
-  const { id, ...rest } = step;
-  const { error: insertError } = await supabase.from("steps").insert([rest]);
+export const saveStep = async (step: CreateStepPayload): Promise<Step[]> => {
+  const { error: insertError } = await supabase.from("steps").insert([step]);
   if (insertError) throw insertError;
-  return getStep(step.agent_id);
+  return getSteps(step.agent_id);
 };
 
 export const updateStep = async (
@@ -205,4 +204,37 @@ export const getRuntimeSessions = async (
   const { data, error } = await query;
   if (error) throw error;
   return data;
+};
+
+export const runAgent = async (
+  agentId: number,
+  initialData: any = {},
+): Promise<void> => {
+  const userId = await getUserId();
+
+  // Verify agent ownership if enforcement is enabled
+  const userIdIfEnforced = await getUserIdIfEnforced();
+  if (userIdIfEnforced) {
+    const { data: agentData } = await supabase
+      .from("agents")
+      .select("id")
+      .eq("id", agentId)
+      .eq("owner_id", userIdIfEnforced);
+
+    if (!agentData || agentData.length === 0) {
+      throw new Error("Agent not found or access denied");
+    }
+  }
+
+  // Create a signal to trigger agent execution
+  const { error } = await supabase.from("signals").insert([
+    {
+      agent_id: agentId,
+      user_requested_uuid: crypto.randomUUID(),
+      signal_type: "run",
+      initial_data: JSON.stringify(initialData),
+    },
+  ]);
+
+  if (error) throw error;
 };

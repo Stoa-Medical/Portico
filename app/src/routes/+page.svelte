@@ -37,7 +37,7 @@
         <h2 class="mb-4 text-4xl">Get started on something new</h2>
 
         <p class="mt-2 mb-6">
-          Create a project from scratch or start from a template
+          Create and manage agents to automate your workflows
         </p>
 
         <div
@@ -45,9 +45,6 @@
         >
           <Button href="/agents" size="xl" class="bg-sea text-black"
             >Agents</Button
-          >
-          <Button href="/steps" size="xl" class="bg-sea text-black"
-            >Steps</Button
           >
           <Button href="/analytics" size="xl" class="bg-sea text-black"
             >Analytics</Button
@@ -78,12 +75,8 @@
           <div
             class="p-4 rounded-md text-[18px] leading-[24px] tracking-normal font-normal text-white/60 bg-white/5 backdrop-blur-sm shadow-sm font-sans"
           >
-            <span class="text-sea font-semibold">&gt;99.99%</span> uptime
-          </div>
-          <div
-            class="p-4 rounded-md text-[18px] leading-[24px] tracking-normal font-normal text-white/60 bg-white/5 backdrop-blur-sm shadow-sm font-sans"
-          >
-            <span class="text-sea font-semibold">0%</span> unstable agents
+            <span class="text-sea font-semibold">{agentPerf?.length || 0}</span>
+            active agents
           </div>
         </div>
       </div>

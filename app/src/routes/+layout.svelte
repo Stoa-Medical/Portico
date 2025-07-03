@@ -12,7 +12,6 @@
     { href: "/", icon: "/home-icon.svg", label: "Home" },
     { href: "/agents", icon: "/folder-icon.svg", label: "Agents" },
     { href: "/analytics", icon: "/donut-icon.svg", label: "Analytics" },
-    { href: "/steps", icon: "/tree-icon.svg", label: "Steps" },
   ];
 
   let checkingAuth = $state(true);
