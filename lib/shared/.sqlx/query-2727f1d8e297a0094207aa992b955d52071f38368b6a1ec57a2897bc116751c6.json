@@ -1,0 +1,37 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO agents (\n                global_uuid, description, agent_state, created_at, updated_at\n            )\n            VALUES ($1, $2, $3::agent_state, $4, $5)\n            RETURNING id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        {
+          "Custom": {
+            "name": "agent_state",
+            "kind": {
+              "Enum": [
+                "inactive",
+                "stable",
+                "unstable"
+              ]
+            }
+          }
+        },
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2727f1d8e297a0094207aa992b955d52071f38368b6a1ec57a2897bc116751c6"
+}

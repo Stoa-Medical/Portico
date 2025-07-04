@@ -1,15 +1,98 @@
 services:
-  # TODO: Add Supabase (rn, running `supabase start` -- surely there's a better way. Worst case write custom container)
+  # Supabase services
+  postgres:
+    image: supabase/postgres:15.1.0.117
+    restart: unless-stopped
+    ports:
+      - "54322:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./examples/seed.sql:/docker-entrypoint-initdb.d/seed.sql
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+    networks:
+      - portico-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  server:
-    build: .
+  # Apply schema migrations using Atlas
+  schema_migrator:
+    image: arigaio/atlas:latest
     depends_on:
-      db:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./scheme.hcl:/scheme.hcl
+    command: >
+      schema apply
+        --url "postgresql://postgres:postgres@postgres:5432/postgres?search_path=public&sslmode=disable"
+        --to "file:///scheme.hcl"
+        --auto-approve
+    networks:
+      - portico-network
+
+  # Prepare SQLx query files
+  shared_prepare:
+    build:
+      context: ..
+      dockerfile: ./shared/Dockerfile
+    depends_on:
+      schema_migrator:
+        condition: service_completed_successfully
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/postgres
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+    volumes:
+      - sqlx_data:/app/shared/.sqlx
+    networks:
+      - portico-network
+
+  # Engine service processes signals
+  engine:
+    build:
+      context: ..
+      dockerfile: ./server/engine/Dockerfile
+    ports:
+      - "50051:50051"
+    depends_on:
+      shared_prepare:
+        condition: service_completed_successfully
+      postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-portico}:${POSTGRES_PASSWORD:-portico123}@db:5432/${POSTGRES_DB:-portico_db}
-    ports:
-      - "8080:8080"
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/postgres
+    volumes:
+      - sqlx_data:/app/shared/.sqlx:ro
+    networks:
+      - portico-network
+    restart: unless-stopped
+
+  # Bridge service connects to Supabase and forwards signals to the engine
+  bridge:
+    build:
+      context: ..
+      dockerfile: ./server/bridge/Dockerfile
+    depends_on:
+      engine:
+        condition: service_started
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/postgres
+      - ENGINE_HOST=engine
+      - ENGINE_PORT=50051
+    networks:
+      - portico-network
+    restart: unless-stopped
+
+networks:
+  portico-network:
+    driver: bridge
 
 volumes:
   postgres_data:
+  sqlx_data:

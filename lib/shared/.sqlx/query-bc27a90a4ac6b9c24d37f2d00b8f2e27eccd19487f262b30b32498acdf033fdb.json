@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE agents\n            SET description = $1,\n                agent_state = $2::agent_state,\n                updated_at = $3\n            WHERE global_uuid = $4\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        {
+          "Custom": {
+            "name": "agent_state",
+            "kind": {
+              "Enum": [
+                "inactive",
+                "stable",
+                "unstable"
+              ]
+            }
+          }
+        },
+        "Timestamptz",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bc27a90a4ac6b9c24d37f2d00b8f2e27eccd19487f262b30b32498acdf033fdb"
+}

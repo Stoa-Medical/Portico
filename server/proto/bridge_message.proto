@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package portico;
+
+import "google/protobuf/struct.proto";
+
+service BridgeService {
+  // Initialize server connection
+  rpc InitServer(ServerInitRequest) returns (GeneralResponse);
+
+  // Process signals
+  rpc ProcessSignal(SignalRequest) returns (SignalResponse);
+
+  // Process changes
+  rpc CreateAgent(CreateAgentRequest) returns (GeneralResponse);
+  rpc DeleteAgent(DeleteAgentRequest) returns (GeneralResponse);
+}
+
+// === Core definitions ===
+// Server initialization
+message ServerInitRequest {
+  bool server_init = 1;
+}
+
+message GeneralResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Signal request structure
+message SignalRequest {
+  int32 signal_id = 1;
+  int32 agent_id = 2;
+  SignalType signal_type = 3;
+
+  // Optional payload based on signal type
+  oneof payload {
+    google.protobuf.Struct run_data = 4;
+    SyncPayload sync = 5;
+    google.protobuf.Struct fyi_data = 6;
+  }
+}
+
+// Response with the result of processing the signal
+message SignalResponse {
+  bool success = 1;
+  string message = 2;
+  string runtime_session_uuid = 3;
+  google.protobuf.Struct result_data = 4;
+}
+
+message CreateAgentRequest {
+  google.protobuf.Struct agent_json = 1;
+}
+
+message DeleteAgentRequest {
+  int32 agent_id = 1;
+}
+
+// === Sub definitions ===
+
+enum SignalType {
+  RUN = 0;
+  SYNC = 1;
+  FYI = 2;
+}
+
+message SyncPayload {
+  // Sync scope
+  SyncScope scope = 1;
+
+  // Optional specific UUIDs to sync (if not ALL)
+  repeated string agent_uuids = 2;
+}
+
+enum SyncScope {
+  ALL = 0;
+  SPECIFIC = 1;
+}

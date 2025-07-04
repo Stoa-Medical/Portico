@@ -1,18 +1,51 @@
-This is the desktop app.
+Portico Desktop App.
 
-It has the option to 1) connect to a server to manage, or 2) run indepdently with an embedded db
+Portico is a desktop application built with SvelteKit (v2.9.0) + Tauri 2.0 using Svelte 5.
 
-Proposed stack:
-- Tauri
-    - Svelte frontend
+It has two modes: 1) connect to a remote server for management, or 2) run standalone with an embedded SQLite database.
+
+Stack:
+- Tauri 2.0
+    - SvelteKit frontend (Svelte 5)
     - Rust backend
-        - Python interpreter with PyO3
-- SQLite (embedded db)
+- Vite + TypeScript
+- Tailwind CSS + Flowbite-Svelte
+- CodeMirror Python editor
+- Supabase JS for remote data
 
 Requirements:
-1. Write data mappings in Python
-2. Save data mappings in Python
-3. Set listeners to incoming ports
-4. Reroute data to outgoing ports
-5. Manages public/private keypair for encrypting data
-6. Manages signing key for signing data
+1. Node.js 18+ and pnpm
+2. Rust stable toolchain
+3. Python 3.10+ for embedded interpreter
+4. SQLite CLI for standalone mode
+5. SUPABASE_URL and SUPABASE_ANON_KEY in .env
+
+## Quick Start (Local development)
+
+```bash
+cd app
+pnpm install
+pnpm tauri dev   # runs SvelteKit + Tauri with live reload
+```
+
+The app will attempt to connect to the Portico server specified in `.env`. If none is provided, it falls back to an embedded SQLite database for offline usage.
+
+Setup:
+1. pnpm install
+2. cp .env-example .env
+3. edit .env with your Supabase credentials
+
+Development:
+1. pnpm dev
+2. pnpm tauri dev
+
+Build:
+1. pnpm build
+2. pnpm tauri build
+
+Testing:
+pnpm test
+
+Configuration:
+- See src/lib/stores/configStore.ts for settings management
+- See src/lib/components/AdminSettings.svelte for admin UI

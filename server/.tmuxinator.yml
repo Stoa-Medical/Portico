@@ -1,0 +1,19 @@
+# ~/.tmuxinator/portico.yml
+
+name: portico-server
+root: .
+
+windows:
+  - portico:
+      # Simple 3-pane layout: main-vertical with even splits
+      layout: main-vertical
+      panes:
+        - supabase:
+          - supabase start
+        - engine:
+          - cd engine
+          - cargo run
+        - bridge:
+          - cd bridge
+          - source .venv/bin/activate
+          - while ! nc -z localhost 50051 2>/dev/null; do echo "Waiting for engine to start..."; sleep 1; done && python -m src.main

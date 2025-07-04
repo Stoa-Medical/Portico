@@ -1,0 +1,106 @@
+@import url("https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500&display=swap");
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@plugin 'flowbite/plugin';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-primary-50: #fff5f2;
+  --color-primary-100: #fff1ee;
+  --color-primary-200: #ffe4de;
+  --color-primary-300: #ffd5cc;
+  --color-primary-400: #ffbcad;
+  --color-primary-500: #fe795d;
+  --color-primary-600: #ef562f;
+  --color-primary-700: #eb4f27;
+  --color-primary-800: #cc4522;
+  --color-primary-900: #a5371b;
+}
+
+@source "../node_modules/flowbite-svelte/dist";
+
+@layer base {
+  :root {
+    --font-primary: "Helvetica", sans-serif;
+    --font-secondary: "EB Garamond", serif;
+    /* Main colors */
+    --ink: #262431;
+    --papyrus: #ecd8a8;
+    --sky: #b0c3e8;
+    --sea: #a7e7df;
+    --error: #e58382;
+    --success: #76d5ac;
+    --warning: #eebd8e;
+    --white: #fdfcfb;
+    --card: #312f3b;
+    /* Color levels (mid) */
+    --ink-mid: #b2b1b9;
+    --papyrus-mid: #f4e9ce;
+    --sky-mid: #dde6f8;
+    --sea-mid: #c9f4ef;
+    --error-mid: #f1b2b0;
+    --success-mid: #a2eacb;
+    --warning-mid: #f8dabe;
+    /* Color levels (light) */
+    --ink-light: #f3f2f4;
+    --papyrus-light: #f8f2e3;
+    --sky-light: #eaeff9;
+    --sea-light: #ecf6f5;
+    --error-light: #fdeded;
+    --success-light: #e3f7ef;
+    --warning-light: #fff4ea;
+  }
+
+  body {
+    font-family: var(--font-primary);
+    @apply bg-ink text-white;
+  }
+
+  h1 {
+    font-size: 52px;
+    margin-top: 0.1rem;
+    margin-bottom: 0.1rem;
+  }
+
+  button {
+    text-color: black;
+  }
+
+  .gradient-text {
+    background: linear-gradient(to right, #a7e7df 0%, #64a9a0 90%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    display: inline-block;
+  }
+
+  .text-sea {
+    color: #a7e7df;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply gradient-text;
+  }
+}
+
+@layer utilities {
+  .font-helvetica {
+    font-family: "Helvetica", sans-serif;
+    letter-spacing: -0.01em;
+  }
+  .font-eb-garamond-medium {
+    font-family: "EB Garamond", serif;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+  }
+  .font-eb-garamond-regular {
+    font-family: "EB Garamond", serif;
+    font-weight: 400;
+    letter-spacing: 0.01em;
+  }
+}

@@ -1,0 +1,23 @@
+/* Import Tailwind CSS */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global styles */
+:root {
+  --primary-color: #3b82f6;
+  --secondary-color: #10b981;
+  --background-color: #ffffff;
+  --text-color: #1f2937;
+}
+
+/* Dark mode */
+.dark {
+  --background-color: #1f2937;
+  --text-color: #f9fafb;
+}
+
+body {
+  background-color: var(--background-color);
+  color: var(--text-color);
+}
