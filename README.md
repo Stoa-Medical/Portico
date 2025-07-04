@@ -1,10 +1,10 @@
 # Portico
 
-An analytic interface engine and database system for scalable data interchange.
+An agentic integration engine and database system for scalable data interchange. Optimized for healthcare IT teams.
 
 ## Overview
 
-Portico is a source-available agentic interface engine built with a microservices architecture. It operates in two modes:
+Portico is a source-available agentic integration engine built with a microservices architecture. It operates in two modes:
 
 1. **Server** - Production-ready concurrent server with multi-threading support
 2. **App** - Desktop application that can connect to a server or run locally with embedded database
