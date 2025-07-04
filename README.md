@@ -26,16 +26,16 @@ graph TB
         D[Python Bridge]
         E[Rust Engine]
 
-        C -->|Realtime Events| D
+        C -->|Supabase Realtime| D
         D -->|gRPC| E
-        E -->|Updates| C
+        E -->|SQLx write queries| C
     end
 
     B <-->|API| C
 
-    style A fill:#f9f,stroke:#333,stroke-width:2px
-    style E fill:#9ff,stroke:#333,stroke-width:2px
-    style C fill:#ff9,stroke:#333,stroke-width:2px
+    style A fill:#ECD8A8,color:#000,stroke:#333,stroke-width:2px
+    style E fill:#B0C3E8,color:#000,stroke:#333,stroke-width:2px
+    style D fill:#A7E7DF,color:#000,stroke:#333,stroke-width:2px
 ```
 
 ### Components
