@@ -1,0 +1,15 @@
+# Summary
+
+* [Overview](01-overview/vision.md)
+* [Architecture](02-architecture/big-picture.md)
+  * [Frontend](02-architecture/frontend.md)
+  * [Desktop Shell](02-architecture/desktop-shell.md)
+  * [Backend](02-architecture/backend.md)
+  * [Data Models](02-architecture/data-models.md)
+  * [Data Flow](02-architecture/data-flow.md)
+* [Development Guide](03-development-guide/prerequisites.md)
+  * [Local Development](03-development-guide/local-dev.md)
+* [Decision Records](04-decision-records/README.md)
+  * [ADR-0001: Initial MVP Decisions](04-decision-records/adr-0001-chosen-frontend.md)
+* [Glossary](GLOSSARY.md)
+* [Reference](05-reference/README.md)
