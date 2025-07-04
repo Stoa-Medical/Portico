@@ -1,77 +1,183 @@
-# Portico -- an analytic interface engine and database system
+# Portico
 
-Portico is an agentic interface engine for scalable and efficient data interchange. It has two modes:
-1. `server` which starts a server which can run with concurrency and multi-threading
-2. `app` which can connect to a server or run locally with an embedded database
+An analytic interface engine and database system for scalable data interchange.
 
-Using first-princple design, Portico strives to be both the most performant and user-friendly option on the market.
+## Overview
 
-## Instructions to run
+Portico is a source-available agentic interface engine built with a microservices architecture. It operates in two modes:
 
-See the corresponding `README`s:
-- [server/README.txt](./server/README.txt)
-- [app/README.txt](./app/README.txt)
+1. **Server** - Production-ready concurrent server with multi-threading support
+2. **App** - Desktop application that can connect to a server or run locally with embedded database
+
+Built with first-principles design, Portico delivers both exceptional performance and intuitive user experience.
+
+## Architecture
+
+```mermaid
+graph TB
+    subgraph "Desktop App"
+        A[SvelteKit Frontend]
+        B[Tauri Backend]
+        A <-->|IPC| B
+    end
+
+    subgraph "Server"
+        C[(PostgreSQL/Supabase)]
+        D[Python Bridge]
+        E[Rust Engine]
+
+        C -->|Realtime Events| D
+        D -->|gRPC| E
+        E -->|Updates| C
+    end
+
+    B <-->|API| C
+
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style E fill:#9ff,stroke:#333,stroke-width:2px
+    style C fill:#ff9,stroke:#333,stroke-width:2px
+```
+
+### Components
+
+- **Desktop App** (`/app`) - Tauri 2.0 desktop application with SvelteKit frontend
+- **PostgreSQL Database** - Core data storage via Supabase (local or cloud)
+- **Python Bridge** (`/server/bridge`) - Converts Supabase realtime events to gRPC calls
+- **Rust Engine** (`/server/engine`) - High-performance signal processor and workflow executor
+- **Shared Library** (`/lib/shared`) - Common Rust models and database interfaces
 
 ## Quick Start
 
-Spin up the **entire Portico stack** locally with Docker Compose:
-
 ```bash
-# clone & enter repository
-git clone https://github.com/<your-org>/Portico.git
+# Clone repository
+git clone https://github.com/Stoa-Medical/Portico.git
 cd Portico
 
-# build & run all services (Supabase, Bridge, Engine)
-docker compose up --build
+# Start backend services
+cd server
+./start.sh
+
+# In another terminal, start the desktop app
+cd app
+pnpm install
+pnpm tauri dev
 ```
 
-Services started by the Compose file:
+For detailed setup instructions:
+- [Server Documentation](./server/README.txt)
+- [App Documentation](./app/README.txt)
 
-- **Supabase** – Postgres + Realtime (ports 54321 / 54322)
-- **Bridge** – Python service that converts Supabase events into gRPC calls
-- **Engine** – Rust gRPC service that executes workflow steps
+## Technology Stack
 
-Once all containers are healthy you can:
+### Frontend
+- **Framework**: SvelteKit 2 with Svelte 5 (Runes API)
+- **Desktop**: Tauri 2.0
+- **Styling**: TailwindCSS + Flowbite
+- **Language**: TypeScript
+- **Testing**: Vitest
 
-1. Open Supabase Studio at `http://localhost:54323` to inspect the database
-2. Start the desktop/web client:
-   ```bash
-   cd app
-   pnpm install
-   pnpm tauri dev   # or: pnpm dev for a browser-only preview
-   ```
+### Backend
+- **Engine**: Rust with Tokio async runtime
+- **Bridge**: Python 3.10+ with asyncio
+- **Database**: PostgreSQL via Supabase
+- **Communication**: gRPC (Protocol Buffers)
+- **Schema**: Atlas for migrations
 
-For running individual services, advanced configuration, and development workflows, check the directory-level READMEs linked above.
+### DevOps
+- **Containers**: Docker Compose
+- **Package Managers**: pnpm (JS), Cargo (Rust), uv (Python)
+
+## Development
+
+### Prerequisites
+
+- Rust (latest stable)
+- Node.js 18+ with pnpm
+- Python 3.10+
+- Docker & Docker Compose
+- PostgreSQL client (psql)
+- Supabase CLI
+- Atlas CLI (schema & ORM management)
+- uv (Python package manager, recommended for fast installs)
+
+### Best Practices
+
+1. **Code Quality**
+   - Follow existing patterns and conventions
+   - Use standard library over external dependencies when possible
+   - Write comprehensive tests for new features
+   - Ensure proper error handling with `Result<T, E>` in Rust
+
+2. **Frontend Development**
+   - Use Svelte 5 Runes (`$state()`, `$derived()`, `$effect()`)
+   - Keep components small and focused
+   - Use TypeScript for type safety
+   - Follow TailwindCSS utility-first approach
+
+3. **Backend Development**
+   - Use async/await patterns consistently
+   - Validate all inputs from frontend
+   - Log errors appropriately
+   - Follow gRPC best practices for service design
+
+4. **Database**
+   - Use migrations for schema changes
+   - Keep queries performant with proper indexing
+   - Use transactions for data consistency
 
 ## Features
 
+### Agent Management
+- Create and manage workflow agents
+- Support for multi-step workflows
+- Python script execution
+- Web scraping capabilities
+- Real-time status updates
+
 ### Agent Ownership
+Configurable data visibility controls:
 
-Portico supports a configurable agent ownership feature that controls data visibility:
+- **Default**: All agents visible to all users
+- **Scoped**: Users see only their own agents
 
-- **Default behavior**: By default, all agents are visible to all users (agent ownership filtering is disabled)
-- **Scoped view**: When enabled, users can only view and interact with their own agents
+Toggle via admin settings or programmatically:
+```typescript
+import { updateConfig } from "$lib/stores/configStore";
+updateConfig({ enforceAgentOwnership: true });
+```
 
-#### Toggling Agent Ownership
+### Analytics
+- Response time tracking
+- Success rate monitoring
+- Interactive charts and visualizations
 
-There are two ways to toggle the agent ownership feature:
+## Contributing
 
-1. **Via Admin Settings UI**:
-   - Navigate to the admin settings interface
-   - Use the "Enforce Agent Ownership" toggle switch
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 
-2. **Programmatically**:
-   ```typescript
-   import { updateConfig } from "$lib/stores/configStore";
+## Security
 
-   // Enable agent ownership (restrict users to their own agents)
-   updateConfig({ enforceAgentOwnership: true });
+For security issues, please email security@stoamedical.com instead of using the issue tracker.
 
-   // Disable agent ownership (allow viewing all agents)
-   updateConfig({ enforceAgentOwnership: false });
-   ```
+## License
 
-The setting persists across sessions in the browser's local storage. This feature is particularly useful for:
-- Multi-user environments where data isolation is required
-- Administrative debugging when you need to view all agents
-- Development and testing scenarios
+This project is licensed under the Business Source License 1.1 (BSL).
+
+**Key Points:**
+- Source code is available for viewing and non-production use
+- Production use requires a commercial license for:
+  - More than 2 production interfaces
+  - Over $1M in annual gross charges
+- **Converts to Apache 2.0 on July 1, 2030**
+
+See [LICENSE.txt](./LICENSE.txt) for full terms.
+
+## Support
+
+- Documentation: [docs/](./docs/)
+- Issues: [GitHub Issues](https://github.com/Stoa-Medical/Portico/issues)
+- Email: support@stoamedical.com
+
+---
+
+Built with ❤️ 🐍 ☕️ by Stoa Medical, Inc.
