@@ -1,45 +1,45 @@
-use crate::core::agent_manager::AgentManager;
+use crate::core::workflow_manager::WorkflowManager;
 use crate::proto::GeneralResponse;
 use sqlx;
 use tonic::Status;
 
-// Delete agent operation handler
-pub async fn handle_delete_agent(
-    manager: &mut AgentManager,
-    agent_id: i32,
+// Delete workflow operation handler
+pub async fn handle_delete_workflow(
+    manager: &mut WorkflowManager,
+    workflow_id: i32,
 ) -> Result<GeneralResponse, Status> {
-    if agent_id == 0 {
+    if workflow_id == 0 {
         return Err(Status::invalid_argument(
-            "Missing agent_id for delete operation",
+            "Missing workflow_id for delete operation",
         ));
     }
 
     // For now, we'll skip the in-memory removal since we're using IDs directly
-    // In a production system, you'd want to look up the agent by ID and then remove it
-    println!("[INFO] Removing agent with ID {} from database", agent_id);
+    // In a production system, you'd want to look up the workflow by ID and then remove it
+    println!("[INFO] Removing workflow with ID {} from database", workflow_id);
 
-    // First delete associated steps for the agent
-    if let Err(e) = sqlx::query("DELETE FROM steps WHERE agent_id = $1")
-        .bind(agent_id)
+    // First delete associated steps for the workflow
+    if let Err(e) = sqlx::query("DELETE FROM steps WHERE workflow_id = $1")
+        .bind(workflow_id)
         .execute(&manager.db_pool)
         .await {
-        eprintln!("[ERROR] Failed to delete agent's steps from database: {}", e);
-        return Err(Status::internal("Failed to delete agent's steps from database"));
+        eprintln!("[ERROR] Failed to delete workflow's steps from database: {}", e);
+        return Err(Status::internal("Failed to delete workflow's steps from database"));
     }
 
-    // Then delete the agent itself
-    if let Err(e) = sqlx::query("DELETE FROM agents WHERE id = $1")
-        .bind(agent_id)
+    // Then delete the workflow itself
+    if let Err(e) = sqlx::query("DELETE FROM workflows WHERE id = $1")
+        .bind(workflow_id)
         .execute(&manager.db_pool)
         .await
     {
-        eprintln!("[ERROR] Failed to delete agent from database: {}", e);
-        return Err(Status::internal("Failed to delete agent from database"));
+        eprintln!("[ERROR] Failed to delete workflow from database: {}", e);
+        return Err(Status::internal("Failed to delete workflow from database"));
     }
 
-    println!("[INFO] Agent successfully removed");
+    println!("[INFO] Workflow successfully removed");
     Ok(GeneralResponse {
         success: true,
-        message: format!("Agent with ID {} deleted successfully", agent_id),
+        message: format!("Workflow with ID {} deleted successfully", workflow_id),
     })
 }

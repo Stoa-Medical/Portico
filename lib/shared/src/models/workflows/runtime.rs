@@ -1,12 +1,12 @@
-use super::types::Agent;
-use crate::models::agents::AgentState;
+use super::types::Workflow;
+use crate::models::workflows::WorkflowState;
 use crate::models::runtime_sessions::RuntimeSession;
 use crate::PythonRuntime;
 use anyhow::{anyhow, Result};
 use serde_json::Value;
 
-impl Agent {
-    /// Create a Python runtime for this agent
+impl Workflow {
+    /// Create a Python runtime for this workflow
     pub fn create_python_runtime(&self) -> Result<PythonRuntime> {
         let mut runtime = PythonRuntime::new(&self.identifiers.global_uuid)?;
 
@@ -20,17 +20,17 @@ impl Agent {
         Ok(runtime)
     }
 
-    /// Process data with this agent using an immutable reference
+    /// Process data with this workflow using an immutable reference
     pub async fn run(&self, source: Value) -> Result<RuntimeSession> {
         // Check if state is Inactive. If so, return error
-        if self.state() == AgentState::Inactive {
-            return Err(anyhow!("Cannot run agent in Inactive state"));
+        if self.state() == WorkflowState::Inactive {
+            return Err(anyhow!("Cannot run workflow in Inactive state"));
         }
 
-        // Create a Python runtime for this agent
+        // Create a Python runtime for this workflow
         let runtime = self.create_python_runtime()?;
 
-        // Create a new RuntimeSession with the agent's steps and local_id
+        // Create a new RuntimeSession with the workflow's steps and local_id
         let mut session =
             RuntimeSession::new(source, self.steps.clone(), self.identifiers.local_id);
 

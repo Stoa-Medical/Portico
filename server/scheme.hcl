@@ -74,17 +74,17 @@ table "signals" {
     }
 
     # === Relationships ===
-    column "agent_id" {
+    column "workflow_id" {
         type = int
         null = true
     }
 
-    foreign_key "signal_agent_fk" {
+    foreign_key "signal_workflow_fk" {
         columns = [
-            column.agent_id
+            column.workflow_id
         ]
         ref_columns = [
-            table.agents.column.id
+            table.workflows.column.id
         ]
     }
 
@@ -144,7 +144,7 @@ table "signals" {
     }
 }
 
-table "agents" {
+table "workflows" {
     # === General ===
     schema = schema.public
 
@@ -170,7 +170,7 @@ table "agents" {
     }
 
     # === Relationships ===
-    # An Agent can have many Steps (a Step points to an Agent)
+    # A Workflow can have many Steps (a Step points to a Workflow)
     column "step_ids" {
         type = sql("int[]")
         null = true
@@ -203,15 +203,15 @@ table "agents" {
         type = sql("text")
         null = true
     }
-    column "agent_state" {
-        type = enum.agent_state
+    column "workflow_state" {
+        type = enum.workflow_state
         null = false
     }
-    column "agent_name" {
+    column "workflow_name" {
         type = sql("text")
         null = true
     }
-    column "agent_type" {
+    column "workflow_type" {
         type = sql("text")
         null = true
     }
@@ -243,18 +243,18 @@ table "steps" {
     }
 
     # === Relationships ===
-    # A Step is defined within an Agent, and has a unique sequence
-    # An Agent runs steps in ascending order of sequence numbers
-    column "agent_id" {
+    # A Step is defined within a Workflow, and has a unique sequence
+    # A Workflow runs steps in ascending order of sequence numbers
+    column "workflow_id" {
         type = int
         null = false
     }
-    foreign_key "step_agent_fk" {
+    foreign_key "step_workflow_fk" {
         columns = [
-            column.agent_id
+            column.workflow_id
         ]
         ref_columns = [
-            table.agents.column.id
+            table.workflows.column.id
         ]
     }
 
@@ -321,16 +321,16 @@ table "runtime_sessions" {
     }
 
     # === Relationships ===
-    column "requested_by_agent_id" {
+    column "workflow_id" {
         type = int
         null = false
     }
-    foreign_key "runtime_session_agent_fk" {
+    foreign_key "runtime_session_workflow_fk" {
         columns = [
-            column.requested_by_agent_id
+            column.workflow_id
         ]
         ref_columns = [
-            table.agents.column.id
+            table.workflows.column.id
         ]
     }
 
@@ -398,7 +398,7 @@ enum "signal_type" {
     ]
 }
 
-enum "agent_state" {
+enum "workflow_state" {
     schema = schema.public
     values = [
         "inactive",

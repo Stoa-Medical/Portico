@@ -3,4 +3,4 @@ mod runtime;
 mod state;
 mod types;
 
-pub use types::{Agent, AgentState};
+pub use types::{Workflow, WorkflowState};

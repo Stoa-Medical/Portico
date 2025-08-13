@@ -1,4 +1,4 @@
-use super::types::{Agent, AgentState};
+use super::types::{Workflow, WorkflowState};
 use crate::models::steps::Step;
 use crate::{DatabaseItem, IdFields, JsonLike, TimestampFields};
 use anyhow::{anyhow, Result};
@@ -9,7 +9,7 @@ use sqlx::{PgPool, Row};
 use std::str::FromStr;
 use uuid::Uuid;
 
-impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
+impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Workflow {
     fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
         let id: i32 = row.try_get("id")?;
         let global_uuid: uuid::Uuid = row.try_get("global_uuid")?;
@@ -18,7 +18,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
         let description: String = row
             .try_get::<Option<String>, _>("description")?
             .unwrap_or_default();
-        let agent_state: AgentState = row.try_get("agent_state")?;
+        let workflow_state: WorkflowState = row.try_get("workflow_state")?;
 
         // Parse steps - each raw JSON will look like a `json_build_object` result
         let steps_json: Value = row.try_get("steps")?;
@@ -34,13 +34,13 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
                 updated: updated_at,
             },
             description,
-            agent_state: std::sync::Mutex::new(agent_state),
+            workflow_state: std::sync::Mutex::new(workflow_state),
             steps,
         })
     }
 }
 
-impl JsonLike for Agent {
+impl JsonLike for Workflow {
     fn to_json(&self) -> Value {
         serde_json::json!({
             "id": self.identifiers.local_id,
@@ -48,7 +48,7 @@ impl JsonLike for Agent {
             "created_at": self.timestamps.created.format("%Y-%m-%d %H:%M:%S").to_string(),
             "updated_at": self.timestamps.updated.format("%Y-%m-%d %H:%M:%S").to_string(),
             "description": self.description,
-            "agent_state": self.state(),
+            "workflow_state": self.state(),
             "steps": self.steps.iter().map(|step| step.to_json()).collect::<Vec<Value>>(),
         })
     }
@@ -87,10 +87,10 @@ impl JsonLike for Agent {
                     .and_then(|v| v.as_str())
                     .unwrap_or_default()
                     .to_string(),
-                agent_state: std::sync::Mutex::new(
-                    obj.get("agent_state")
+                workflow_state: std::sync::Mutex::new(
+                    obj.get("workflow_state")
                         .and_then(|v| v.as_str())
-                        .and_then(|s| AgentState::from_str(s).ok())
+                        .and_then(|s| WorkflowState::from_str(s).ok())
                         .unwrap_or_default(),
                 ),
                 steps: obj
@@ -110,7 +110,7 @@ impl JsonLike for Agent {
 }
 
 #[async_trait]
-impl DatabaseItem for Agent {
+impl DatabaseItem for Workflow {
     type IdType = i32;
 
     fn id(&self) -> &IdFields<Self::IdType> {
@@ -118,26 +118,26 @@ impl DatabaseItem for Agent {
     }
 
     async fn try_db_create(&self, pool: &PgPool) -> Result<()> {
-        // Check if an agent with the same UUID already exists
-        if crate::check_exists_by_uuid(pool, "agents", &self.identifiers.global_uuid).await? {
-            return Ok(()); // Agent already exists, no need to create it again
+        // Check if a workflow with the same UUID already exists
+        if crate::check_exists_by_uuid(pool, "workflows", &self.identifiers.global_uuid).await? {
+            return Ok(()); // Workflow already exists, no need to create it again
         }
 
         let uuid_parsed = Uuid::parse_str(&self.identifiers.global_uuid)?;
-        let agent_state = self.state(); // Get the current state
+        let workflow_state = self.state(); // Get the current state
 
-        // Use query_scalar! for inserting the agent and returning the ID
-        let agent_id = sqlx::query_scalar!(
+        // Use query_scalar! for inserting the workflow and returning the ID
+        let workflow_id = sqlx::query_scalar!(
             r#"
-            INSERT INTO agents (
-                global_uuid, description, agent_state, created_at, updated_at
+            INSERT INTO workflows (
+                global_uuid, description, workflow_state, created_at, updated_at
             )
-            VALUES ($1, $2, $3::agent_state, $4, $5)
+            VALUES ($1, $2, $3::workflow_state, $4, $5)
             RETURNING id
             "#,
             uuid_parsed,
             &self.description,
-            agent_state as AgentState,
+            workflow_state as WorkflowState,
             &self.timestamps.created,
             &self.timestamps.updated
         )
@@ -152,13 +152,13 @@ impl DatabaseItem for Agent {
             sqlx::query!(
                 r#"
                 INSERT INTO steps (
-                    global_uuid, agent_id, description,
+                    global_uuid, workflow_id, description,
                     step_type, step_content, created_at, updated_at
                 )
                 VALUES ($1, $2, $3, ($4::text)::step_type, $5, $6, $7)
                 "#,
                 step_uuid,
-                agent_id,
+                workflow_id,
                 step.description.as_deref().unwrap_or(""),
                 step_type_str,
                 &step.step_content,
@@ -174,18 +174,18 @@ impl DatabaseItem for Agent {
 
     async fn try_db_update(&self, pool: &PgPool) -> Result<()> {
         let uuid_parsed = Uuid::parse_str(&self.identifiers.global_uuid)?;
-        let agent_state = self.state();
+        let workflow_state = self.state();
 
         sqlx::query!(
             r#"
-            UPDATE agents
+            UPDATE workflows
             SET description = $1,
-                agent_state = $2::agent_state,
+                workflow_state = $2::workflow_state,
                 updated_at = $3
             WHERE global_uuid = $4
             "#,
             &self.description,
-            agent_state as AgentState,
+            workflow_state as WorkflowState,
             &self.timestamps.updated,
             uuid_parsed
         )
@@ -197,13 +197,13 @@ impl DatabaseItem for Agent {
 
     async fn try_db_delete(&self, pool: &PgPool) -> Result<()> {
         if let Some(id) = self.identifiers.local_id {
-            sqlx::query!("DELETE FROM steps WHERE agent_id = $1", id)
+            sqlx::query!("DELETE FROM steps WHERE workflow_id = $1", id)
                 .execute(pool)
                 .await?;
         }
 
         let uuid_parsed = Uuid::parse_str(&self.identifiers.global_uuid)?;
-        sqlx::query!("DELETE FROM agents WHERE global_uuid = $1", uuid_parsed)
+        sqlx::query!("DELETE FROM workflows WHERE global_uuid = $1", uuid_parsed)
             .execute(pool)
             .await?;
 
@@ -211,23 +211,23 @@ impl DatabaseItem for Agent {
     }
 
     async fn try_db_select_all(pool: &PgPool) -> Result<Vec<Self>> {
-        struct AgentRow {
+        struct WorkflowRow {
             id: i32,
             global_uuid: uuid::Uuid,
             description: Option<String>,
-            agent_state: AgentState,
+            workflow_state: WorkflowState,
             created_at: chrono::DateTime<chrono::Utc>,
             updated_at: chrono::DateTime<chrono::Utc>,
             steps: serde_json::Value,
         }
 
         let rows = sqlx::query_as!(
-            AgentRow,
+            WorkflowRow,
             r#"
             SELECT
-                a.id, a.global_uuid, a.description,
-                a.agent_state as "agent_state: _",
-                a.created_at, a.updated_at,
+                w.id, w.global_uuid, w.description,
+                w.workflow_state as "workflow_state: _",
+                w.created_at, w.updated_at,
                 COALESCE(
                     (
                         SELECT json_agg(json_build_object(
@@ -235,28 +235,28 @@ impl DatabaseItem for Agent {
                             'global_uuid', s.global_uuid,
                             'created_at', s.created_at,
                             'updated_at', s.updated_at,
-                            'agent_id', s.agent_id,
+                            'workflow_id', s.workflow_id,
                             'description', s.description,
                             'step_type', s.step_type::text,
                             'step_content', s.step_content
                         ))
                         FROM steps s
-                        WHERE s.agent_id = a.id
+                        WHERE s.workflow_id = w.id
                     ),
                     '[]'::json
                 ) as "steps: JsonValue"
-            FROM agents a
+            FROM workflows w
             "#
         )
         .fetch_all(pool)
         .await?;
 
-        let agents = rows
+        let workflows = rows
             .into_iter()
             .map(|row| {
                 let steps = Step::from_json_array(&row.steps);
 
-                Agent {
+                Workflow {
                     identifiers: IdFields {
                         local_id: Some(row.id),
                         global_uuid: row.global_uuid.to_string(),
@@ -266,24 +266,24 @@ impl DatabaseItem for Agent {
                         updated: row.updated_at,
                     },
                     description: row.description.unwrap_or_default(),
-                    agent_state: std::sync::Mutex::new(row.agent_state),
+                    workflow_state: std::sync::Mutex::new(row.workflow_state),
                     steps,
                 }
             })
             .collect();
 
-        Ok(agents)
+        Ok(workflows)
     }
 
     async fn try_db_select_by_id(
         pool: &PgPool,
         id: &IdFields<Self::IdType>,
     ) -> Result<Option<Self>> {
-        struct AgentRow {
+        struct WorkflowRow {
             id: i32,
             global_uuid: uuid::Uuid,
             description: Option<String>,
-            agent_state: AgentState,
+            workflow_state: WorkflowState,
             created_at: chrono::DateTime<chrono::Utc>,
             updated_at: chrono::DateTime<chrono::Utc>,
             steps: serde_json::Value,
@@ -291,12 +291,12 @@ impl DatabaseItem for Agent {
 
         let row_opt = if let Some(local_id) = id.local_id {
             sqlx::query_as!(
-                AgentRow,
+                WorkflowRow,
                 r#"
                 SELECT
-                    a.id, a.global_uuid, a.description,
-                    a.agent_state as "agent_state: _",
-                    a.created_at, a.updated_at,
+                    w.id, w.global_uuid, w.description,
+                    w.workflow_state as "workflow_state: _",
+                    w.created_at, w.updated_at,
                     COALESCE(
                         (
                             SELECT json_agg(json_build_object(
@@ -304,18 +304,18 @@ impl DatabaseItem for Agent {
                                 'global_uuid', s.global_uuid,
                                 'created_at', s.created_at,
                                 'updated_at', s.updated_at,
-                                'agent_id', s.agent_id,
+                                'workflow_id', s.workflow_id,
                                 'description', s.description,
                                 'step_type', s.step_type::text,
                                 'step_content', s.step_content
                             ))
                             FROM steps s
-                            WHERE s.agent_id = a.id
+                            WHERE s.workflow_id = w.id
                         ),
                         '[]'::json
                     ) as "steps: JsonValue"
-                FROM agents a
-                WHERE a.id = $1
+                FROM workflows w
+                WHERE w.id = $1
                 "#,
                 local_id
             )
@@ -324,12 +324,12 @@ impl DatabaseItem for Agent {
         } else {
             let uuid_parsed = Uuid::parse_str(&id.global_uuid)?;
             sqlx::query_as!(
-                AgentRow,
+                WorkflowRow,
                 r#"
                 SELECT
-                    a.id, a.global_uuid, a.description,
-                    a.agent_state as "agent_state: _",
-                    a.created_at, a.updated_at,
+                    w.id, w.global_uuid, w.description,
+                    w.workflow_state as "workflow_state: _",
+                    w.created_at, w.updated_at,
                     COALESCE(
                         (
                             SELECT json_agg(json_build_object(
@@ -337,18 +337,18 @@ impl DatabaseItem for Agent {
                                 'global_uuid', s.global_uuid,
                                 'created_at', s.created_at,
                                 'updated_at', s.updated_at,
-                                'agent_id', s.agent_id,
+                                'workflow_id', s.workflow_id,
                                 'description', s.description,
                                 'step_type', s.step_type::text,
                                 'step_content', s.step_content
                             ))
                             FROM steps s
-                            WHERE s.agent_id = a.id
+                            WHERE s.workflow_id = w.id
                         ),
                         '[]'::json
                     ) as "steps: JsonValue"
-                FROM agents a
-                WHERE a.global_uuid = $1
+                FROM workflows w
+                WHERE w.global_uuid = $1
                 "#,
                 uuid_parsed
             )
@@ -359,7 +359,7 @@ impl DatabaseItem for Agent {
         Ok(row_opt.map(|row| {
             let steps = Step::from_json_array(&row.steps);
 
-            Agent {
+            Workflow {
                 identifiers: IdFields {
                     local_id: Some(row.id),
                     global_uuid: row.global_uuid.to_string(),
@@ -369,7 +369,7 @@ impl DatabaseItem for Agent {
                     updated: row.updated_at,
                 },
                 description: row.description.unwrap_or_default(),
-                agent_state: std::sync::Mutex::new(row.agent_state),
+                workflow_state: std::sync::Mutex::new(row.workflow_state),
                 steps,
             }
         }))

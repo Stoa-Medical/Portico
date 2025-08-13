@@ -1,4 +1,4 @@
-use portico_shared::Agent;
+use portico_shared::Workflow;
 use prost_types::Struct;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -17,8 +17,8 @@ pub mod handlers;
 // Re-export important types
 pub use crate::core::rpc_server::RpcServer;
 
-// Thread-safe Agent map type
-pub type SharedAgentMap = Arc<RwLock<HashMap<String, Agent>>>;
+// Thread-safe Workflow map type
+pub type SharedWorkflowMap = Arc<RwLock<HashMap<String, Workflow>>>;
 
 // Convert a protobuf Struct to a serde_json::Value
 pub fn proto_struct_to_json(proto_struct: &Struct) -> Value {

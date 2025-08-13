@@ -1,68 +1,70 @@
-use crate::core::agent_manager::AgentManager;
-use crate::proto::{SignalRequest, SignalResponse};
+use crate::SharedWorkflowMap;
+use crate::proto::SignalResponse;
+use crate::json_to_proto_struct;
+use portico_shared::{DatabaseItem, RuntimeSession};
+use serde_json::Value;
+use sqlx::PgPool;
 use tonic::Status;
 
-// Run operation handler
-pub async fn handle_run(
-    manager: &AgentManager,
-    signal: SignalRequest,
-    runtime_session_uuid: String,
+// Run signal handler for workflows
+pub async fn handle_run_signal(
+    workflow_map: SharedWorkflowMap,
+    workflow_id: i32,
+    run_data: Value,
+    pool: PgPool,
 ) -> Result<SignalResponse, Status> {
-    // Process run signal
-    println!(
-        "[INFO] Processing run operation for signal: {}",
-        signal.signal_id
-    );
+    println!("[INFO] Processing run signal for workflow_id: {}", workflow_id);
 
-    let agent_uuid_or_id = signal.agent_id.to_string();
-
-    if agent_uuid_or_id.is_empty() {
-        return Err(Status::invalid_argument(
-            "Missing agent_uuid for RUN operation",
-        ));
-    }
-
-    // Check if the agent_uuid is actually a numeric local ID
-    let agent_uuid = if agent_uuid_or_id.parse::<i32>().is_ok() {
-        // This is a numeric ID, try to look it up in the local_id_map
-        if let Some(uuid) = manager.local_id_map.get(&agent_uuid_or_id) {
-            println!("[INFO] Found UUID {} for local ID {}", uuid, agent_uuid_or_id);
-            uuid.clone()
-        } else {
-            // No mapping found, return an error
-            eprintln!("[ERROR] No UUID mapping found for local ID: {}", agent_uuid_or_id);
-            return Err(Status::not_found(format!(
-                "Agent with local ID {} not found in UUID map",
-                agent_uuid_or_id
-            )));
-        }
-    } else {
-        // This is already a UUID, use it directly
-        agent_uuid_or_id
+    // Look up the workflow by ID
+    let workflow_uuid = {
+        let workflows = workflow_map.read().await;
+        let workflow = workflows
+            .values()
+            .find(|w| w.identifiers.local_id == Some(workflow_id))
+            .ok_or_else(|| {
+                Status::not_found(format!("Workflow with ID {} not found", workflow_id))
+            })?;
+        workflow.identifiers.global_uuid.clone()
     };
 
-    // Forward the signal to the agent's queue if it exists
-    if let Some(queue) = manager.message_queues.get(&agent_uuid) {
-        // Create a modified signal with the correct UUID
-        let mut modified_signal = signal.clone();
-        modified_signal.agent_id = agent_uuid.parse::<i32>().unwrap_or(0);
+    // Get the workflow and run it
+    let runtime_session = {
+        let workflows = workflow_map.read().await;
+        let workflow = workflows.get(&workflow_uuid).ok_or_else(|| {
+            Status::not_found(format!("Workflow {} not found", workflow_uuid))
+        })?;
 
-        if let Err(e) = queue.send(modified_signal).await {
-            eprintln!("[ERROR] Failed to send signal to agent queue: {}", e);
-            return Err(Status::internal("Failed to forward signal to agent queue"));
+        match workflow.run(run_data).await {
+            Ok(session) => session,
+            Err(e) => {
+                eprintln!("[ERROR] Failed to run workflow {}: {}", workflow_uuid, e);
+                return Err(Status::internal(format!(
+                    "Failed to execute workflow: {}",
+                    e
+                )));
+            }
         }
+    };
 
-        Ok(SignalResponse {
-            success: true,
-            message: format!("Signal forwarded to agent {}", agent_uuid),
-            runtime_session_uuid,
-            result_data: None,
-        })
-    } else {
-        eprintln!("[ERROR] No queue found for agent: {}", agent_uuid);
-        Err(Status::not_found(format!(
-            "Agent with UUID {} not found",
-            agent_uuid
-        )))
+    // Save the runtime session to database
+    if let Err(e) = runtime_session.try_db_create(&pool).await {
+        eprintln!(
+            "[ERROR] Failed to save runtime session to database: {}",
+            e
+        );
+        return Err(Status::internal("Failed to save runtime session"));
     }
+
+    // Convert result to proto format
+    let result_data = runtime_session
+        .last_successful_result
+        .as_ref()
+        .map(|result| json_to_proto_struct(result));
+
+    Ok(SignalResponse {
+        success: true,
+        message: "Workflow executed successfully".to_string(),
+        runtime_session_uuid: runtime_session.identifiers.global_uuid,
+        result_data,
+    })
 }

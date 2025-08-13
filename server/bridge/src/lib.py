@@ -98,254 +98,231 @@ class BridgeClient:
             # Handle the server init case separately
             if "server-init" in data:
                 response = await self.initialize_server()
-                return response is not None and getattr(response, "success", False)
+                return response is not None and response.success
 
-            # Process the actual signal based on the data
+            # For signal data, use the new create_signal_request function
             signal_request = await create_signal_request(data)
             if signal_request:
                 response = await self.process_signal(signal_request)
                 if response and getattr(response, "success", False):
-                    logger.info(
-                        f"Successfully sent {meta} message: {sanitize_data(getattr(response, 'message', ''))}"
-                    )
+                    logger.info(f"Signal processed successfully: {response.message}")
                     return True
                 else:
-                    error_msg = (
-                        getattr(response, "message", "No response received")
-                        if response
-                        else "No response received"
-                    )
-                    logger.error(f"Failed to send {meta} message: {error_msg}")
+                    error_msg = getattr(response, "message", "Unknown error")
+                    logger.error(f"Signal processing failed: {error_msg}")
                     return False
             else:
-                logger.error(
-                    f"Failed to create signal request from data: {sanitize_data(data)}"
-                )
+                logger.error("Failed to create signal request")
                 return False
+
         except Exception as e:
-            logger.error(f"Error sending message to engine: {sanitize_data(str(e))}")
+            logger.error(f"Error sending signal: {sanitize_data(str(e))}")
             return False
 
-    async def close(self):
-        """Close the gRPC channel"""
+    async def close(self) -> None:
+        """Close the gRPC connection"""
         if self.channel:
             await self.channel.close()
-            logger.info("Closed gRPC channel")
+
+
+def sanitize_data(data: Any) -> str:
+    """Sanitize data for logging to prevent log injection"""
+    if isinstance(data, dict):
+        return json.dumps(data, indent=2, default=str)
+    return str(data).replace("\n", "\\n").replace("\r", "\\r")
 
 
 async def create_signal_request(data: dict[str, Any]) -> Any:
     """Create a SignalRequest from the Supabase payload"""
     try:
         # Extract record data from the Supabase payload using pydian get
-        record = get(data, "data.record", {})
+        record = get(data, "record", {})
 
         if not record:
-            logger.error("No record found in data payload")
+            logger.error("No record found in payload")
             return None
 
-        # Extract the necessary fields from the record
-        # Get the signal ID directly from the record
+        # Extract signal ID
         signal_id = get(record, "id", 0)
 
-        # Get the agent ID directly from the record
-        agent_id = get(record, "agent_id", 0)
+        # Extract workflow_id (was agent_id)
+        workflow_id = get(record, "workflow_id", 0)
 
-        if agent_id:
-            logger.info(f"Processing signal for agent_id: {agent_id}")
+        if workflow_id:
+            logger.info(f"Processing signal for workflow_id: {workflow_id}")
         else:
-            logger.warning("No agent_id found in record")
+            logger.warning("No workflow_id found in record")
 
         # Determine signal type
         signal_type_str = get(record, "signal_type", "").upper()
-        if not signal_type_str:
-            logger.error("No signal_type found in record")
-            return None
+        signal_type = pb2.RUN  # Default
 
-        try:
-            # Access via the pb2 namespace
-            signal_type = pb2.SignalType.Value(signal_type_str)
-        except ValueError:
-            logger.error(f"Invalid signal_type: {signal_type_str}")
-            return None
+        if signal_type_str == "SYNC":
+            signal_type = pb2.SYNC
+        elif signal_type_str == "FYI":
+            signal_type = pb2.FYI
 
-        # Extract initial_data JSON
+        logger.info(f"Signal type: {signal_type_str}")
+
+        # Extract payload data
         initial_data = get(record, "initial_data", {})
-        if isinstance(initial_data, str):
-            try:
-                initial_data = json.loads(initial_data)
-            except json.JSONDecodeError:
-                logger.error(f"Invalid JSON in initial_data: {initial_data}")
-                initial_data = {}
 
-        # Create the base request via pb2 namespace using the correct field names
-        request = pb2.SignalRequest(
+        # Create appropriate payload based on signal type
+        payload = None
+        if signal_type == pb2.RUN and initial_data:
+            payload = pb2.SignalRequest(run_data=dict_to_struct(initial_data))
+        elif signal_type == pb2.SYNC:
+            # Create sync payload
+            sync_payload = pb2.SyncPayload(
+                scope=pb2.ALL,  # Default to ALL scope
+                workflow_uuids=[],  # Empty for ALL scope
+            )
+            payload = pb2.SignalRequest(sync=sync_payload)
+        elif signal_type == pb2.FYI and initial_data:
+            payload = pb2.SignalRequest(fyi_data=dict_to_struct(initial_data))
+
+        # Create the SignalRequest
+        signal_request = pb2.SignalRequest(
             signal_id=signal_id,
-            agent_id=agent_id,
+            workflow_id=workflow_id,
             signal_type=signal_type,
         )
 
-        # Handle payload based on signal type - access via pb2 namespace
-        if signal_type == pb2.SignalType.RUN:
-            # Ensure the run_data has the expected structure with a "data" field
-            # that the Rust engine is looking for
-            run_data_wrapper = {"data": initial_data}
-            request.run_data.CopyFrom(dict_to_struct(run_data_wrapper))
-        elif signal_type == pb2.SignalType.SYNC:
-            sync_payload = create_sync_payload(initial_data)
-            request.sync.CopyFrom(sync_payload)
-        elif signal_type == pb2.SignalType.FYI:
-            # Wrap fyi_data in a similar structure for consistency
-            fyi_data_wrapper = {"data": initial_data}
-            request.fyi_data.CopyFrom(dict_to_struct(fyi_data_wrapper))
+        # Set the appropriate payload
+        if signal_type == pb2.RUN and initial_data:
+            signal_request.run_data.CopyFrom(dict_to_struct(initial_data))
+        elif signal_type == pb2.SYNC:
+            sync_payload = pb2.SyncPayload(
+                scope=pb2.ALL,
+                workflow_uuids=[],
+            )
+            signal_request.sync.CopyFrom(sync_payload)
+        elif signal_type == pb2.FYI and initial_data:
+            signal_request.fyi_data.CopyFrom(dict_to_struct(initial_data))
 
-        return request
+        return signal_request
+
     except Exception as e:
-        logger.error(f"Error creating signal request: {str(e)}")
+        logger.error(f"Error creating signal request: {sanitize_data(str(e))}")
         return None
 
 
-def create_sync_payload(data: dict[str, Any]) -> Any:
-    """Create a SyncPayload from the initial_data"""
-    # Get sync scope
-    scope_str = get(data, "scope", "ALL").upper()
-    try:
-        # Access via pb2 namespace
-        scope = pb2.SyncScope.Value(scope_str)
-    except ValueError:
-        logger.error(f"Invalid scope: {scope_str}")
-        # Default via pb2 namespace
-        scope = pb2.SyncScope.ALL
-
-    # Get entity UUIDs
-    entity_uuids = [str(uuid_val) for uuid_val in get(data, "entity_uuids", [])]
-
-    # Get entity types
-    entity_types_str = get(data, "entity_types", [])
-    entity_types = []
-    for et_str in entity_types_str:
-        try:
-            # Access via pb2 namespace
-            et = pb2.EntityType.Value(et_str.upper())
-            entity_types.append(et)
-        except ValueError:
-            logger.error(f"Invalid entity_type: {et_str}")
-
-    # Create and return via pb2 namespace
-    return pb2.SyncPayload(
-        scope=scope, entity_uuids=entity_uuids, entity_types=entity_types
-    )
-
-
-# Sanitize data by removing null characters that Postgres can't handle
-def sanitize_data(data: Any) -> Any:
-    """Sanitize data by removing null characters that Postgres can't handle."""
-    if isinstance(data, str):
-        return data.replace("\u0000", "")
-    elif isinstance(data, dict):
-        return {k: sanitize_data(v) for k, v in data.items()}
-    elif isinstance(data, list):
-        return [sanitize_data(v) for v in data]
-    return data
-
-
-# Public API for the bridge service
 async def handle_signal_insert(payload: dict[str, Any], client: BridgeClient) -> None:
-    """Handle a new signal inserted into the signals table"""
-    # Sanitize the payload before any processing
-    safe_payload = sanitize_data(payload)
-    logger.info(f"🔔 New signal detected: {safe_payload}")
-
-    try:
-        # Send sanitized signal to engine
-        success = await client.send_signal(safe_payload, "signal")
-        if not success:
-            logger.error("Failed to process signal in engine service")
-    except Exception as e:
-        logger.error(f"Error handling new signal: {str(e)}")
-
-
-async def handle_agent_insert(payload: dict[str, Any], client: BridgeClient) -> None:
-    """Handles a new Agent inserted in postgres"""
-    # Create and send a `CreateAgentRequest`
+    """Handles a new Signal inserted in postgres"""
     try:
         # Sanitize the payload before any processing
         safe_payload = sanitize_data(payload)
-        logger.info(f"🔔 New agent created: {safe_payload}")
+        logger.info(f"🔔 New signal: {safe_payload}")
+
+        # Extract record data from the Supabase payload using pydian get
+        record = get(payload, "record", {})
+
+        if not record:
+            logger.error("No record found in signal payload")
+            return
+
+        # Create and send signal request
+        signal_request = await create_signal_request(payload)
+        if signal_request:
+            response = await client.process_signal(signal_request)
+            if response and response.success:
+                logger.info(f"Signal processed successfully: {response.message}")
+            else:
+                error_msg = response.message if response else "No response received"
+                logger.error(f"Signal processing failed: {error_msg}")
+        else:
+            logger.error("Failed to create signal request")
+
+    except Exception as e:
+        logger.error(f"Error handling signal: {str(e)}")
+
+
+async def handle_workflow_insert(payload: dict[str, Any], client: BridgeClient) -> None:
+    """Handles a new Workflow inserted in postgres"""
+    # Create and send a `CreateWorkflowRequest`
+    try:
+        # Sanitize the payload before any processing
+        safe_payload = sanitize_data(payload)
+        logger.info(f"🔔 New workflow created: {safe_payload}")
 
         # Extract record data from the Supabase payload using pydian get
         record = get(safe_payload, "data.record", {})
 
         if not record:
-            logger.error("No record found in agent insert payload")
+            logger.error("No record found in workflow insert payload")
             return
 
-        # Create the CreateAgentRequest with the agent data
+        # Create the CreateWorkflowRequest with the workflow data
         if not client.stub:
             logger.error("gRPC stub not initialized")
             return
 
         # Convert record to a Protobuf Struct
-        agent_json_struct = dict_to_struct(record)
+        workflow_json_struct = dict_to_struct(record)
 
         # Create request
-        request = pb2.CreateAgentRequest(agent_json=agent_json_struct)
+        request = pb2.CreateWorkflowRequest(workflow_json=workflow_json_struct)
 
         # Send request
         try:
-            response = await client.stub.CreateAgent(request)
+            response = await client.stub.CreateWorkflow(request)
             if response and response.success:
-                logger.info(f"Successfully created agent: {response.message}")
+                logger.info(f"Successfully created workflow: {response.message}")
             else:
                 error_msg = (
                     get(response, "message") if response else "No response received"
                 )
-                logger.error(f"Failed to create agent: {error_msg}")
+                logger.error(f"Failed to create workflow: {error_msg}")
         except Exception as e:
-            logger.error(f"Error sending CreateAgentRequest: {sanitize_data(str(e))}")
+            logger.error(
+                f"Error sending CreateWorkflowRequest: {sanitize_data(str(e))}"
+            )
     except Exception as e:
-        logger.error(f"Error handling new agent: {str(e)}")
+        logger.error(f"Error handling new workflow: {str(e)}")
 
 
-async def handle_agent_delete(payload: dict[str, Any], client: BridgeClient) -> None:
-    """Handles a new Agent deleted in postgres"""
-    # Create and send a `DeleteAgentRequest`
+async def handle_workflow_delete(payload: dict[str, Any], client: BridgeClient) -> None:
+    """Handles a new Workflow deleted in postgres"""
+    # Create and send a `DeleteWorkflowRequest`
     try:
         # Sanitize the payload before any processing
         safe_payload = sanitize_data(payload)
-        logger.info(f"🔔 Agent deleted: {safe_payload}")
+        logger.info(f"🔔 Workflow deleted: {safe_payload}")
 
         # Extract record data from the Supabase payload using pydian get
         record = get(safe_payload, "data.record", {})
 
         if not record:
-            logger.error("No record found in agent delete payload")
+            logger.error("No record found in workflow delete payload")
             return
 
-        # Get the agent ID from the record
-        agent_id = get(record, "id", 0)
-        if not agent_id:
-            logger.error("No agent ID found in delete record")
+        # Get the workflow ID from the record
+        workflow_id = get(record, "id", 0)
+        if not workflow_id:
+            logger.error("No workflow ID found in delete record")
             return
 
-        # Create the DeleteAgentRequest
+        # Create the DeleteWorkflowRequest
         if not client.stub:
             logger.error("gRPC stub not initialized")
             return
 
         # Create request
-        request = pb2.DeleteAgentRequest(agent_id=agent_id)
+        request = pb2.DeleteWorkflowRequest(workflow_id=workflow_id)
 
         # Send request
         try:
-            response = await client.stub.DeleteAgent(request)
+            response = await client.stub.DeleteWorkflow(request)
             if response and response.success:
-                logger.info(f"Successfully deleted agent: {response.message}")
+                logger.info(f"Successfully deleted workflow: {response.message}")
             else:
                 error_msg = (
                     get(response, "message") if response else "No response received"
                 )
-                logger.error(f"Failed to delete agent: {error_msg}")
+                logger.error(f"Failed to delete workflow: {error_msg}")
         except Exception as e:
-            logger.error(f"Error sending DeleteAgentRequest: {sanitize_data(str(e))}")
+            logger.error(
+                f"Error sending DeleteWorkflowRequest: {sanitize_data(str(e))}"
+            )
     except Exception as e:
-        logger.error(f"Error handling agent deletion: {str(e)}")
+        logger.error(f"Error handling workflow deletion: {str(e)}")

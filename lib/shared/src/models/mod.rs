@@ -1,8 +1,8 @@
 pub mod signals;
 pub use signals::{RunDataPayload, RunPayload, Signal, SignalType, SyncPayload};
 
-pub mod agents;
-pub use agents::Agent;
+pub mod workflows;
+pub use workflows::Workflow;
 
 pub mod steps;
 pub use steps::Step;

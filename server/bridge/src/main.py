@@ -34,8 +34,8 @@ from src.lib import logger
 from src.lib import (
     BridgeClient,
     handle_signal_insert,
-    handle_agent_insert,
-    handle_agent_delete,
+    handle_workflow_insert,
+    handle_workflow_delete,
 )
 
 # Ensure proto files are generated
@@ -113,27 +113,27 @@ async def main():
         schema="public",
     )
     await channel_signals.subscribe()
-    # Also subscribe to Agent Create/Delete
-    channel_agents = client.channel("agent-inserts")
-    channel_agents.on_postgres_changes(
+    # Also subscribe to Workflow Create/Delete
+    channel_workflows = client.channel("workflow-inserts")
+    channel_workflows.on_postgres_changes(
         event="INSERT",
         callback=lambda payload: asyncio.create_task(
-            handle_agent_insert(payload, grpc_client)
+            handle_workflow_insert(payload, grpc_client)
         ),
-        table="agents",
+        table="workflows",
         schema="public",
     )
-    await channel_agents.subscribe()
-    channel_agents_deletes = client.channel("agent-deletes")
-    channel_agents_deletes.on_postgres_changes(
+    await channel_workflows.subscribe()
+    channel_workflows_deletes = client.channel("workflow-deletes")
+    channel_workflows_deletes.on_postgres_changes(
         event="DELETE",
         callback=lambda payload: asyncio.create_task(
-            handle_agent_delete(payload, grpc_client)
+            handle_workflow_delete(payload, grpc_client)
         ),
-        table="agents",
+        table="workflows",
         schema="public",
     )
-    await channel_agents_deletes.subscribe()
+    await channel_workflows_deletes.subscribe()
     logger.info("Subscribed to Supabase realtime channels")
 
     # Use asyncio.Event for cleaner termination
@@ -145,7 +145,7 @@ async def main():
             sig,
             lambda: asyncio.create_task(
                 shutdown(
-                    [channel_signals, channel_agents, channel_agents_deletes],
+                    [channel_signals, channel_workflows, channel_workflows_deletes],
                     stop_event,
                     grpc_client,
                 )

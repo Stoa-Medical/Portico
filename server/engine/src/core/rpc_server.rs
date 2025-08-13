@@ -1,32 +1,33 @@
-use crate::core::agent_manager::AgentManager;
+use crate::core::workflow_manager::WorkflowManager;
+use crate::handlers::{create, delete};
 use crate::proto::bridge_service_server::{BridgeService, BridgeServiceServer};
 use crate::proto::{
-    CreateAgentRequest, DeleteAgentRequest, GeneralResponse, ServerInitRequest, SignalRequest,
+    CreateWorkflowRequest, DeleteWorkflowRequest, GeneralResponse, ServerInitRequest, SignalRequest,
     SignalResponse,
 };
-use crate::SharedAgentMap;
+use crate::SharedWorkflowMap;
 use sqlx::PgPool;
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
 
 // Bridge service implementation
 pub struct RpcServer {
-    agent_manager: Arc<tokio::sync::Mutex<AgentManager>>,
+    workflow_manager: Arc<tokio::sync::Mutex<WorkflowManager>>,
 }
 
 impl RpcServer {
-    pub fn new(agent_map: SharedAgentMap, db_pool: PgPool) -> Self {
-        let agent_manager = Arc::new(tokio::sync::Mutex::new(AgentManager::new(
-            agent_map, db_pool,
+    pub fn new(workflow_map: SharedWorkflowMap, db_pool: PgPool) -> Self {
+        let workflow_manager = Arc::new(tokio::sync::Mutex::new(WorkflowManager::new(
+            workflow_map, db_pool,
         )));
 
-        let instance = Self { agent_manager };
+        let instance = Self { workflow_manager };
 
-        // Initialize agent queues in the background
-        let manager_clone = Arc::clone(&instance.agent_manager);
+        // Initialize workflow queues in the background
+        let manager_clone = Arc::clone(&instance.workflow_manager);
         tokio::spawn(async move {
-            if let Err(e) = manager_clone.lock().await.init_agent_queues().await {
-                eprintln!("[ERROR] Failed to initialize agent queues: {}", e);
+            if let Err(e) = manager_clone.lock().await.init_workflow_queues().await {
+                eprintln!("[ERROR] Failed to initialize workflow queues: {}", e);
             }
         });
 
@@ -49,13 +50,21 @@ impl BridgeService for RpcServer {
         if server_init {
             println!("[INFO] Received init message from bridge service");
 
-            Ok(Response::new(GeneralResponse {
+            let workflow_count = self.workflow_manager.lock().await.workflow_count().await;
+
+            let reply = GeneralResponse {
                 success: true,
-                message: "Bridge service initialized successfully".to_string(),
-            }))
+                message: format!("Engine initialized successfully with {} workflows", workflow_count),
+            };
+
+            Ok(Response::new(reply))
         } else {
-            eprintln!("[ERROR] Server init failed: expected server_init to be true, got false");
-            Err(Status::invalid_argument("Expected server_init to be true"))
+            let reply = GeneralResponse {
+                success: false,
+                message: "Invalid server initialization request".to_string(),
+            };
+
+            Ok(Response::new(reply))
         }
     }
 
@@ -63,79 +72,52 @@ impl BridgeService for RpcServer {
         &self,
         request: Request<SignalRequest>,
     ) -> Result<Response<SignalResponse>, Status> {
-        let signal = request.into_inner();
-
+        let signal_request = request.into_inner();
         println!(
-            "[INFO] Received signal: type={:?}, signal_id={}",
-            signal.signal_type(),
-            signal.signal_id
+            "[INFO] Received signal for workflow_id: {} with type: {:?}",
+            signal_request.workflow_id,
+            signal_request.signal_type()
         );
 
-        // Process the signal using the agent manager
-        let mut manager = self.agent_manager.lock().await;
-        match manager.process_signal(signal).await {
-            Ok(response) => Ok(Response::new(response)),
-            Err(status) => Err(status),
-        }
+        // Queue the signal through the workflow manager
+        let response = self
+            .workflow_manager
+            .lock()
+            .await
+            .queue_signal(signal_request)
+            .await?;
+
+        Ok(Response::new(response))
     }
 
-    async fn create_agent(
+    async fn create_workflow(
         &self,
-        request: Request<CreateAgentRequest>,
+        request: Request<CreateWorkflowRequest>,
     ) -> Result<Response<GeneralResponse>, Status> {
-        let agent_request = request.into_inner();
+        let create_request = request.into_inner();
+        println!("[INFO] Received create workflow request");
 
-        println!("[INFO] Received create_agent request");
+        // Handle the workflow creation through the create handler
+        let mut manager = self.workflow_manager.lock().await;
+        let response = create::handle_create_workflow(&mut manager, &create_request.workflow_json).await?;
 
-        if let Some(agent_json) = &agent_request.agent_json {
-            // Use the create_agent handler directly
-            let mut manager = self.agent_manager.lock().await;
-            match crate::handlers::create::handle_create_agent(&mut *manager, agent_json).await {
-                Ok(response) => {
-                    println!("[INFO] Agent created successfully");
-                    Ok(Response::new(response))
-                }
-                Err(status) => {
-                    eprintln!("[ERROR] Failed to create agent: {}", status);
-                    Err(status)
-                }
-            }
-        } else {
-            Err(Status::invalid_argument(
-                "Missing agent_json in CreateAgentRequest",
-            ))
-        }
+        Ok(Response::new(response))
     }
 
-    async fn delete_agent(
+    async fn delete_workflow(
         &self,
-        request: Request<DeleteAgentRequest>,
+        request: Request<DeleteWorkflowRequest>,
     ) -> Result<Response<GeneralResponse>, Status> {
         let delete_request = request.into_inner();
-        let agent_id = delete_request.agent_id;
-
         println!(
-            "[INFO] Received delete_agent request for ID: {}",
-            agent_id
+            "[INFO] Received delete workflow request for workflow_id: {}",
+            delete_request.workflow_id
         );
 
-        if agent_id == 0 {
-            return Err(Status::invalid_argument(
-                "Missing agent_id in DeleteAgentRequest",
-            ));
-        }
+        // Handle the workflow deletion through the delete handler
+        let mut manager = self.workflow_manager.lock().await;
+        let response = delete::handle_delete_workflow(&mut manager, delete_request.workflow_id).await?;
 
-        // Use the delete_agent handler directly
-        let mut manager = self.agent_manager.lock().await;
-        match crate::handlers::delete::handle_delete_agent(&mut *manager, agent_id).await {
-            Ok(response) => {
-                println!("[INFO] Agent deleted successfully");
-                Ok(Response::new(response))
-            }
-            Err(status) => {
-                eprintln!("[ERROR] Failed to delete agent: {}", status);
-                Err(status)
-            }
-        }
+        Ok(Response::new(response))
     }
 }
