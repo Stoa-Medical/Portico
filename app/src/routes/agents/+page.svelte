@@ -26,36 +26,38 @@
   import { PageHeader, StepConfig, DateTimeRow } from "$lib/components";
   import { readableDate } from "$lib/date";
   import {
-    getSteps,
-    updateStep,
     getAgents,
     deleteAgent,
     saveAgent,
     updateAgent,
-    getRuntimeSessions,
-    deleteStep,
-    saveStep,
-    runAgent,
+    requestPlanWorkflow,
+    getAgentCapabilities,
+    updateAgentCapabilities,
+    getAgentPolicy,
+    updateAgentPolicy,
   } from "./api";
+  import { getWorkflowsByAgent } from "../workflows/api";
+  import type { WorkflowCompositionRequest } from "$lib/types";
   import { onMount } from "svelte";
   import { fly } from "svelte/transition";
 
   // Selected resources for detail views
   let selectedAgent = $state<any | null>(null);
-  let selectedStep = $state<any | null>(null);
-  let selectedRuntimeSession = $state<any | null>(null);
   let currentTab = $state<string | null>(null);
 
   // Data stores
   let agents = $state<any[] | undefined>(undefined);
-  let steps = $state<any[] | undefined>(undefined);
   let originalAgent = $state<any | null>(null);
-  let runtimeSessions = $state<any[]>([]);
-  let isEditingStep = $state(false);
-  let editingStepData = $state<any>(null);
-  let showRunModal = $state(false);
-  let runInitialData = $state("");
-  let isRunning = $state(false);
+  let agentWorkflows = $state<any[]>([]);
+  let showComposeModal = $state(false);
+  let compositionRequest = $state<WorkflowCompositionRequest>({
+    agent_id: 0,
+    objective: "",
+    context: {},
+    constraints: {},
+    is_ephemeral: false,
+    auto_execute: false,
+  });
 
   const hasAgentChanges = $derived(
     selectedAgent && originalAgent
@@ -65,8 +67,7 @@
 
   $effect(() => {
     if (selectedAgent) {
-      loadSteps(selectedAgent.id);
-      loadRuntimeSessions(selectedAgent.id);
+      loadAgentWorkflows(selectedAgent.id);
     }
   });
 
@@ -101,51 +102,21 @@
     }
   }
 
-  async function loadSteps(agentIdInput: string | number) {
+  async function loadAgentWorkflows(agentIdInput: string | number) {
     try {
       const id =
         typeof agentIdInput === "string"
           ? parseInt(agentIdInput, 10)
           : agentIdInput;
       if (isNaN(id)) {
-        console.error("Invalid agentId for loadSteps:", agentIdInput);
-        steps = [];
+        console.error("Invalid agentId for loadAgentWorkflows:", agentIdInput);
+        agentWorkflows = [];
         return;
       }
-      steps = await getSteps(id);
+      agentWorkflows = await getWorkflowsByAgent(id);
     } catch (err) {
-      console.error("Failed to load steps", err);
-      steps = [];
-    }
-  }
-
-  async function saveStepData() {
-    if (!selectedStep || !selectedAgent) return;
-
-    try {
-      await updateStep(selectedStep);
-      if (selectedAgent) await loadSteps(selectedAgent.id);
-      selectedStep = null;
-    } catch (err) {
-      console.error("Failed to save step", err);
-    }
-  }
-
-  async function loadRuntimeSessions(agentIdInput: string | number) {
-    try {
-      const id =
-        typeof agentIdInput === "string"
-          ? parseInt(agentIdInput, 10)
-          : agentIdInput;
-      if (isNaN(id)) {
-        console.error("Invalid agentId for loadRuntimeSessions:", agentIdInput);
-        runtimeSessions = [];
-        return;
-      }
-      runtimeSessions = await getRuntimeSessions(id);
-    } catch (err) {
-      console.error("Failed to load runtime sessions", err);
-      runtimeSessions = [];
+      console.error("Failed to load agent workflows", err);
+      agentWorkflows = [];
     }
   }
 
@@ -213,79 +184,49 @@
     await loadAgents();
   }
 
-  function addNewStep() {
-    editingStepData = {
+  function openComposeModal() {
+    if (!selectedAgent) return;
+
+    compositionRequest = {
       agent_id: selectedAgent.id,
-      name: "",
-      description: "",
-      step_content: "",
-      step_type: "prompt",
+      objective: "",
+      context: {},
+      constraints: {},
+      is_ephemeral: false,
+      auto_execute: false,
     };
-    isEditingStep = true;
-    selectedStep = null;
+    showComposeModal = true;
   }
 
-  function editStep(step) {
-    editingStepData = { ...step };
-    isEditingStep = true;
-    selectedStep = null;
-  }
-
-  async function saveStepChanges() {
-    if (!editingStepData) return;
-
-    try {
-      if (editingStepData.id) {
-        // Update existing step
-        await updateStep(editingStepData);
-      } else {
-        // Create new step
-        await saveStep(editingStepData);
-      }
-      await loadSteps(selectedAgent.id);
-      isEditingStep = false;
-      editingStepData = null;
-    } catch (err) {
-      console.error("Failed to save step", err);
-    }
-  }
-
-  function cancelStepEdit() {
-    isEditingStep = false;
-    editingStepData = null;
-  }
-
-  async function handleRunAgent() {
+  async function handleComposeWorkflow() {
     if (!selectedAgent) return;
 
     try {
-      isRunning = true;
-      let initialData = {};
+      await requestPlanWorkflow(compositionRequest);
 
-      if (runInitialData.trim()) {
-        try {
-          initialData = JSON.parse(runInitialData);
-        } catch (e) {
-          // If it's not valid JSON, treat it as a simple string value
-          initialData = { input: runInitialData };
-        }
-      }
-
-      await runAgent(selectedAgent.id, initialData);
-
-      // Wait a moment then refresh runtime sessions to see the new execution
+      // Refresh agent workflows to show the new composition
       setTimeout(() => {
-        loadRuntimeSessions(selectedAgent.id);
+        loadAgentWorkflows(selectedAgent.id);
       }, 1000);
 
-      showRunModal = false;
-      runInitialData = "";
+      showComposeModal = false;
+      resetComposeForm();
+      alert("Workflow composition request submitted successfully!");
     } catch (err) {
-      console.error("Failed to run agent", err);
-      alert("Failed to run agent: " + err.message);
-    } finally {
-      isRunning = false;
+      console.error("Failed to request workflow composition", err);
+      alert("Failed to request workflow composition: " + err.message);
     }
+  }
+
+  function resetComposeForm() {
+    compositionRequest = {
+      agent_id: 0,
+      objective: "",
+      context: {},
+      constraints: {},
+      is_ephemeral: false,
+      auto_execute: false,
+    };
   }
 
   const breadcrumbs = [
@@ -297,8 +238,8 @@
     selectedAgent
       ? [
           {
-            label: "Run Agent",
-            onClick: () => (showRunModal = true),
+            label: "Compose Workflow",
+            onClick: openComposeModal,
             color: "green",
             type: "button",
           },
@@ -365,8 +306,7 @@
         currentTab = tab || "General";
 
         // Loading data for the agent
-        loadSteps(agent.id);
-        loadRuntimeSessions(agent.id);
+        loadAgentWorkflows(agent.id);
       }
     }
   });
@@ -511,97 +451,70 @@
             </TabItem>
 
             <TabItem
-              open={currentTab === "Steps"}
-              title="Steps"
-              on:click={() => changeTab("Steps")}
+              open={currentTab === "Workflows"}
+              title="Created Workflows"
+              on:click={() => changeTab("Workflows")}
             >
               <div class="py-4">
                 <div class="space-y-4">
                   <div class="flex justify-between items-center">
-                    <Heading tag="h4">Agent Steps</Heading>
+                    <Heading tag="h4">Workflows Created by this Agent</Heading>
                     <Button
                       size="sm"
-                      on:click={() => addNewStep()}
+                      on:click={openComposeModal}
                       class="bg-sea text-black"
                     >
                       <PlusOutline class="mr-2 h-5 w-5" />
-                      Add Step
+                      Compose New Workflow
                     </Button>
                   </div>
-                  {#if steps && steps.length > 0}
+                  {#if agentWorkflows && agentWorkflows.length > 0}
                     <Table hoverable={true}>
                       <TableHead>
-                        <TableHeadCell>Step Name</TableHeadCell>
+                        <TableHeadCell>Workflow Name</TableHeadCell>
+                        <TableHeadCell>State</TableHeadCell>
                         <TableHeadCell>Type</TableHeadCell>
-                        <TableHeadCell>Last Edited</TableHeadCell>
+                        <TableHeadCell>Created</TableHeadCell>
                         <TableHeadCell>Actions</TableHeadCell>
                       </TableHead>
                       <TableBody>
-                        {#each steps as step (step.id)}
+                        {#each agentWorkflows as workflow (workflow.id)}
                           <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
-                            <TableBodyCell>{step.name}</TableBodyCell>
+                            <TableBodyCell
+                              >{workflow.name ||
+                                `Workflow ${workflow.id}`}</TableBodyCell
+                            >
                             <TableBodyCell>
                               <Badge
-                                color={step.step_type === "python"
-                                  ? "blue"
-                                  : step.step_type === "webscrape"
-                                    ? "green"
-                                    : "purple"}>{step.step_type}</Badge
+                                color={workflow.workflow_state === "stable"
+                                  ? "green"
+                                  : workflow.workflow_state === "unstable"
+                                    ? "yellow"
+                                    : "gray"}
                               >
+                                {workflow.workflow_state}
+                              </Badge>
                             </TableBodyCell>
                             <TableBodyCell
-                              >{readableDate(step.updated_at)}</TableBodyCell
+                              >{workflow.workflow_type || "—"}</TableBodyCell
+                            >
+                            <TableBodyCell
+                              >{readableDate(
+                                workflow.created_at,
+                              )}</TableBodyCell
                             >
                             <TableBodyCell>
                               <Button
                                 size="xs"
-                                color="alternative"
-                                on:click={() =>
-                                  (selectedStep =
-                                    selectedStep?.id === step.id ? null : step)}
-                              >
-                                {selectedStep?.id === step.id ? "Hide" : "View"}
-                              </Button>
-                              <Button
-                                size="xs"
                                 color="blue"
-                                class="ml-2"
-                                on:click={() => editStep(step)}
-                              >
-                                Edit
-                              </Button>
-                              <Button
-                                size="xs"
-                                color="red"
-                                class="ml-2"
-                                on:click={async () => {
-                                  if (
-                                    confirm(
-                                      "Are you sure you want to delete this step?",
-                                    )
-                                  ) {
-                                    await deleteStep(step.id);
-                                    await loadSteps(selectedAgent.id);
-                                  }
+                                on:click={() => {
+                                  window.location.href = `/workflows?workflowId=${workflow.id}`;
                                 }}
                               >
-                                <TrashBinOutline class="w-4 h-4" />
+                                View Details
                               </Button>
                             </TableBodyCell>
                           </tr>
-                          {#if selectedStep?.id === step.id}
-                            <tr>
-                              <td
-                                colspan="4"
-                                class="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg"
-                              >
-                                <StepConfig
-                                  bind:step={selectedStep}
-                                  on:save={saveStepData}
-                                />
-                              </td>
-                            </tr>
-                          {/if}
                         {/each}
                       </TableBody>
                     </Table>
@@ -610,47 +523,14 @@
                       class="text-center py-8 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800"
                     >
                       <p class="text-gray-500 dark:text-gray-400 mb-4">
-                        No steps found for this agent.
+                        No workflows created by this agent yet.
                       </p>
                       <Button
                         class="bg-sea text-black"
-                        on:click={() => addNewStep()}
+                        on:click={openComposeModal}
                       >
-                        <PlusOutline class="mr-2 h-5 w-5" /> Create First Step
+                        <PlusOutline class="mr-2 h-5 w-5" /> Compose First Workflow
                       </Button>
-                    </div>
-                  {/if}
-
-                  <!-- Step Editing Modal/Panel -->
-                  {#if isEditingStep && editingStepData}
-                    <div
-                      class="mt-6 p-4 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800"
-                    >
-                      <div class="flex justify-between items-center mb-4">
-                        <Heading tag="h5">
-                          {editingStepData.id ? "Edit Step" : "Create New Step"}
-                        </Heading>
-                        <div class="flex gap-2">
-                          <Button
-                            size="sm"
-                            color="blue"
-                            on:click={saveStepChanges}
-                          >
-                            Save
-                          </Button>
-                          <Button
-                            size="sm"
-                            color="light"
-                            on:click={cancelStepEdit}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                      <StepConfig
-                        bind:step={editingStepData}
-                        stepTypes={["prompt", "python", "webscrape"]}
-                      />
                     </div>
                   {/if}
                 </div>
@@ -658,51 +538,37 @@
             </TabItem>
 
             <TabItem
-              open={currentTab === "Sessions"}
-              title="Runtime Sessions"
-              on:click={() => changeTab("Sessions")}
+              open={currentTab === "Capabilities"}
+              title="Capabilities & Policy"
+              on:click={() => changeTab("Capabilities")}
             >
               <div class="py-4">
-                <div class="space-y-4">
-                  <Heading tag="h4">Runtime Sessions</Heading>
-                  {#if runtimeSessions && runtimeSessions.length > 0}
-                    <Table hoverable={true}>
-                      <TableHead>
-                        <TableHeadCell>Session ID</TableHeadCell>
-                        <TableHeadCell>Status</TableHeadCell>
-                        <TableHeadCell>Started At</TableHeadCell>
-                        <TableHeadCell>Last Activity</TableHeadCell>
-                      </TableHead>
-                      <TableBody>
-                        {#each runtimeSessions as session (session.id)}
-                          <tr>
-                            <TableBodyCell>{session.id}</TableBodyCell>
-                            <TableBodyCell>
-                              <Badge
-                                color={session.status === "completed"
-                                  ? "green"
-                                  : session.status === "running"
-                                    ? "blue"
-                                    : "yellow"}
-                              >
-                                {session.status}
-                              </Badge>
-                            </TableBodyCell>
-                            <TableBodyCell
-                              >{readableDate(session.created_at)}</TableBodyCell
-                            >
-                            <TableBodyCell
-                              >{readableDate(session.updated_at)}</TableBodyCell
-                            >
-                          </tr>
-                        {/each}
-                      </TableBody>
-                    </Table>
-                  {:else}
-                    <div class="text-center py-6 text-gray-500">
-                      No runtime sessions found for this agent.
+                <div class="space-y-6">
+                  <div>
+                    <Heading tag="h4" class="mb-4">Agent Capabilities</Heading>
+                    <div
+                      class="p-4 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800"
+                    >
+                      <p class="text-gray-500 dark:text-gray-400 text-center">
+                        Capabilities management will be implemented here.<br />
+                        This will include available tools, models, step limits, and
+                        ephemeral workflow permissions.
+                      </p>
                     </div>
-                  {/if}
+                  </div>
+
+                  <div>
+                    <Heading tag="h4" class="mb-4">Agent Policy</Heading>
+                    <div
+                      class="p-4 border border-gray-300 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800"
+                    >
+                      <p class="text-gray-500 dark:text-gray-400 text-center">
+                        Policy management will be implemented here.<br />
+                        This will include rate limits, security constraints, and
+                        allowed patterns.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </TabItem>
@@ -760,46 +626,75 @@
     </form>
   </Modal>
 
-  <!-- Run Agent Modal -->
-  <Modal title="Run Agent" bind:open={showRunModal} autoclose>
+  <!-- Compose Workflow Modal -->
+  <Modal title="Compose New Workflow" bind:open={showComposeModal} autoclose>
     <div class="space-y-4">
       <div>
-        <Label for="runAgentName" class="mb-2">Agent</Label>
+        <Label for="composeAgentName" class="mb-2">Agent</Label>
         <Input
-          id="runAgentName"
+          id="composeAgentName"
           value={selectedAgent?.name || ""}
           readonly
           class="bg-gray-50 dark:bg-gray-700"
         />
       </div>
       <div>
-        <Label for="runInitialData" class="mb-2"
-          >Initial Data (JSON or text)</Label
-        >
+        <Label for="composeObjective" class="mb-2">Objective *</Label>
         <Textarea
-          id="runInitialData"
-          placeholder={`{"key": "value"} or just plain text`}
-          rows="4"
-          bind:value={runInitialData}
+          id="composeObjective"
+          placeholder="Describe what you want the workflow to accomplish..."
+          rows="3"
+          required
+          bind:value={compositionRequest.objective}
         />
         <p class="text-sm text-gray-500 mt-1">
-          Enter JSON data or plain text to pass to the agent. Leave empty for no
-          initial data.
+          Be specific about the goal and expected outcomes.
         </p>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <Label class="mb-2 flex items-center">
+            <input
+              type="checkbox"
+              class="mr-2"
+              bind:checked={compositionRequest.is_ephemeral}
+            />
+            Ephemeral Workflow
+          </Label>
+          <p class="text-xs text-gray-500">
+            Temporary workflow that will be automatically cleaned up.
+          </p>
+        </div>
+        <div>
+          <Label class="mb-2 flex items-center">
+            <input
+              type="checkbox"
+              class="mr-2"
+              bind:checked={compositionRequest.auto_execute}
+            />
+            Auto Execute
+          </Label>
+          <p class="text-xs text-gray-500">
+            Automatically run the workflow after composition.
+          </p>
+        </div>
       </div>
       <div class="flex justify-end gap-4">
         <Button
           color="alternative"
           on:click={() => {
-            showRunModal = false;
-            runInitialData = "";
+            showComposeModal = false;
+            resetComposeForm();
           }}
-          disabled={isRunning}
         >
           Cancel
         </Button>
-        <Button color="green" on:click={handleRunAgent} disabled={isRunning}>
-          {isRunning ? "Starting..." : "Run Agent"}
+        <Button
+          color="green"
+          on:click={handleComposeWorkflow}
+          disabled={!compositionRequest.objective.trim()}
+        >
+          Compose Workflow
         </Button>
       </div>
     </div>

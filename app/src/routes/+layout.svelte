@@ -11,6 +11,7 @@
   const links = [
     { href: "/", icon: "/home-icon.svg", label: "Home" },
     { href: "/agents", icon: "/folder-icon.svg", label: "Agents" },
+    { href: "/workflows", icon: "/folder-icon.svg", label: "Workflows" },
     { href: "/analytics", icon: "/donut-icon.svg", label: "Analytics" },
   ];
 

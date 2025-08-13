@@ -1,63 +1,19 @@
 import supabase from "$lib/supabase";
 import { getUserId, getUserIdIfEnforced } from "$lib/user";
-
-// TODO: Should be connected to a prompt step rather than the agent:
-type AgentLLMConfig = {
-  temperature: number;
-  maxTokens: number;
-  topP: number;
-  frequencyPenalty: number;
-  presencePenalty: number;
-};
-
-export type Agent = {
-  id: number;
-  name: string;
-  agent_state: string;
-  type: string;
-  // lastActive: string;
-  description: string;
-  owner_id: string;
-  // settings: AgentLLMConfig;
-  // capabilities: string[];
-  // isActive: boolean;
-  // model: string;
-  // created_at: string;
-};
-
-export type Step = {
-  id: number | string;
-  global_uuid: string;
-  agent_id: number;
-  name: string;
-  description?: string;
-  step_content: string;
-  step_type: "python" | "prompt" | "webscrape";
-};
-
-export type RuntimeSession = {
-  id: number;
-  global_uuid: string;
-  requested_by_agent_id: number;
-  created_at: string;
-  updated_at: string;
-  rts_status: "queued" | "running" | "completed" | "failed";
-  initial_data: any; // JSON blob
-  latest_step_idx: number;
-  latest_result: any | null; // nullable JSON
-};
+import type {
+  Agent,
+  AgentCapabilities,
+  AgentPolicy,
+  WorkflowCompositionRequest,
+} from "$lib/types";
 
 // Omit both "id" and "owner_id" fields for creation:
-export type CreateStepPayload = Omit<Step, "id" | "global_uuid">;
+export type CreateAgentPayload = Omit<
+  Agent,
+  "id" | "owner_id" | "created_at" | "updated_at"
+>;
 
-// Omit both "id" and "owner_id" fields for creation:
-export type CreateAgentPayload = Omit<Agent, "id" | "owner_id">;
-
-// Allow partial Step and Agent updates:
-export type UpdateStepPayload = Partial<Step> & {
-  id: number;
-  agent_id: number;
-};
+// Allow partial Agent updates:
 export type UpdateAgentPayload = Partial<Agent> & { id: number };
 
 export const getAgents = async (): Promise<Agent[]> => {
@@ -100,13 +56,8 @@ export const updateAgent = async (
 export const deleteAgent = async (
   agentIdToDelete: number,
 ): Promise<Agent[]> => {
-  // Delete dependent steps:
-  const { error: stepDeleteError } = await supabase
-    .from("steps")
-    .delete()
-    .eq("agent_id", agentIdToDelete);
-
-  if (stepDeleteError) throw stepDeleteError;
+  // Note: With the new architecture, we should also consider what to do with workflows
+  // created by this agent. For now, we'll leave them orphaned.
 
   // Delete Agent:
   const { error: agentDeleteError } = await supabase
@@ -117,98 +68,122 @@ export const deleteAgent = async (
   return getAgents();
 };
 
-export const getStep = async (stepId): Promise<Step[]> => {
+// Agent capabilities and policy management
+export const getAgentCapabilities = async (
+  agentId: number,
+): Promise<AgentCapabilities | null> => {
+  const userId = await getUserIdIfEnforced();
+
+  // Verify ownership if enforcement is enabled
+  if (userId) {
+    const { data: agentData } = await supabase
+      .from("agents")
+      .select("capabilities")
+      .eq("id", agentId)
+      .eq("owner_id", userId);
+
+    if (!agentData || agentData.length === 0) {
+      return null;
+    }
+    return agentData[0].capabilities;
+  }
+
   const { data, error } = await supabase
-    .from("steps")
-    .select("*")
-    .eq("id", stepId);
+    .from("agents")
+    .select("capabilities")
+    .eq("id", agentId)
+    .single();
+
   if (error) throw error;
-  return data;
+  return data.capabilities;
 };
 
-export const getSteps = async (agentId: number): Promise<Step[]> => {
+export const updateAgentCapabilities = async (
+  agentId: number,
+  capabilities: AgentCapabilities,
+): Promise<void> => {
   const userId = await getUserIdIfEnforced();
-  let query = supabase.from("steps").select("*").eq("agent_id", agentId);
 
-  // If enforceAgentOwnership is enabled, only show steps from agents owned by this user
+  // Verify ownership if enforcement is enabled
   if (userId) {
-    // First get the agent to verify ownership
     const { data: agentData } = await supabase
       .from("agents")
       .select("id")
       .eq("id", agentId)
       .eq("owner_id", userId);
 
-    // If agent doesn't belong to user, return empty array
     if (!agentData || agentData.length === 0) {
-      return [];
+      throw new Error("Agent not found or access denied");
     }
   }
 
-  const { data, error } = await query;
-  if (error) throw error;
-  return data;
-};
-
-export const saveStep = async (step: CreateStepPayload): Promise<Step[]> => {
-  const { error: insertError } = await supabase.from("steps").insert([step]);
-  if (insertError) throw insertError;
-  return getSteps(step.agent_id);
-};
-
-export const updateStep = async (
-  updatedStep: UpdateStepPayload,
-): Promise<Step[]> => {
-  const { id, ...rest } = updatedStep;
   const { error } = await supabase
-    .from("steps")
-    .update(rest)
-    .eq("id", updatedStep.id);
-  if (error) throw error;
-  return getStep(updatedStep.agent_id);
-};
+    .from("agents")
+    .update({ capabilities })
+    .eq("id", agentId);
 
-export const deleteStep = async (stepIdToDelete: number): Promise<void> => {
-  const { error } = await supabase
-    .from("steps")
-    .delete()
-    .eq("id", stepIdToDelete);
   if (error) throw error;
 };
 
-export const getRuntimeSessions = async (
+export const getAgentPolicy = async (
   agentId: number,
-): Promise<RuntimeSession[]> => {
+): Promise<AgentPolicy | null> => {
   const userId = await getUserIdIfEnforced();
-  let query = supabase
-    .from("runtime_sessions")
-    .select("*")
-    .eq("requested_by_agent_id", agentId)
-    .order("created_at", { ascending: false });
 
-  // If enforceAgentOwnership is enabled, verify the agent is owned by this user
+  // Verify ownership if enforcement is enabled
   if (userId) {
-    // First check if the agent belongs to the user
+    const { data: agentData } = await supabase
+      .from("agents")
+      .select("policy")
+      .eq("id", agentId)
+      .eq("owner_id", userId);
+
+    if (!agentData || agentData.length === 0) {
+      return null;
+    }
+    return agentData[0].policy;
+  }
+
+  const { data, error } = await supabase
+    .from("agents")
+    .select("policy")
+    .eq("id", agentId)
+    .single();
+
+  if (error) throw error;
+  return data.policy;
+};
+
+export const updateAgentPolicy = async (
+  agentId: number,
+  policy: AgentPolicy,
+): Promise<void> => {
+  const userId = await getUserIdIfEnforced();
+
+  // Verify ownership if enforcement is enabled
+  if (userId) {
     const { data: agentData } = await supabase
       .from("agents")
       .select("id")
       .eq("id", agentId)
       .eq("owner_id", userId);
 
-    // If agent doesn't belong to user, return empty array
     if (!agentData || agentData.length === 0) {
-      return [];
+      throw new Error("Agent not found or access denied");
     }
   }
 
-  const { data, error } = await query;
+  const { error } = await supabase
+    .from("agents")
+    .update({ policy })
+    .eq("id", agentId);
+
   if (error) throw error;
-  return data;
 };
 
-export const runAgent = async (
-  agentId: number,
-  initialData: any = {},
+// Workflow composition - the new primary action for agents
+export const requestPlanWorkflow = async (
+  payload: WorkflowCompositionRequest,
 ): Promise<void> => {
   const userId = await getUserId();
 
@@ -218,7 +193,7 @@ export const runAgent = async (
     const { data: agentData } = await supabase
       .from("agents")
       .select("id")
-      .eq("id", agentId)
+      .eq("id", payload.agent_id)
       .eq("owner_id", userIdIfEnforced);
 
     if (!agentData || agentData.length === 0) {
@@ -226,13 +201,15 @@ export const runAgent = async (
     }
   }
 
-  // Create a signal to trigger agent execution
-  const { error } = await supabase.from("signals").insert([
+  // Create a composition request that the bridge service will pick up
+  const { error } = await supabase.from("agent_composition_requests").insert([
     {
-      agent_id: agentId,
-      user_requested_uuid: crypto.randomUUID(),
-      signal_type: "run",
-      initial_data: JSON.stringify(initialData),
+      agent_id: payload.agent_id,
+      objective: payload.objective,
+      context: payload.context ?? {},
+      constraints: payload.constraints ?? {},
+      is_ephemeral: !!payload.is_ephemeral,
+      auto_execute: !!payload.auto_execute,
     },
   ]);
 
