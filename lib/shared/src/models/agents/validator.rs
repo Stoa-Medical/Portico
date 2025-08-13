@@ -44,11 +44,13 @@ impl WorkflowValidator {
             warnings.push(e.to_string());
         }
 
+        let requires_approval = Self::requires_approval(agent, workflow_spec, &errors, &warnings);
+
         Ok(ValidationResult {
             is_valid: errors.is_empty(),
             errors,
             warnings,
-            requires_approval: Self::requires_approval(agent, workflow_spec, &errors, &warnings),
+            requires_approval,
         })
     }
 

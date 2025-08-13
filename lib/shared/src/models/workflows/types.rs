@@ -50,11 +50,11 @@ impl Workflow {
         Self {
             identifiers,
             timestamps,
+            workflow_name: name.clone(),
             name,
             workflow_type: None,
             description,
             workflow_state: WorkflowState::Inactive,
-            workflow_name: name.clone(),
             step_ids: None,
             created_by_agent_id: None,
             version: "v1".to_string(),

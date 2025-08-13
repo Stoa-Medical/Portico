@@ -1,5 +1,9 @@
 use crate::core::workflow_manager::WorkflowManager;
 use crate::handlers::{create, delete};
+use crate::services::simple_workflow_planner::SimpleWorkflowPlannerService;
+use crate::services::agent_monitoring::AgentMonitoringService;
+use crate::services::agent_cache::AgentCacheService;
+use crate::services::request_batcher::{RequestBatcherService, BatchConfig};
 use crate::proto::bridge_service_server::{BridgeService, BridgeServiceServer};
 use crate::proto::{
     CreateWorkflowRequest, DeleteWorkflowRequest, GeneralResponse, PlanWorkflowRequest,
@@ -8,20 +12,56 @@ use crate::proto::{
 use crate::SharedWorkflowMap;
 use sqlx::PgPool;
 use std::sync::Arc;
+use std::time::Instant;
 use tonic::{Request, Response, Status};
 
 // Bridge service implementation
 pub struct RpcServer {
     workflow_manager: Arc<tokio::sync::Mutex<WorkflowManager>>,
+    workflow_planner: SimpleWorkflowPlannerService,
+    agent_monitor: Arc<AgentMonitoringService>,
+    agent_cache: Arc<AgentCacheService>,
+    request_batcher: Arc<RequestBatcherService>,
 }
 
 impl RpcServer {
     pub fn new(workflow_map: SharedWorkflowMap, db_pool: PgPool) -> Self {
         let workflow_manager = Arc::new(tokio::sync::Mutex::new(WorkflowManager::new(
-            workflow_map, db_pool,
+            workflow_map, db_pool.clone(),
         )));
 
-        let instance = Self { workflow_manager };
+        let workflow_planner = SimpleWorkflowPlannerService::new();
+        let agent_monitor = Arc::new(AgentMonitoringService::new());
+        let agent_cache = Arc::new(AgentCacheService::new(1000, 3600)); // 1000 entries, 1 hour TTL
+        let request_batcher = Arc::new(RequestBatcherService::new(BatchConfig::default()));
+
+        let instance = Self {
+            workflow_manager,
+            workflow_planner,
+            agent_monitor: agent_monitor.clone(),
+            agent_cache: agent_cache.clone(),
+            request_batcher,
+        };
+
+        // Start background monitoring cleanup task
+        let monitor_clone = Arc::clone(&agent_monitor);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600)); // Every hour
+            loop {
+                interval.tick().await;
+                monitor_clone.cleanup_old_metrics().await;
+            }
+        });
+
+        // Start background cache cleanup task
+        let cache_clone = Arc::clone(&agent_cache);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(1800)); // Every 30 minutes
+            loop {
+                interval.tick().await;
+                cache_clone.cleanup_expired().await;
+            }
+        });
 
         // Initialize workflow queues in the background
         let manager_clone = Arc::clone(&instance.workflow_manager);
@@ -126,33 +166,156 @@ impl BridgeService for RpcServer {
         request: Request<crate::proto::PlanWorkflowRequest>,
     ) -> Result<Response<crate::proto::PlanWorkflowResponse>, Status> {
         let plan_request = request.into_inner();
+        let start_time = Instant::now();
+
         println!(
             "[INFO] Received plan workflow request from agent_id: {} with objective: '{}'",
             plan_request.agent_id,
             plan_request.objective
         );
 
-        // For now, create a simple response indicating the request was received
-        // In a full implementation, this would:
-        // 1. Load the agent from database
-        // 2. Use the WorkflowPlanner to create workflow spec
-        // 3. Create and save the workflow
-        // 4. Return detailed response with workflow UUID and validation results
+        // Convert protobuf context to JSON
+        let context = plan_request.context.map(|ctx| crate::proto_struct_to_json(&ctx));
+        let constraints = plan_request.constraints.map(|cons| crate::proto_struct_to_json(&cons));
 
-        let response = crate::proto::PlanWorkflowResponse {
-            success: true,
-            message: format!(
-                "Plan workflow request received for agent {} with objective: '{}'",
-                plan_request.agent_id, plan_request.objective
-            ),
-            workflow_spec: None, // Would contain the actual workflow specification
-            validation_errors: vec![], // Would contain any validation errors
-            estimated_steps: 1, // Would contain actual step count
-            requires_approval: false, // Would be determined by agent policy
-            workflow_uuid: String::new(), // Would contain UUID if workflow was created
-        };
+        // Extract tools that might be used (simple analysis from objective)
+        let tools_used = self.extract_tools_from_objective(&plan_request.objective);
 
-        println!("[INFO] Plan workflow request processed: {}", response.message);
-        Ok(Response::new(response))
+        // Use SimpleWorkflowPlannerService to plan workflow
+        let result = self.workflow_planner.plan_workflow(
+            plan_request.agent_id,
+            plan_request.objective.clone(),
+            context,
+            constraints,
+            plan_request.is_ephemeral,
+        ).await;
+
+        let planning_duration = start_time.elapsed();
+
+        match result {
+            Ok(plan) => {
+                // Record successful planning metrics
+                self.agent_monitor.record_planning_attempt(
+                    plan_request.agent_id,
+                    format!("Agent {}", plan_request.agent_id), // Would get real name from database
+                    plan_request.objective.clone(),
+                    planning_duration,
+                    plan.success,
+                    plan.estimated_steps,
+                    plan.requires_approval,
+                    None,
+                    tools_used,
+                ).await;
+
+                // Convert workflow spec to protobuf if available
+                let workflow_spec = plan.workflow_spec.as_ref()
+                    .map(|spec| crate::json_to_proto_struct(spec));
+
+                let response = crate::proto::PlanWorkflowResponse {
+                    success: plan.success,
+                    message: plan.message,
+                    workflow_spec,
+                    validation_errors: plan.validation_errors,
+                    estimated_steps: plan.estimated_steps,
+                    requires_approval: plan.requires_approval,
+                    workflow_uuid: plan.workflow_uuid,
+                };
+
+                println!("[INFO] Plan workflow completed: {}", response.message);
+                Ok(Response::new(response))
+            }
+            Err(status) => {
+                // Record failed planning metrics
+                self.agent_monitor.record_planning_attempt(
+                    plan_request.agent_id,
+                    format!("Agent {}", plan_request.agent_id), // Would get real name from database
+                    plan_request.objective.clone(),
+                    planning_duration,
+                    false,
+                    0,
+                    false,
+                    Some("planning_error".to_string()),
+                    tools_used,
+                ).await;
+
+                println!("[ERROR] Plan workflow failed: {}", status.message());
+
+                let response = crate::proto::PlanWorkflowResponse {
+                    success: false,
+                    message: format!("Workflow planning failed: {}", status.message()),
+                    workflow_spec: None,
+                    validation_errors: vec![status.message().to_string()],
+                    estimated_steps: 0,
+                    requires_approval: false,
+                    workflow_uuid: String::new(),
+                };
+
+                Ok(Response::new(response))
+            }
+        }
+    }
+
+    /// Extract likely tools from the objective text (simple heuristic)
+    fn extract_tools_from_objective(&self, objective: &str) -> Vec<String> {
+        let objective_lower = objective.to_lowercase();
+        let mut tools = Vec::new();
+
+        if objective_lower.contains("python") || objective_lower.contains("data") || objective_lower.contains("analyze") {
+            tools.push("python".to_string());
+        }
+        if objective_lower.contains("web") || objective_lower.contains("scrape") || objective_lower.contains("website") {
+            tools.push("webscrape".to_string());
+        }
+        if objective_lower.contains("prompt") || objective_lower.contains("generate") || objective_lower.contains("write") {
+            tools.push("prompt".to_string());
+        }
+
+        tools
+    }
+
+    /// Get agent statistics (could be exposed via additional gRPC endpoint)
+    pub async fn get_agent_statistics(&self, agent_id: i32) -> Option<crate::services::agent_monitoring::AgentStats> {
+        self.agent_monitor.get_agent_stats(agent_id).await
+    }
+
+    /// Get system statistics (could be exposed via additional gRPC endpoint)
+    pub async fn get_system_statistics(&self) -> crate::services::agent_monitoring::SystemStats {
+        self.agent_monitor.get_system_stats().await
+    }
+
+    /// Get cache statistics
+    pub async fn get_cache_statistics(&self) -> crate::services::agent_cache::CacheStats {
+        self.agent_cache.get_stats().await
+    }
+
+    /// Get batch processing statistics
+    pub async fn get_batch_statistics(&self) -> crate::services::request_batcher::BatchStats {
+        self.request_batcher.get_stats().await
+    }
+
+    /// Get agent from cache or fallback to database
+    pub async fn get_cached_agent(&self, agent_id: i32) -> Option<crate::services::agent_cache::CachedAgent> {
+        // Try cache first
+        if let Some(agent) = self.agent_cache.get_agent(agent_id).await {
+            return Some(agent);
+        }
+
+        // TODO: Fallback to database lookup
+        // This would typically query the database and then cache the result
+        None
+    }
+
+    /// Batch plan workflows for improved performance
+    pub async fn plan_workflow_batched(
+        &self,
+        agent_id: i32,
+        objective: String,
+        context: Option<serde_json::Value>,
+        constraints: Option<serde_json::Value>,
+        is_ephemeral: bool,
+    ) -> Result<crate::services::request_batcher::BatchResponse, String> {
+        self.request_batcher
+            .plan_workflow_batched(agent_id, objective, context, constraints, is_ephemeral)
+            .await
     }
 }

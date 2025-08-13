@@ -139,21 +139,21 @@ impl DatabaseItem for Agent {
         let capabilities_json = serde_json::to_value(&self.capabilities)?;
         let policy_json = serde_json::to_value(&self.policy)?;
 
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO agents (
                 global_uuid, name, description, capabilities_json, policy_json, created_at, updated_at
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7)
             "#,
-            uuid_parsed,
-            &self.name,
-            self.description.as_deref(),
-            capabilities_json,
-            policy_json,
-            &self.timestamps.created,
-            &self.timestamps.updated
         )
+        .bind(uuid_parsed)
+        .bind(&self.name)
+        .bind(self.description.as_deref())
+        .bind(capabilities_json)
+        .bind(policy_json)
+        .bind(&self.timestamps.created)
+        .bind(&self.timestamps.updated)
         .execute(pool)
         .await?;
 

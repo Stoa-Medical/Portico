@@ -1735,6 +1735,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "dotenvy",
+ "fastrand",
  "futures",
  "portico-shared",
  "prost",

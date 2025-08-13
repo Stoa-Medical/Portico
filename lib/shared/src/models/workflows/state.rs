@@ -37,19 +37,12 @@ impl FromStr for WorkflowState {
 }
 
 impl Workflow {
-    pub fn state(&self) -> WorkflowState {
-        let guard = self.workflow_state.lock().unwrap();
-        guard.clone()
+    pub fn set_state(&mut self, new_state: WorkflowState) {
+        self.workflow_state = new_state;
     }
 
-    pub fn set_state(&self, new_state: WorkflowState) {
-        let mut guard = self.workflow_state.lock().unwrap();
-        *guard = new_state;
-    }
-
-    pub fn start(&self) -> Result<()> {
-        let current_state = self.state();
-        match current_state {
+    pub fn start(&mut self) -> Result<()> {
+        match self.workflow_state {
             WorkflowState::Inactive => {
                 // Set new state to Stable
                 self.set_state(WorkflowState::Stable);
@@ -59,10 +52,9 @@ impl Workflow {
         }
     }
 
-    pub fn stop(&self) -> Result<()> {
+    pub fn stop(&mut self) -> Result<()> {
         // Set to inactive
-        let current_state = self.state();
-        match current_state {
+        match self.workflow_state {
             WorkflowState::Stable | WorkflowState::Unstable => {
                 self.set_state(WorkflowState::Inactive);
                 Ok(())
