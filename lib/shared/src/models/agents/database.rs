@@ -165,7 +165,7 @@ impl DatabaseItem for Agent {
         let capabilities_json = serde_json::to_value(&self.capabilities)?;
         let policy_json = serde_json::to_value(&self.policy)?;
 
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE agents
             SET name = $1,
@@ -175,13 +175,13 @@ impl DatabaseItem for Agent {
                 updated_at = $5
             WHERE global_uuid = $6
             "#,
-            &self.name,
-            self.description.as_deref(),
-            capabilities_json,
-            policy_json,
-            &self.timestamps.updated,
-            uuid_parsed
         )
+        .bind(&self.name)
+        .bind(self.description.as_deref())
+        .bind(capabilities_json)
+        .bind(policy_json)
+        .bind(&self.timestamps.updated)
+        .bind(uuid_parsed)
         .execute(pool)
         .await?;
 
@@ -190,7 +190,8 @@ impl DatabaseItem for Agent {
 
     async fn try_db_delete(&self, pool: &PgPool) -> Result<()> {
         let uuid_parsed = Uuid::parse_str(&self.identifiers.global_uuid)?;
-        sqlx::query!("DELETE FROM agents WHERE global_uuid = $1", uuid_parsed)
+        sqlx::query("DELETE FROM agents WHERE global_uuid = $1")
+            .bind(uuid_parsed)
             .execute(pool)
             .await?;
 
@@ -198,7 +199,7 @@ impl DatabaseItem for Agent {
     }
 
     async fn try_db_select_all(pool: &PgPool) -> Result<Vec<Self>> {
-        let rows = sqlx::query!(
+        let rows = sqlx::query_as::<_, Agent>(
             r#"
             SELECT id, global_uuid, name, description, capabilities_json, policy_json, created_at, updated_at
             FROM agents
@@ -208,39 +209,7 @@ impl DatabaseItem for Agent {
         .fetch_all(pool)
         .await?;
 
-        let agents = rows
-            .into_iter()
-            .map(|row| {
-                let capabilities = if let Some(caps_json) = &row.capabilities_json {
-                    serde_json::from_value(caps_json.clone()).unwrap_or_default()
-                } else {
-                    AgentCapabilities::default()
-                };
-
-                let policy = if let Some(pol_json) = &row.policy_json {
-                    serde_json::from_value(pol_json.clone()).unwrap_or_default()
-                } else {
-                    AgentPolicy::default()
-                };
-
-                Agent {
-                    identifiers: IdFields {
-                        local_id: Some(row.id),
-                        global_uuid: row.global_uuid.to_string(),
-                    },
-                    timestamps: TimestampFields {
-                        created: row.created_at,
-                        updated: row.updated_at,
-                    },
-                    name: row.name,
-                    description: row.description,
-                    capabilities,
-                    policy,
-                }
-            })
-            .collect();
-
-        Ok(agents)
+        Ok(rows)
     }
 
     async fn try_db_select_by_id(
@@ -248,57 +217,30 @@ impl DatabaseItem for Agent {
         id: &IdFields<Self::IdType>,
     ) -> Result<Option<Self>> {
         let row_opt = if let Some(local_id) = id.local_id {
-            sqlx::query!(
+            sqlx::query_as::<_, Agent>(
                 r#"
                 SELECT id, global_uuid, name, description, capabilities_json, policy_json, created_at, updated_at
                 FROM agents
                 WHERE id = $1
                 "#,
-                local_id
             )
+            .bind(local_id)
             .fetch_optional(pool)
             .await?
         } else {
             let uuid_parsed = Uuid::parse_str(&id.global_uuid)?;
-            sqlx::query!(
+            sqlx::query_as::<_, Agent>(
                 r#"
                 SELECT id, global_uuid, name, description, capabilities_json, policy_json, created_at, updated_at
                 FROM agents
                 WHERE global_uuid = $1
                 "#,
-                uuid_parsed
             )
+            .bind(uuid_parsed)
             .fetch_optional(pool)
             .await?
         };
 
-        Ok(row_opt.map(|row| {
-            let capabilities = if let Some(caps_json) = &row.capabilities_json {
-                serde_json::from_value(caps_json.clone()).unwrap_or_default()
-            } else {
-                AgentCapabilities::default()
-            };
-
-            let policy = if let Some(pol_json) = &row.policy_json {
-                serde_json::from_value(pol_json.clone()).unwrap_or_default()
-            } else {
-                AgentPolicy::default()
-            };
-
-            Agent {
-                identifiers: IdFields {
-                    local_id: Some(row.id),
-                    global_uuid: row.global_uuid.to_string(),
-                },
-                timestamps: TimestampFields {
-                    created: row.created_at,
-                    updated: row.updated_at,
-                },
-                name: row.name,
-                description: row.description,
-                capabilities,
-                policy,
-            }
-        }))
+        Ok(row_opt)
     }
 }

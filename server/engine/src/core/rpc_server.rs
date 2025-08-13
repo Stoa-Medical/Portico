@@ -1,5 +1,6 @@
 use crate::core::workflow_manager::WorkflowManager;
 use crate::handlers::{create, delete};
+use crate::services::workflow_planner::WorkflowPlannerService;
 use crate::services::simple_workflow_planner::SimpleWorkflowPlannerService;
 use crate::services::agent_monitoring::AgentMonitoringService;
 use crate::services::agent_cache::AgentCacheService;
@@ -14,11 +15,13 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Instant;
 use tonic::{Request, Response, Status};
+use uuid;
 
 // Bridge service implementation
 pub struct RpcServer {
     workflow_manager: Arc<tokio::sync::Mutex<WorkflowManager>>,
-    workflow_planner: SimpleWorkflowPlannerService,
+    workflow_planner: Arc<tokio::sync::Mutex<WorkflowPlannerService>>,
+    simple_planner: SimpleWorkflowPlannerService,  // Keep for fallback
     agent_monitor: Arc<AgentMonitoringService>,
     agent_cache: Arc<AgentCacheService>,
     request_batcher: Arc<RequestBatcherService>,
@@ -30,7 +33,8 @@ impl RpcServer {
             workflow_map, db_pool.clone(),
         )));
 
-        let workflow_planner = SimpleWorkflowPlannerService::new();
+        let workflow_planner = Arc::new(tokio::sync::Mutex::new(WorkflowPlannerService::new(db_pool.clone())));
+        let simple_planner = SimpleWorkflowPlannerService::new();
         let agent_monitor = Arc::new(AgentMonitoringService::new());
         let agent_cache = Arc::new(AgentCacheService::new(1000, 3600)); // 1000 entries, 1 hour TTL
         let request_batcher = Arc::new(RequestBatcherService::new(BatchConfig::default()));
@@ -38,6 +42,7 @@ impl RpcServer {
         let instance = Self {
             workflow_manager,
             workflow_planner,
+            simple_planner,
             agent_monitor: agent_monitor.clone(),
             agent_cache: agent_cache.clone(),
             request_batcher,
@@ -181,14 +186,46 @@ impl BridgeService for RpcServer {
         // Extract tools that might be used (simple analysis from objective)
         let tools_used = self.extract_tools_from_objective(&plan_request.objective);
 
-        // Use SimpleWorkflowPlannerService to plan workflow
-        let result = self.workflow_planner.plan_workflow(
-            plan_request.agent_id,
-            plan_request.objective.clone(),
-            context,
-            constraints,
-            plan_request.is_ephemeral,
-        ).await;
+        // Try DB-backed planner first, fallback to simple planner
+        let use_db_planner = false; // Feature flag to switch between planners (disabled due to DB compilation issues)
+
+        let result = if use_db_planner {
+            // Use DB-backed WorkflowPlannerService
+            let mut planner = self.workflow_planner.lock().await;
+            let planning_result = planner.plan_workflow_for_agent(
+                plan_request.agent_id,
+                plan_request.objective.clone(),
+                context.clone(),
+                constraints.clone(),
+                plan_request.is_ephemeral,
+            ).await;
+
+            // Convert to SimpleWorkflowPlan format for consistent handling
+            planning_result.map(|result| {
+                crate::services::simple_workflow_planner::SimpleWorkflowPlan {
+                    success: result.validation_result.is_valid,
+                    message: if result.validation_result.is_valid {
+                        format!("Workflow planned successfully with {} steps", result.plan_response.workflow_spec.steps.len())
+                    } else {
+                        format!("Workflow validation failed: {:?}", result.validation_result.errors.join(", "))
+                    },
+                    workflow_spec: Some(serde_json::to_value(&result.plan_response.workflow_spec).unwrap_or_default()),
+                    validation_errors: result.validation_result.errors,
+                    estimated_steps: result.plan_response.workflow_spec.steps.len() as u32,
+                    requires_approval: result.validation_result.requires_approval,
+                    workflow_uuid: uuid::Uuid::new_v4().to_string(),
+                }
+            }).map_err(|e| Status::internal(format!("Planning failed: {}", e)))
+        } else {
+            // Fallback to simple planner
+            self.simple_planner.plan_workflow(
+                plan_request.agent_id,
+                plan_request.objective.clone(),
+                context,
+                constraints,
+                plan_request.is_ephemeral,
+            ).await
+        };
 
         let planning_duration = start_time.elapsed();
 
@@ -207,6 +244,35 @@ impl BridgeService for RpcServer {
                     tools_used,
                 ).await;
 
+                // If planning was successful and has a workflow spec, persist the workflow
+                let final_uuid = if plan.success && plan.workflow_spec.is_some() {
+                    // Convert workflow spec to JSON string for persistence
+                    let workflow_json = serde_json::to_string(&plan.workflow_spec).unwrap_or_default();
+
+                    // Create workflow through existing handler
+                    let mut manager = self.workflow_manager.lock().await;
+                    match create::handle_create_workflow(&mut manager, &workflow_json).await {
+                        Ok(create_response) => {
+                            // Extract workflow UUID from creation response
+                            let created_uuid = create_response.message
+                                .split("Workflow ")
+                                .nth(1)
+                                .and_then(|s| s.split(" created").next())
+                                .unwrap_or(&plan.workflow_uuid)
+                                .to_string();
+
+                            println!("[INFO] Workflow persisted with UUID: {}", created_uuid);
+                            created_uuid
+                        }
+                        Err(e) => {
+                            println!("[WARN] Failed to persist workflow: {}", e);
+                            plan.workflow_uuid.clone() // Use planning UUID as fallback
+                        }
+                    }
+                } else {
+                    plan.workflow_uuid.clone()
+                };
+
                 // Convert workflow spec to protobuf if available
                 let workflow_spec = plan.workflow_spec.as_ref()
                     .map(|spec| crate::json_to_proto_struct(spec));
@@ -218,7 +284,7 @@ impl BridgeService for RpcServer {
                     validation_errors: plan.validation_errors,
                     estimated_steps: plan.estimated_steps,
                     requires_approval: plan.requires_approval,
-                    workflow_uuid: plan.workflow_uuid,
+                    workflow_uuid: final_uuid,
                 };
 
                 println!("[INFO] Plan workflow completed: {}", response.message);

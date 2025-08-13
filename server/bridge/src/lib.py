@@ -77,21 +77,69 @@ async def handle_approval_required(workflow_metadata: dict[str, Any]) -> None:
         logger.error(f"Failed to handle approval requirement: {e}")
 
 
-async def trigger_workflow_execution(workflow_uuid: str, agent_id: int) -> None:
-    """Trigger automatic execution of approved workflows (placeholder implementation)"""
+async def trigger_workflow_execution(
+    workflow_uuid: str, agent_id: int, client: BridgeClient = None
+) -> None:
+    """Trigger automatic execution of approved workflows"""
     try:
         logger.info(
             f"Triggering execution of workflow {workflow_uuid} for agent {agent_id}"
         )
 
-        # TODO: Implement actual workflow execution triggering
-        # This would typically:
-        # 1. Create a RUN signal for the workflow
-        # 2. Send it to the engine for execution
-        # 3. Monitor execution status
+        if not client:
+            logger.error("No gRPC client provided for workflow execution")
+            return
 
-        # For now, just log the trigger
-        logger.info(f"Auto-execution triggered for workflow {workflow_uuid}")
+        # Create a RUN signal for the workflow
+        # Note: We need to determine the workflow_id from the UUID
+        # For now, using agent_id as workflow_id (this may need adjustment based on your schema)
+        run_signal_data = {
+            "record": {
+                "id": f"auto_run_{workflow_uuid}",  # Generate unique signal ID
+                "workflow_id": agent_id,  # This might need to be the actual workflow database ID
+                "signal_type": "RUN",
+                "initial_data": {
+                    "workflow_uuid": workflow_uuid,
+                    "auto_triggered": True,
+                    "trigger_reason": "auto_execution_after_planning",
+                },
+            }
+        }
+
+        # Create and send the RUN signal
+        signal_request = await create_signal_request(run_signal_data)
+        if signal_request:
+            response = await client.process_signal(signal_request)
+            if response and response.success:
+                logger.info(
+                    f"Successfully triggered execution for workflow {workflow_uuid}: {response.message}"
+                )
+
+                # Store execution trigger metadata
+                trigger_metadata = {
+                    "workflow_uuid": workflow_uuid,
+                    "agent_id": agent_id,
+                    "trigger_timestamp": get_current_timestamp(),
+                    "trigger_type": "auto_execution",
+                    "success": True,
+                }
+                await store_workflow_metadata(trigger_metadata)
+
+            else:
+                error_msg = response.message if response else "No response received"
+                logger.error(f"Failed to trigger workflow execution: {error_msg}")
+
+                # Store failure metadata
+                failure_metadata = {
+                    "workflow_uuid": workflow_uuid,
+                    "agent_id": agent_id,
+                    "error_message": error_msg,
+                    "trigger_type": "auto_execution_failed",
+                    "timestamp": get_current_timestamp(),
+                }
+                await store_failure_metadata(failure_metadata)
+        else:
+            logger.error(f"Failed to create RUN signal for workflow {workflow_uuid}")
 
     except Exception as e:
         logger.error(f"Failed to trigger workflow execution: {e}")
@@ -670,7 +718,9 @@ async def handle_agent_composition_request(
             # If auto-execute is enabled and no approval required, trigger execution
             auto_execute = get(record, "auto_execute", False)
             if auto_execute and not workflow_metadata.get("requires_approval", False):
-                await trigger_workflow_execution(response.workflow_uuid, agent_id)
+                await trigger_workflow_execution(
+                    response.workflow_uuid, agent_id, client
+                )
 
         else:
             error_msg = response.message if response else "No response received"

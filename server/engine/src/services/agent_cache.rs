@@ -1,4 +1,5 @@
 /// Agent caching service for improved performance
+use portico_shared::models::agents::{AgentCapabilities, AgentPolicy};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -11,27 +12,13 @@ pub struct CachedAgent {
     pub name: String,
     pub capabilities: AgentCapabilities,
     pub policy: AgentPolicy,
+    #[serde(skip)]
     pub last_updated: Instant,
     pub access_count: u64,
+    #[serde(skip)]
     pub last_accessed: Instant,
 }
 
-/// Agent capabilities structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AgentCapabilities {
-    pub tools: Vec<String>,
-    pub models: Vec<String>,
-    pub max_steps: u32,
-    pub can_create_ephemeral: bool,
-}
-
-/// Agent policy structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AgentPolicy {
-    pub max_workflows_per_hour: u32,
-    pub allowed_patterns: Vec<String>,
-    pub security_constraints: HashMap<String, serde_json::Value>,
-}
 
 /// Cache statistics
 #[derive(Debug, Clone, Serialize)]

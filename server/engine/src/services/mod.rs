@@ -14,5 +14,5 @@ pub use workflow_planner::WorkflowPlannerService;
 pub use agent_manager::AgentManagerService;
 pub use simple_workflow_planner::{SimpleWorkflowPlannerService, SimpleWorkflowPlan};
 pub use agent_monitoring::{AgentMonitoringService, AgentStats, SystemStats, PerformanceTrends};
-pub use agent_cache::{AgentCacheService, CachedAgent, AgentCapabilities as CacheAgentCapabilities, AgentPolicy as CacheAgentPolicy, CacheStats};
+pub use agent_cache::{AgentCacheService, CachedAgent, CacheStats};
 pub use request_batcher::{RequestBatcherService, BatchableRequest, BatchResponse, BatchConfig, BatchStats};

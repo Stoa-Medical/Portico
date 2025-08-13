@@ -252,7 +252,7 @@ impl RequestBatcherService {
                 .collect();
 
             // Execute all planning requests concurrently
-            tokio::join!(futures::future::join_all(plan_futures));
+            futures::future::join_all(plan_futures).await;
         }
 
         // Process stats requests (can be batched more efficiently)

@@ -1,10 +1,30 @@
 /// Performance testing module for Agent-Workflow architecture
 use crate::services::{
-    agent_cache::{AgentCacheService, CachedAgent, AgentCapabilities, AgentPolicy},
+    agent_cache::{AgentCacheService, CachedAgent},
     agent_monitoring::AgentMonitoringService,
     request_batcher::{RequestBatcherService, BatchConfig},
     simple_workflow_planner::SimpleWorkflowPlannerService,
 };
+// Disabled due to shared library compilation issues
+// use portico_shared::models::agents::{AgentCapabilities, AgentPolicy};
+
+// Temporary placeholder types
+#[derive(Debug, Clone)]
+pub struct AgentCapabilities {
+    pub tools: Vec<String>,
+    pub models: Vec<String>,
+    pub max_steps: Option<u32>,
+    pub can_create_ephemeral: bool,
+    pub metadata: serde_json::Value,
+}
+
+#[derive(Debug, Clone)]
+pub struct AgentPolicy {
+    pub max_workflows_per_hour: Option<u32>,
+    pub allowed_patterns: Vec<String>,
+    pub security_constraints: serde_json::Value,
+    pub metadata: serde_json::Value,
+}
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tokio::task::JoinSet;
@@ -87,13 +107,15 @@ impl PerformanceTestSuite {
                 capabilities: AgentCapabilities {
                     tools: vec!["python".to_string(), "webscrape".to_string()],
                     models: vec!["gpt-4".to_string()],
-                    max_steps: 10,
+                    max_steps: Some(10),
                     can_create_ephemeral: i % 2 == 0,
+                    metadata: serde_json::Value::Object(serde_json::Map::new()),
                 },
                 policy: AgentPolicy {
-                    max_workflows_per_hour: 100,
+                    max_workflows_per_hour: Some(100),
                     allowed_patterns: vec!["data_analysis".to_string()],
-                    security_constraints: HashMap::new(),
+                    security_constraints: serde_json::Value::Object(serde_json::Map::new()),
+                    metadata: serde_json::Value::Object(serde_json::Map::new()),
                 },
                 last_updated: Instant::now(),
                 access_count: 0,
@@ -296,13 +318,15 @@ impl PerformanceTestSuite {
                 capabilities: AgentCapabilities {
                     tools: vec!["python".to_string(), "webscrape".to_string()],
                     models: vec!["gpt-4".to_string()],
-                    max_steps: 10,
+                    max_steps: Some(10),
                     can_create_ephemeral: true,
+                    metadata: serde_json::Value::Object(serde_json::Map::new()),
                 },
                 policy: AgentPolicy {
-                    max_workflows_per_hour: 100,
+                    max_workflows_per_hour: Some(100),
                     allowed_patterns: vec!["data_analysis".to_string()],
-                    security_constraints: HashMap::new(),
+                    security_constraints: serde_json::Value::Object(serde_json::Map::new()),
+                    metadata: serde_json::Value::Object(serde_json::Map::new()),
                 },
                 last_updated: Instant::now(),
                 access_count: 0,
@@ -428,13 +452,15 @@ mod tests {
                 capabilities: AgentCapabilities {
                     tools: vec!["python".to_string()],
                     models: vec!["gpt-4".to_string()],
-                    max_steps: 5,
+                    max_steps: Some(5),
                     can_create_ephemeral: false,
+                    metadata: serde_json::Value::Object(serde_json::Map::new()),
                 },
                 policy: AgentPolicy {
-                    max_workflows_per_hour: 50,
+                    max_workflows_per_hour: Some(50),
                     allowed_patterns: vec!["test".to_string()],
-                    security_constraints: HashMap::new(),
+                    security_constraints: serde_json::Value::Object(serde_json::Map::new()),
+                    metadata: serde_json::Value::Object(serde_json::Map::new()),
                 },
                 last_updated: Instant::now(),
                 access_count: 0,
