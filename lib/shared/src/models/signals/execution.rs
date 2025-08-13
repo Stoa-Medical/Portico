@@ -6,7 +6,8 @@ impl Signal {
     pub fn new(
         identifiers: crate::IdFields<i64>,
         user_requested_uuid: String,
-        agent: Option<crate::models::agents::Agent>,
+        workflow_id: Option<i32>,
+        initiator_agent_id: Option<i32>,
         signal_type: SignalType,
         initial_data: Option<Value>,
     ) -> Self {
@@ -14,11 +15,12 @@ impl Signal {
             identifiers,
             timestamps: crate::TimestampFields::new(),
             user_requested_uuid,
-            agent,
-            linked_rts: None,
+            workflow_id,
+            initiator_agent_id,
+            rts_id: None,
             signal_type,
             initial_data,
-            result_data: None,
+            response_data: None,
             error_message: None,
         }
     }
@@ -26,104 +28,84 @@ impl Signal {
     pub fn new_run(
         identifiers: crate::IdFields<i64>,
         user_requested_uuid: String,
-        agent: Option<crate::models::agents::Agent>,
+        workflow_id: Option<i32>,
+        initiator_agent_id: Option<i32>,
         run_payload: RunPayload,
     ) -> Self {
         Self::new(
             identifiers,
             user_requested_uuid,
-            agent,
+            workflow_id,
+            initiator_agent_id,
             SignalType::Run,
-            Some(serde_json::to_value(run_payload).unwrap_or(Value::Null)),
+            Some(serde_json::to_value(run_payload).unwrap_or_default()),
         )
     }
 
     pub fn new_sync(
         identifiers: crate::IdFields<i64>,
         user_requested_uuid: String,
-        agent: Option<crate::models::agents::Agent>,
+        workflow_id: Option<i32>,
+        initiator_agent_id: Option<i32>,
         sync_payload: SyncPayload,
     ) -> Self {
         Self::new(
             identifiers,
             user_requested_uuid,
-            agent,
+            workflow_id,
+            initiator_agent_id,
             SignalType::Sync,
-            Some(serde_json::to_value(sync_payload).unwrap_or(Value::Null)),
+            Some(serde_json::to_value(sync_payload).unwrap_or_default()),
         )
     }
 
     pub fn new_fyi(
         identifiers: crate::IdFields<i64>,
         user_requested_uuid: String,
-        agent: Option<crate::models::agents::Agent>,
-        data: Value,
+        workflow_id: Option<i32>,
+        initiator_agent_id: Option<i32>,
+        fyi_data: Value,
     ) -> Self {
         Self::new(
             identifiers,
             user_requested_uuid,
-            agent,
+            workflow_id,
+            initiator_agent_id,
             SignalType::Fyi,
-            Some(data),
+            Some(fyi_data),
         )
     }
 
-    pub fn parse_run_payload(&self) -> Result<RunPayload> {
-        match &self.initial_data {
-            Some(data) if self.signal_type == SignalType::Run => {
-                serde_json::from_value(data.clone())
-                    .map_err(|e| anyhow!("Invalid run payload: {}", e))
-            }
-            _ => Err(anyhow!("Not a run signal or missing data")),
-        }
+    /// Get the workflow ID associated with this signal
+    pub fn get_workflow_id(&self) -> Option<i32> {
+        self.workflow_id
     }
 
-    pub fn parse_sync_payload(&self) -> Result<SyncPayload> {
-        match &self.initial_data {
-            Some(data) if self.signal_type == SignalType::Sync => {
-                serde_json::from_value(data.clone())
-                    .map_err(|e| anyhow!("Invalid sync payload: {}", e))
-            }
-            _ => Err(anyhow!("Not a sync signal or missing data")),
-        }
+    /// Get the initiator agent ID for this signal
+    pub fn get_initiator_agent_id(&self) -> Option<i32> {
+        self.initiator_agent_id
     }
 
-    pub fn parse_fyi_data(&self) -> Result<Value> {
-        match &self.initial_data {
-            Some(data) if self.signal_type == SignalType::Fyi => Ok(data.clone()),
-            _ => Err(anyhow!("Not an FYI signal or missing data")),
-        }
+    /// Check if this signal has been processed (has response data or error)
+    pub fn is_processed(&self) -> bool {
+        self.response_data.is_some() || self.error_message.is_some()
     }
 
-    pub async fn process(&mut self) -> Result<()> {
-        match self.execute_signal().await {
-            Ok(runtime_session) => {
-                self.linked_rts = Some(runtime_session);
-                Ok(())
-            }
-            Err(e) => {
-                self.error_message = Some(e.to_string());
-                Err(e)
-            }
-        }
+    /// Set response data for the signal
+    pub fn set_response(&mut self, response_data: Value) {
+        self.response_data = Some(response_data);
+        self.timestamps.updated = chrono::Utc::now();
     }
 
-    async fn execute_signal(&self) -> Result<crate::models::runtime_sessions::RuntimeSession> {
-        match &self.agent {
-            Some(agent) => {
-                let result = agent
-                    .run(self.initial_data.clone().unwrap_or(Value::Null))
-                    .await?;
-                Ok(result)
-            }
-            None => {
-                let error_msg = match self.signal_type {
-                    SignalType::Run => "Cannot process run signal with no associated agent",
-                    SignalType::Sync => "Cannot process sync signal with no associated agent",
-                    SignalType::Fyi => "FYI signal requires an agent to process",
-                };
-                Err(anyhow!(error_msg))
-            }
-        }
+    /// Set error message for the signal
+    pub fn set_error(&mut self, error_message: String) {
+        self.error_message = Some(error_message);
+        self.timestamps.updated = chrono::Utc::now();
+    }
+
+    /// Link this signal to a runtime session
+    pub fn link_runtime_session(&mut self, rts_id: i64) {
+        self.rts_id = Some(rts_id);
+        self.timestamps.updated = chrono::Utc::now();
     }
 }

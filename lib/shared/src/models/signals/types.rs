@@ -1,5 +1,3 @@
-use crate::models::agents::Agent;
-use crate::models::runtime_sessions::RuntimeSession;
 use crate::{IdFields, TimestampFields};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -91,10 +89,11 @@ pub struct Signal {
     pub identifiers: IdFields<i64>,
     pub timestamps: TimestampFields,
     pub user_requested_uuid: String,
-    pub agent: Option<Agent>,
-    pub linked_rts: Option<RuntimeSession>,
+    pub workflow_id: Option<i32>,
+    pub initiator_agent_id: Option<i32>,
+    pub rts_id: Option<i64>,
     pub signal_type: SignalType,
     pub initial_data: Option<Value>,
-    pub result_data: Option<Value>,
+    pub response_data: Option<Value>,
     pub error_message: Option<String>,
 }

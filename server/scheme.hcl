@@ -88,6 +88,21 @@ table "signals" {
         ]
     }
 
+    column "initiator_agent_id" {
+        type = int
+        null = true
+        comment = "ID of the agent that initiated this signal (optional)"
+    }
+
+    foreign_key "signal_initiator_agent_fk" {
+        columns = [
+            column.initiator_agent_id
+        ]
+        ref_columns = [
+            table.agents.column.id
+        ]
+    }
+
     // "rts" == RuntimeSession
     column "rts_id" {
         type = sql("bigint")
@@ -141,6 +156,70 @@ table "signals" {
     column "error_message" {
         type = sql("text")
         null = true
+    }
+}
+
+table "agents" {
+    # === General ===
+    schema = schema.public
+
+    # === Ids ===
+    column "id" {
+        type = int
+        null = false
+        identity {
+            generated = "ALWAYS"
+        }
+    }
+
+    column "global_uuid" {
+        type = sql("uuid")
+        null = false
+        default = sql("gen_random_uuid()")
+    }
+
+    primary_key {
+        columns = [
+            column.id
+        ]
+    }
+
+    # === Timestamps ===
+    column "created_at" {
+        type = sql("timestamptz")
+        null = false
+        default = sql("CURRENT_TIMESTAMP")
+    }
+
+    column "updated_at" {
+        type = sql("timestamptz")
+        null = false
+        default = sql("CURRENT_TIMESTAMP")
+    }
+
+    # === Custom (table-specific) ===
+    column "name" {
+        type = sql("varchar(255)")
+        null = false
+        comment = "Human-readable name for the agent"
+    }
+
+    column "description" {
+        type = sql("text")
+        null = true
+        comment = "Description of what this agent does"
+    }
+
+    column "capabilities_json" {
+        type = sql("json")
+        null = true
+        comment = "JSON object describing agent capabilities and tools"
+    }
+
+    column "policy_json" {
+        type = sql("json")
+        null = true
+        comment = "JSON object containing agent policies and constraints"
     }
 }
 
@@ -214,6 +293,37 @@ table "workflows" {
     column "workflow_type" {
         type = sql("text")
         null = true
+    }
+
+    # === Agent Relationships ===
+    column "created_by_agent_id" {
+        type = int
+        null = true
+        comment = "ID of the agent that created this workflow (optional)"
+    }
+
+    foreign_key "workflow_creator_agent_fk" {
+        columns = [
+            column.created_by_agent_id
+        ]
+        ref_columns = [
+            table.agents.column.id
+        ]
+    }
+
+    # === Workflow Versioning & Lifecycle ===
+    column "version" {
+        type = sql("varchar(50)")
+        null = false
+        default = "v1"
+        comment = "Version identifier for the workflow"
+    }
+
+    column "is_ephemeral" {
+        type = sql("boolean")
+        null = false
+        default = false
+        comment = "Whether this workflow should be garbage collected after execution"
     }
 }
 
@@ -331,6 +441,21 @@ table "runtime_sessions" {
         ]
         ref_columns = [
             table.workflows.column.id
+        ]
+    }
+
+    column "initiator_agent_id" {
+        type = int
+        null = true
+        comment = "ID of the agent that initiated this workflow execution (optional)"
+    }
+
+    foreign_key "runtime_session_initiator_agent_fk" {
+        columns = [
+            column.initiator_agent_id
+        ]
+        ref_columns = [
+            table.agents.column.id
         ]
     }
 

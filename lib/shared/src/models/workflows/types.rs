@@ -1,7 +1,6 @@
 use crate::models::steps::Step;
 use crate::{IdFields, TimestampFields};
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
 
 /// A Workflow represents a sequence of configurable steps that can be executed.
 /// Workflows define the processing logic and can be dynamically created by Agents.
@@ -10,9 +9,15 @@ use std::sync::Mutex;
 pub struct Workflow {
     pub identifiers: IdFields,
     pub timestamps: TimestampFields,
-    pub description: String,
-    pub workflow_state: Mutex<WorkflowState>,
-    pub steps: Vec<Step>,
+    pub name: Option<String>,
+    pub workflow_type: Option<String>,
+    pub description: Option<String>,
+    pub workflow_state: WorkflowState,
+    pub workflow_name: Option<String>,
+    pub step_ids: Option<Vec<i32>>,
+    pub created_by_agent_id: Option<i32>,
+    pub version: String,
+    pub is_ephemeral: bool,
 }
 
 /// Different states for Workflow to be in. State diagram:
@@ -38,16 +43,37 @@ impl Workflow {
     pub fn new(
         identifiers: IdFields,
         timestamps: TimestampFields,
-        description: String,
-        steps: Vec<Step>,
+        name: Option<String>,
+        description: Option<String>,
     ) -> Self {
         // Start all workflows in an inactive state
         Self {
             identifiers,
             timestamps,
+            name,
+            workflow_type: None,
             description,
-            workflow_state: Mutex::new(WorkflowState::Inactive),
-            steps,
+            workflow_state: WorkflowState::Inactive,
+            workflow_name: name.clone(),
+            step_ids: None,
+            created_by_agent_id: None,
+            version: "v1".to_string(),
+            is_ephemeral: false,
         }
+    }
+
+    /// Get the current state of the workflow
+    pub fn state(&self) -> &WorkflowState {
+        &self.workflow_state
+    }
+
+    /// Check if the workflow is ephemeral (should be garbage collected)
+    pub fn is_ephemeral(&self) -> bool {
+        self.is_ephemeral
+    }
+
+    /// Get the agent that created this workflow
+    pub fn creator_agent_id(&self) -> Option<i32> {
+        self.created_by_agent_id
     }
 }

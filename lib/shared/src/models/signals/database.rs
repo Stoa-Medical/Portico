@@ -1,13 +1,10 @@
 use super::types::Signal;
-use crate::models::agents::Agent;
-use crate::models::agents::AgentState;
 use crate::models::SignalType;
 use crate::{DatabaseItem, IdFields, TimestampFields};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde_json::Value;
 use sqlx::{PgPool, Row};
-use std::sync::Mutex;
 use uuid::Uuid;
 
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Signal {
@@ -21,25 +18,6 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Signal {
             crate::models::signals::SignalType::Fyi
         };
 
-        // Get the agent if one exists
-        let agent = if row.try_get::<Option<i64>, _>("agent_id")?.is_some() {
-            Some(Agent {
-                identifiers: IdFields {
-                    local_id: row.try_get("agent_id")?,
-                    global_uuid: row.try_get::<Uuid, _>("agent_global_uuid")?.to_string(),
-                },
-                timestamps: TimestampFields {
-                    created: row.try_get("agent_created_at")?,
-                    updated: row.try_get("agent_updated_at")?,
-                },
-                description: row.try_get("agent_description")?,
-                agent_state: Mutex::new(row.try_get("agent_state")?),
-                steps: Vec::new(), // Steps are loaded separately
-            })
-        } else {
-            None
-        };
-
         Ok(Self {
             identifiers: IdFields {
                 local_id: row.try_get("id")?,
@@ -50,11 +28,12 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Signal {
                 updated: row.try_get("updated_at")?,
             },
             user_requested_uuid: row.try_get::<Uuid, _>("user_requested_uuid")?.to_string(),
+            workflow_id: row.try_get("workflow_id")?,
+            initiator_agent_id: row.try_get("initiator_agent_id")?,
+            rts_id: row.try_get("rts_id")?,
             signal_type,
-            linked_rts: None, // This will be populated after if needed
-            agent,
             initial_data: row.try_get("initial_data")?,
-            result_data: row.try_get("response_data")?,
+            response_data: row.try_get("response_data")?,
             error_message: row.try_get("error_message")?,
         })
     }
@@ -77,11 +56,6 @@ impl DatabaseItem for Signal {
             ));
         }
 
-        // First ensure the linked RuntimeSession is saved if it exists
-        if let Some(rts) = &self.linked_rts {
-            rts.try_db_create(pool).await?;
-        }
-
         let uuid_parsed = Uuid::parse_str(&self.identifiers.global_uuid)?;
         let user_requested_uuid = Uuid::parse_str(&self.user_requested_uuid)?;
         let signal_type_str = self.signal_type.as_str();
@@ -89,20 +63,21 @@ impl DatabaseItem for Signal {
         sqlx::query!(
             r#"
             INSERT INTO signals (
-                global_uuid, user_requested_uuid, agent_id, rts_id,
-                signal_type, initial_data, response_data, error_message
-            ) VALUES ($1, $2, $3, $4, ($5::text)::signal_type, $6, $7, $8)
+                global_uuid, user_requested_uuid, workflow_id, initiator_agent_id, rts_id,
+                signal_type, initial_data, response_data, error_message, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, ($6::text)::signal_type, $7, $8, $9, $10, $11)
             "#,
             uuid_parsed,
             user_requested_uuid,
-            self.agent.as_ref().and_then(|a| a.identifiers.local_id),
-            self.linked_rts
-                .as_ref()
-                .and_then(|rts| rts.identifiers.local_id),
+            self.workflow_id,
+            self.initiator_agent_id,
+            self.rts_id,
             signal_type_str,
             &self.initial_data as _,
-            &self.result_data as _,
-            &self.error_message.as_deref().unwrap_or_default()
+            &self.response_data as _,
+            &self.error_message.as_deref(),
+            &self.timestamps.created,
+            &self.timestamps.updated
         )
         .execute(pool)
         .await
@@ -117,11 +92,6 @@ impl DatabaseItem for Signal {
             .local_id
             .ok_or_else(|| anyhow!("Cannot update signal without a local ID"))?;
 
-        // Update the linked RuntimeSession if it exists
-        if let Some(rts) = &self.linked_rts {
-            rts.try_db_update(pool).await?;
-        }
-
         let signal_type_str = self.signal_type.as_str();
         let user_requested_uuid = Uuid::parse_str(&self.user_requested_uuid)?;
 
@@ -129,24 +99,25 @@ impl DatabaseItem for Signal {
             r#"
             UPDATE signals SET
                 user_requested_uuid = $1,
-                agent_id = $2,
-                rts_id = $3,
-                signal_type = ($4::text)::signal_type,
-                initial_data = $5,
-                response_data = $6,
-                error_message = $7,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = $8
+                workflow_id = $2,
+                initiator_agent_id = $3,
+                rts_id = $4,
+                signal_type = ($5::text)::signal_type,
+                initial_data = $6,
+                response_data = $7,
+                error_message = $8,
+                updated_at = $9
+            WHERE id = $10
             "#,
             user_requested_uuid,
-            self.agent.as_ref().and_then(|a| a.identifiers.local_id),
-            self.linked_rts
-                .as_ref()
-                .and_then(|rts| rts.identifiers.local_id),
+            self.workflow_id,
+            self.initiator_agent_id,
+            self.rts_id,
             signal_type_str,
             &self.initial_data as _,
-            &self.result_data as _,
-            &self.error_message.as_deref().unwrap_or_default(),
+            &self.response_data as _,
+            &self.error_message.as_deref(),
+            &self.timestamps.updated,
             id
         )
         .execute(pool)
@@ -171,56 +142,24 @@ impl DatabaseItem for Signal {
     }
 
     async fn try_db_select_all(pool: &PgPool) -> Result<Vec<Self>> {
-        // Define struct compatible with query_as! output
-        struct SignalRow {
-            id: i64,
-            global_uuid: uuid::Uuid,
-            user_requested_uuid: String,
-            created_at: chrono::DateTime<chrono::Utc>,
-            updated_at: chrono::DateTime<chrono::Utc>,
-            agent_id: Option<i32>,
-            agent_global_uuid: Option<uuid::Uuid>,
-            agent_created_at: Option<chrono::DateTime<chrono::Utc>>,
-            agent_updated_at: Option<chrono::DateTime<chrono::Utc>>,
-            agent_description: Option<String>,
-            agent_state: Option<AgentState>,
-            #[allow(dead_code)]
-            /// This field is required to match the SQL query structure but is handled
-            /// separately through RuntimeSession loading after row mapping
-            rts_id: Option<i64>,
-            signal_type: SignalType,
-            initial_data: Option<serde_json::Value>,
-            response_data: Option<serde_json::Value>,
-            error_message: Option<String>,
-        }
-
-        let rows = sqlx::query_as!(
-            SignalRow,
+        let rows = sqlx::query!(
             r#"
             SELECT
-                s.id, s.global_uuid, s.user_requested_uuid,
-                s.created_at, s.updated_at,
-                s.signal_type as "signal_type: _",
-                s.initial_data as "initial_data: serde_json::Value",
-                s.response_data as "response_data: serde_json::Value",
-                s.error_message,
-                s.rts_id,
-                a.id as agent_id,
-                a.global_uuid as agent_global_uuid,
-                a.created_at as agent_created_at,
-                a.updated_at as agent_updated_at,
-                a.description as agent_description,
-                a.agent_state as "agent_state: AgentState"
-            FROM signals s
-            LEFT JOIN agents a ON s.agent_id = a.id
+                id, global_uuid, user_requested_uuid, created_at, updated_at,
+                workflow_id, initiator_agent_id, rts_id,
+                signal_type as "signal_type: _",
+                initial_data, response_data, error_message
+            FROM signals
+            ORDER BY created_at DESC
             "#
         )
         .fetch_all(pool)
-        .await?;
+        .await
+        .map_err(|e| anyhow!("Failed to fetch all signals: {}", e))?;
 
-        let mut signals = Vec::with_capacity(rows.len());
-        for row in rows {
-            let signal = Signal {
+        let signals = rows
+            .into_iter()
+            .map(|row| Signal {
                 identifiers: IdFields {
                     local_id: Some(row.id),
                     global_uuid: row.global_uuid.to_string(),
@@ -229,36 +168,16 @@ impl DatabaseItem for Signal {
                     created: row.created_at,
                     updated: row.updated_at,
                 },
-                user_requested_uuid: row.user_requested_uuid,
-                agent: if row.agent_id.is_some() {
-                    Some(Agent {
-                        identifiers: IdFields {
-                            local_id: row.agent_id,
-                            global_uuid: row
-                                .agent_global_uuid
-                                .map(|uuid| uuid.to_string())
-                                .unwrap_or_default(),
-                        },
-                        timestamps: TimestampFields {
-                            created: row.agent_created_at.unwrap_or_default(),
-                            updated: row.agent_updated_at.unwrap_or_default(),
-                        },
-                        description: row.agent_description.unwrap_or_default(),
-                        agent_state: Mutex::new(row.agent_state.unwrap_or_default()),
-                        steps: Vec::new(), // Steps are loaded separately
-                    })
-                } else {
-                    None
-                },
-                linked_rts: None, // Will be populated after if needed
+                user_requested_uuid: row.user_requested_uuid.to_string(),
+                workflow_id: row.workflow_id,
+                initiator_agent_id: row.initiator_agent_id,
+                rts_id: row.rts_id,
                 signal_type: row.signal_type,
                 initial_data: row.initial_data,
-                result_data: row.response_data,
+                response_data: row.response_data,
                 error_message: row.error_message,
-            };
-
-            signals.push(signal);
-        }
+            })
+            .collect();
 
         Ok(signals)
     }
@@ -267,32 +186,42 @@ impl DatabaseItem for Signal {
         pool: &PgPool,
         id: &IdFields<Self::IdType>,
     ) -> Result<Option<Self>> {
-        let uuid_parsed = Uuid::parse_str(&id.global_uuid)?;
-        let row = sqlx::query!(
-            r#"
-            SELECT
-                s.id, s.global_uuid, s.user_requested_uuid,
-                s.created_at, s.updated_at,
-                s.signal_type as "signal_type!: crate::models::signals::SignalType",
-                s.initial_data as "initial_data: Value",
-                s.response_data as "response_data: Value",
-                s.error_message,
-                a.id as "agent_id?",
-                a.global_uuid as "agent_global_uuid?",
-                a.created_at as "agent_created_at?",
-                a.updated_at as "agent_updated_at?",
-                a.description as "agent_description?",
-                a.agent_state as "agent_state?: crate::models::agents::AgentState"
-            FROM signals s
-            LEFT JOIN agents a ON s.agent_id = a.id
-            WHERE s.global_uuid = $1
-            "#,
-            uuid_parsed
-        )
-        .fetch_optional(pool)
-        .await?;
+        let row_opt = if let Some(local_id) = id.local_id {
+            sqlx::query!(
+                r#"
+                SELECT
+                    id, global_uuid, user_requested_uuid, created_at, updated_at,
+                    workflow_id, initiator_agent_id, rts_id,
+                    signal_type as "signal_type: _",
+                    initial_data, response_data, error_message
+                FROM signals
+                WHERE id = $1
+                "#,
+                local_id
+            )
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| anyhow!("Failed to fetch signal by local ID: {}", e))?
+        } else {
+            let uuid_parsed = Uuid::parse_str(&id.global_uuid)?;
+            sqlx::query!(
+                r#"
+                SELECT
+                    id, global_uuid, user_requested_uuid, created_at, updated_at,
+                    workflow_id, initiator_agent_id, rts_id,
+                    signal_type as "signal_type: _",
+                    initial_data, response_data, error_message
+                FROM signals
+                WHERE global_uuid = $1
+                "#,
+                uuid_parsed
+            )
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| anyhow!("Failed to fetch signal by UUID: {}", e))?
+        };
 
-        Ok(row.map(|row| Signal {
+        Ok(row_opt.map(|row| Signal {
             identifiers: IdFields {
                 local_id: Some(row.id),
                 global_uuid: row.global_uuid.to_string(),
@@ -302,27 +231,12 @@ impl DatabaseItem for Signal {
                 updated: row.updated_at,
             },
             user_requested_uuid: row.user_requested_uuid.to_string(),
-            agent: if row.agent_id.is_some() {
-                Some(Agent {
-                    identifiers: IdFields {
-                        local_id: row.agent_id,
-                        global_uuid: row.agent_global_uuid.unwrap().to_string(),
-                    },
-                    timestamps: TimestampFields {
-                        created: row.agent_created_at.unwrap(),
-                        updated: row.agent_updated_at.unwrap(),
-                    },
-                    description: row.agent_description.unwrap_or_default(),
-                    agent_state: Mutex::new(row.agent_state.unwrap_or_default()),
-                    steps: Vec::new(), // Steps are loaded separately
-                })
-            } else {
-                None
-            },
-            linked_rts: None, // Will be populated after if needed
+            workflow_id: row.workflow_id,
+            initiator_agent_id: row.initiator_agent_id,
+            rts_id: row.rts_id,
             signal_type: row.signal_type,
             initial_data: row.initial_data,
-            result_data: row.response_data,
+            response_data: row.response_data,
             error_message: row.error_message,
         }))
     }

@@ -92,6 +92,45 @@ class BridgeClient:
             logger.error(f"Error processing signal: {sanitize_data(str(e))}")
             return None
 
+    async def plan_workflow(self, plan_request: dict[str, Any]) -> Any:
+        """Send a plan workflow request to the engine"""
+        try:
+            if not self.stub:
+                logger.error("gRPC stub not initialized")
+                return None
+
+            # Create PlanWorkflowRequest
+            agent_id = plan_request.get("agent_id", 0)
+            objective = plan_request.get("objective", "")
+            is_ephemeral = plan_request.get("is_ephemeral", False)
+
+            # Convert context and constraints to Protobuf Struct if they exist
+            context_struct = dict_to_struct(plan_request.get("context", {}))
+            constraints_struct = dict_to_struct(plan_request.get("constraints", {}))
+
+            request = pb2.PlanWorkflowRequest(
+                agent_id=agent_id,
+                objective=objective,
+                context=context_struct,
+                constraints=constraints_struct,
+                is_ephemeral=is_ephemeral,
+            )
+
+            response = await self.stub.PlanWorkflow(request)
+
+            if response and response.success:
+                logger.info(f"Workflow planned successfully: {response.message}")
+                if response.workflow_uuid:
+                    logger.info(f"Created workflow UUID: {response.workflow_uuid}")
+            else:
+                error_msg = response.message if response else "No response received"
+                logger.error(f"Workflow planning failed: {error_msg}")
+
+            return response
+        except Exception as e:
+            logger.error(f"Error planning workflow: {sanitize_data(str(e))}")
+            return None
+
     async def send_signal(self, data: dict[str, Any], meta: str = "signal") -> bool:
         """Send a signal to the engine using the unified SignalRequest structure"""
         try:
@@ -326,3 +365,131 @@ async def handle_workflow_delete(payload: dict[str, Any], client: BridgeClient) 
             )
     except Exception as e:
         logger.error(f"Error handling workflow deletion: {str(e)}")
+
+
+async def handle_agent_composition_request(
+    payload: dict[str, Any], client: BridgeClient
+) -> None:
+    """Handles an agent composition request to plan and create workflows"""
+    try:
+        # Sanitize the payload before any processing
+        safe_payload = sanitize_data(payload)
+        logger.info(f"🧠 Agent composition request: {safe_payload}")
+
+        # Extract request data from the payload
+        record = get(payload, "record", {})
+
+        if not record:
+            logger.error("No record found in agent composition payload")
+            return
+
+        # Extract required fields for planning
+        agent_id = get(record, "agent_id")
+        objective = get(record, "objective", "")
+        context = get(record, "context", {})
+        constraints = get(record, "constraints", {})
+        is_ephemeral = get(record, "is_ephemeral", False)
+
+        if not agent_id or not objective:
+            logger.error("Missing required fields: agent_id or objective")
+            return
+
+        # Create plan request
+        plan_request = {
+            "agent_id": agent_id,
+            "objective": objective,
+            "context": context,
+            "constraints": constraints,
+            "is_ephemeral": is_ephemeral,
+        }
+
+        # Send plan request to engine
+        response = await client.plan_workflow(plan_request)
+
+        if response and response.success:
+            logger.info(
+                f"Agent {agent_id} successfully planned workflow: {response.message}"
+            )
+
+            # If a workflow was created, log additional details
+            if hasattr(response, "workflow_uuid") and response.workflow_uuid:
+                logger.info(f"New workflow created with UUID: {response.workflow_uuid}")
+
+            if hasattr(response, "estimated_steps"):
+                logger.info(f"Estimated steps: {response.estimated_steps}")
+
+            if hasattr(response, "requires_approval") and response.requires_approval:
+                logger.info("Workflow requires approval before execution")
+
+        else:
+            error_msg = response.message if response else "No response received"
+            logger.error(f"Agent composition failed: {error_msg}")
+
+            # Log validation errors if present
+            if hasattr(response, "validation_errors") and response.validation_errors:
+                for error in response.validation_errors:
+                    logger.error(f"Validation error: {error}")
+
+    except Exception as e:
+        logger.error(f"Error handling agent composition request: {str(e)}")
+
+
+async def handle_agent_insert(payload: dict[str, Any], client: BridgeClient) -> None:
+    """Handles a new Agent inserted in postgres"""
+    try:
+        # Sanitize the payload before any processing
+        safe_payload = sanitize_data(payload)
+        logger.info(f"🤖 New agent created: {safe_payload}")
+
+        # Extract record data from the Supabase payload
+        record = get(payload, "record", {})
+
+        if not record:
+            logger.error("No record found in agent insert payload")
+            return
+
+        agent_id = get(record, "id")
+        agent_name = get(record, "name", "Unknown")
+        capabilities = get(record, "capabilities_json", {})
+        policy = get(record, "policy_json", {})
+
+        logger.info(
+            f"Agent {agent_id} ({agent_name}) registered with capabilities: {capabilities}"
+        )
+        logger.info(f"Agent {agent_id} policy: {policy}")
+
+        # In a real implementation, you might want to:
+        # 1. Cache agent capabilities for faster lookup
+        # 2. Validate agent configuration
+        # 3. Initialize agent-specific resources
+
+    except Exception as e:
+        logger.error(f"Error handling agent insert: {str(e)}")
+
+
+async def handle_agent_update(payload: dict[str, Any], client: BridgeClient) -> None:
+    """Handles an Agent update in postgres"""
+    try:
+        # Sanitize the payload before any processing
+        safe_payload = sanitize_data(payload)
+        logger.info(f"🔄 Agent updated: {safe_payload}")
+
+        # Extract record data from the Supabase payload
+        record = get(payload, "record", {})
+
+        if not record:
+            logger.error("No record found in agent update payload")
+            return
+
+        agent_id = get(record, "id")
+        agent_name = get(record, "name", "Unknown")
+
+        logger.info(f"Agent {agent_id} ({agent_name}) configuration updated")
+
+        # In a real implementation, you might want to:
+        # 1. Update cached agent capabilities
+        # 2. Revalidate existing workflows for this agent
+        # 3. Notify running sessions of capability changes
+
+    except Exception as e:
+        logger.error(f"Error handling agent update: {str(e)}")

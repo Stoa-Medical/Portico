@@ -14,6 +14,9 @@ service BridgeService {
   // Process changes
   rpc CreateWorkflow(CreateWorkflowRequest) returns (GeneralResponse);
   rpc DeleteWorkflow(DeleteWorkflowRequest) returns (GeneralResponse);
+
+  // Agent composition
+  rpc PlanWorkflow(PlanWorkflowRequest) returns (PlanWorkflowResponse);
 }
 
 // === Core definitions ===
@@ -55,6 +58,24 @@ message CreateWorkflowRequest {
 
 message DeleteWorkflowRequest {
   int32 workflow_id = 1;
+}
+
+message PlanWorkflowRequest {
+  int32 agent_id = 1;
+  string objective = 2;
+  google.protobuf.Struct context = 3;
+  google.protobuf.Struct constraints = 4;
+  bool is_ephemeral = 5;
+}
+
+message PlanWorkflowResponse {
+  bool success = 1;
+  string message = 2;
+  google.protobuf.Struct workflow_spec = 3;
+  repeated string validation_errors = 4;
+  int32 estimated_steps = 5;
+  bool requires_approval = 6;
+  string workflow_uuid = 7; // If workflow was created
 }
 
 // === Sub definitions ===

@@ -2,8 +2,8 @@ use crate::core::workflow_manager::WorkflowManager;
 use crate::handlers::{create, delete};
 use crate::proto::bridge_service_server::{BridgeService, BridgeServiceServer};
 use crate::proto::{
-    CreateWorkflowRequest, DeleteWorkflowRequest, GeneralResponse, ServerInitRequest, SignalRequest,
-    SignalResponse,
+    CreateWorkflowRequest, DeleteWorkflowRequest, GeneralResponse, PlanWorkflowRequest,
+    PlanWorkflowResponse, ServerInitRequest, SignalRequest, SignalResponse,
 };
 use crate::SharedWorkflowMap;
 use sqlx::PgPool;
@@ -118,6 +118,41 @@ impl BridgeService for RpcServer {
         let mut manager = self.workflow_manager.lock().await;
         let response = delete::handle_delete_workflow(&mut manager, delete_request.workflow_id).await?;
 
+        Ok(Response::new(response))
+    }
+
+    async fn plan_workflow(
+        &self,
+        request: Request<crate::proto::PlanWorkflowRequest>,
+    ) -> Result<Response<crate::proto::PlanWorkflowResponse>, Status> {
+        let plan_request = request.into_inner();
+        println!(
+            "[INFO] Received plan workflow request from agent_id: {} with objective: '{}'",
+            plan_request.agent_id,
+            plan_request.objective
+        );
+
+        // For now, create a simple response indicating the request was received
+        // In a full implementation, this would:
+        // 1. Load the agent from database
+        // 2. Use the WorkflowPlanner to create workflow spec
+        // 3. Create and save the workflow
+        // 4. Return detailed response with workflow UUID and validation results
+
+        let response = crate::proto::PlanWorkflowResponse {
+            success: true,
+            message: format!(
+                "Plan workflow request received for agent {} with objective: '{}'",
+                plan_request.agent_id, plan_request.objective
+            ),
+            workflow_spec: None, // Would contain the actual workflow specification
+            validation_errors: vec![], // Would contain any validation errors
+            estimated_steps: 1, // Would contain actual step count
+            requires_approval: false, // Would be determined by agent policy
+            workflow_uuid: String::new(), // Would contain UUID if workflow was created
+        };
+
+        println!("[INFO] Plan workflow request processed: {}", response.message);
         Ok(Response::new(response))
     }
 }
