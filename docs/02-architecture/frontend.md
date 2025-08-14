@@ -18,7 +18,8 @@ app/src/
     +layout.svelte       # global shell (nav, theming)
     +layout.ts           # load common data (Supabase session)
     +page.svelte         # landing page
-    agents/              # CRUD pages for Agents
+    agents/              # Agent capabilities/policy and composition
+    workflows/           # Workflow CRUD, Steps editing, and runs
     analytics/           # success & latency charts
     login/               # Auth flows
     register/            # Sign-up flows
@@ -38,6 +39,7 @@ Tailwind classes are authored inline with occasional `app.css` for global resets
 * Supabase client handles auth and CRUD—no GraphQL layer required.
 * Lightweight Svelte stores expose current user and config.
 * Pages use `load()` functions (`+page.ts`) for SSR-friendly data fetching.
+* Signals target `workflow_id`; analytics aggregate by workflow, and optionally by agent via `created_by_agent_id`.
 
 ## Testing
 
