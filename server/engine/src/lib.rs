@@ -1,4 +1,4 @@
-use portico_shared::Workflow;
+use portico_shared::models::Workflow;
 use prost_types::Struct;
 use serde_json::Value;
 use std::collections::HashMap;

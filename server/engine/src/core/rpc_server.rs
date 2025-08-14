@@ -144,7 +144,10 @@ impl BridgeService for RpcServer {
 
         // Handle the workflow creation through the create handler
         let mut manager = self.workflow_manager.lock().await;
-        let response = create::handle_create_workflow(&mut manager, &create_request.workflow_json).await?;
+        let Some(ref workflow_json) = create_request.workflow_json else {
+            return Err(Status::invalid_argument("workflow_json is required"));
+        };
+        let response = create::handle_create_workflow(&mut manager, workflow_json).await?;
 
         Ok(Response::new(response))
     }
@@ -246,12 +249,13 @@ impl BridgeService for RpcServer {
 
                 // If planning was successful and has a workflow spec, persist the workflow
                 let final_uuid = if plan.success && plan.workflow_spec.is_some() {
-                    // Convert workflow spec to JSON string for persistence
-                    let workflow_json = serde_json::to_string(&plan.workflow_spec).unwrap_or_default();
+                    // Convert workflow spec to protobuf Struct for persistence
+                    let spec_value = serde_json::to_value(&plan.workflow_spec).unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
+                    let spec_struct = crate::json_to_proto_struct(&spec_value);
 
                     // Create workflow through existing handler
                     let mut manager = self.workflow_manager.lock().await;
-                    match create::handle_create_workflow(&mut manager, &workflow_json).await {
+                    match create::handle_create_workflow(&mut manager, &spec_struct).await {
                         Ok(create_response) => {
                             // Extract workflow UUID from creation response
                             let created_uuid = create_response.message
@@ -282,7 +286,7 @@ impl BridgeService for RpcServer {
                     message: plan.message,
                     workflow_spec,
                     validation_errors: plan.validation_errors,
-                    estimated_steps: plan.estimated_steps,
+                    estimated_steps: plan.estimated_steps as i32,
                     requires_approval: plan.requires_approval,
                     workflow_uuid: final_uuid,
                 };
@@ -320,7 +324,10 @@ impl BridgeService for RpcServer {
             }
         }
     }
+}
 
+// Additional methods for RpcServer (not part of the trait)
+impl RpcServer {
     /// Extract likely tools from the objective text (simple heuristic)
     fn extract_tools_from_objective(&self, objective: &str) -> Vec<String> {
         let objective_lower = objective.to_lowercase();

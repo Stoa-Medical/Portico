@@ -107,8 +107,9 @@ impl AgentMonitoringService {
             });
 
             // Keep only recent metrics (last 1000 entries)
-            if metrics.len() > 1000 {
-                metrics.drain(..metrics.len() - 1000);
+            let excess = metrics.len().saturating_sub(1000);
+            if excess > 0 {
+                metrics.drain(..excess);
             }
         }
 

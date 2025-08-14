@@ -7,7 +7,7 @@ use tokio::time::{sleep, timeout};
 use serde::{Deserialize, Serialize};
 
 /// Batch request types
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum BatchableRequest {
     PlanWorkflow {
         agent_id: i32,

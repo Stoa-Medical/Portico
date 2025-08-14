@@ -2,7 +2,7 @@ use crate::handlers::{run, fyi, sync};
 use crate::proto::{SignalRequest, SignalResponse, SignalType};
 use crate::proto_struct_to_json;
 use crate::SharedWorkflowMap;
-use portico_shared::{DatabaseItem, RunningStatus, RuntimeSession};
+use portico_shared::models::{DatabaseItem, RunningStatus, RuntimeSession};
 use serde_json::json;
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -150,43 +150,26 @@ impl WorkflowManager {
         pool: PgPool,
     ) -> Result<SignalResponse, Status> {
         match signal_request.signal_type() {
-            SignalType::Run => {
-                if let Some(ref payload) = signal_request.payload {
-                    if let Some(run_data) = payload.run_data.as_ref() {
-                        let json_data = proto_struct_to_json(run_data);
-                        run::handle_run_signal(workflow_map, signal_request.workflow_id, json_data, pool)
-                            .await
-                    } else {
-                        Err(Status::invalid_argument("Missing run_data for RUN signal"))
-                    }
-                } else {
-                    Err(Status::invalid_argument("Missing payload for RUN signal"))
+            SignalType::Run => match signal_request.payload {
+                Some(crate::proto::signal_request::Payload::RunData(ref run_data)) => {
+                    let json_data = proto_struct_to_json(run_data);
+                    run::handle_run_signal(workflow_map, signal_request.workflow_id, json_data, pool).await
                 }
-            }
-            SignalType::Sync => {
-                if let Some(ref payload) = signal_request.payload {
-                    if let Some(sync_payload) = payload.sync.as_ref() {
-                        sync::handle_sync_signal(workflow_map, sync_payload.clone(), pool).await
-                    } else {
-                        Err(Status::invalid_argument("Missing sync payload for SYNC signal"))
-                    }
-                } else {
-                    Err(Status::invalid_argument("Missing payload for SYNC signal"))
+                _ => Err(Status::invalid_argument("Missing run_data for RUN signal"))
+            },
+            SignalType::Sync => match signal_request.payload {
+                Some(crate::proto::signal_request::Payload::Sync(ref sync_payload)) => {
+                    sync::handle_sync_signal(workflow_map, sync_payload.clone(), pool).await
                 }
-            }
-            SignalType::Fyi => {
-                if let Some(ref payload) = signal_request.payload {
-                    if let Some(fyi_data) = payload.fyi_data.as_ref() {
-                        let json_data = proto_struct_to_json(fyi_data);
-                        fyi::handle_fyi_signal(workflow_map, signal_request.workflow_id, json_data, pool)
-                            .await
-                    } else {
-                        Err(Status::invalid_argument("Missing fyi_data for FYI signal"))
-                    }
-                } else {
-                    Err(Status::invalid_argument("Missing payload for FYI signal"))
+                _ => Err(Status::invalid_argument("Missing sync payload for SYNC signal"))
+            },
+            SignalType::Fyi => match signal_request.payload {
+                Some(crate::proto::signal_request::Payload::FyiData(ref fyi_data)) => {
+                    let json_data = proto_struct_to_json(fyi_data);
+                    fyi::handle_fyi_signal(workflow_map, signal_request.workflow_id, json_data, pool).await
                 }
-            }
+                _ => Err(Status::invalid_argument("Missing fyi_data for FYI signal"))
+            },
         }
     }
 

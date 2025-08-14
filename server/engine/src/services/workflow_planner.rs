@@ -5,6 +5,7 @@
 use sqlx::PgPool;
 use tonic::Status;
 use serde_json::Value;
+use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 
 // Temporary placeholder types while shared library is being fixed
@@ -14,7 +15,7 @@ pub struct Agent {
     pub name: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanRequest {
     pub agent_id: i32,
     pub objective: String,
@@ -23,23 +24,28 @@ pub struct PlanRequest {
     pub is_ephemeral: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanResponse {
     pub workflow_spec: WorkflowSpec,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowSpec {
+    pub name: String,
+    pub description: Option<String>,
+    pub workflow_type: Option<String>,
     pub steps: Vec<StepSpec>,
+    pub is_ephemeral: bool,
+    pub version: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StepSpec {
     pub name: String,
     pub action: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationResult {
     pub is_valid: bool,
     pub errors: Vec<String>,
@@ -50,6 +56,14 @@ pub struct ValidationResult {
 pub struct PlanValidationResult {
     pub plan_response: PlanResponse,
     pub validation_result: ValidationResult,
+}
+
+impl PlanValidationResult {
+    pub fn summary(&self) -> String {
+        format!("Workflow '{}' with {} steps",
+                self.plan_response.workflow_spec.name,
+                self.plan_response.workflow_spec.steps.len())
+    }
 }
 
 /// Engine-side workflow planning service that integrates with shared library components
@@ -79,6 +93,9 @@ impl WorkflowPlannerService {
 
         // Create a simple workflow spec
         let workflow_spec = WorkflowSpec {
+            name: format!("Workflow for: {}", objective.chars().take(50).collect::<String>()),
+            description: Some(format!("Auto-generated workflow for objective: {}", objective)),
+            workflow_type: Some("auto_generated".to_string()),
             steps: vec![
                 StepSpec {
                     name: "analyze_objective".to_string(),
@@ -93,6 +110,8 @@ impl WorkflowPlannerService {
                     action: "Report task completion".to_string(),
                 },
             ],
+            is_ephemeral: _is_ephemeral,
+            version: "v1".to_string(),
         };
 
         let plan_response = PlanResponse { workflow_spec };
@@ -144,41 +163,6 @@ impl WorkflowPlannerService {
     }
 }
 
-/// Result of workflow planning operation
-#[derive(Debug)]
-pub struct PlanWorkflowResult {
-    pub plan_response: PlanResponse,
-    pub validation_result: shared::models::ValidationResult,
-    pub agent_name: String,
-}
-
-impl PlanWorkflowResult {
-    /// Check if the workflow can be auto-executed
-    pub fn can_auto_execute(&self) -> bool {
-        self.validation_result.is_valid && !self.validation_result.requires_approval
-    }
-
-    /// Get summary of planning results
-    pub fn summary(&self) -> String {
-        format!(
-            "Agent '{}' planned workflow '{}' with {} steps. Validation: {}",
-            self.agent_name,
-            self.plan_response.workflow_spec.name,
-            self.plan_response.workflow_spec.steps.len(),
-            self.validation_result.summary()
-        )
-    }
-
-    /// Get list of validation errors
-    pub fn validation_errors(&self) -> Vec<String> {
-        self.validation_result.errors.clone()
-    }
-
-    /// Get list of validation warnings
-    pub fn validation_warnings(&self) -> Vec<String> {
-        self.validation_result.warnings.clone()
-    }
-}
 
 #[cfg(test)]
 mod tests {

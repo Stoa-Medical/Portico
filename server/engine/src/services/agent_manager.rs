@@ -1,9 +1,9 @@
-use shared::models::{Agent, Workflow, DatabaseItem, IdFields};
+use portico_shared::models::{Agent, Workflow, DatabaseItem, IdFields};
 use sqlx::PgPool;
 use tonic::Status;
 use serde_json::Value;
 use uuid::Uuid;
-use super::workflow_planner::{WorkflowPlannerService, PlanWorkflowResult};
+use super::workflow_planner::{WorkflowPlannerService, PlanValidationResult};
 
 /// Engine-side agent management service
 pub struct AgentManagerService {
@@ -77,7 +77,7 @@ impl AgentManagerService {
     /// Create a Workflow struct from WorkflowSpec
     async fn create_workflow_from_spec(
         &self,
-        workflow_spec: &shared::models::WorkflowSpec,
+        workflow_spec: &portico_shared::models::WorkflowSpec,
         agent_id: i32,
         workflow_uuid: String,
         is_ephemeral: bool,
@@ -92,14 +92,14 @@ impl AgentManagerService {
                 local_id: None, // Will be set by database
                 global_uuid: workflow_uuid,
             },
-            timestamps: shared::TimestampFields {
+            timestamps: portico_shared::TimestampFields {
                 created: now,
                 updated: now,
             },
             name: Some(workflow_spec.name.clone()),
             workflow_type: workflow_spec.workflow_type.clone(),
             description: workflow_spec.description.clone(),
-            workflow_state: shared::models::workflows::WorkflowState::Inactive,
+            workflow_state: portico_shared::models::workflows::WorkflowState::Inactive,
             workflow_name: Some(workflow_spec.name.clone()),
             created_by_agent_id: Some(agent_id),
             version: "v1".to_string(),
@@ -139,7 +139,7 @@ impl AgentManagerService {
 #[derive(Debug)]
 pub struct WorkflowCreationResult {
     pub workflow_uuid: Option<String>,
-    pub plan_result: PlanWorkflowResult,
+    pub plan_result: PlanValidationResult,
     pub was_saved: bool,
     pub requires_approval: bool,
 }
