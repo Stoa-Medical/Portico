@@ -9,8 +9,8 @@ use tokio::sync::RwLock;
 use tonic::transport::Server;
 
 use portico_engine::RpcServer;
-use portico_shared::models::Workflow;
-use portico_shared::DatabaseItem;
+use portico_database::models::Workflow;
+use portico_database::DatabaseItem;
 
 #[tokio::main]
 async fn main() -> Result<()> {

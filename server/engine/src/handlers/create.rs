@@ -1,9 +1,9 @@
 use crate::core::workflow_manager::WorkflowManager;
 use crate::proto::GeneralResponse;
 use crate::proto_struct_to_json;
-use portico_shared::models::Workflow;
-use portico_shared::JsonLike;
-use portico_shared::DatabaseItem;
+use portico_database::models::Workflow;
+use portico_database::JsonLike;
+use portico_database::DatabaseItem;
 use prost_types::Struct;
 use tonic::Status;
 

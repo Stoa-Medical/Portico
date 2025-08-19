@@ -1,0 +1,63 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT\n                    w.id, w.global_uuid, w.description,\n                    w.workflow_state as \"workflow_state: _\",\n                    w.created_at, w.updated_at\n                FROM workflows w\n                WHERE w.id = $1\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "global_uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "workflow_state: _",
+        "type_info": {
+          "Custom": {
+            "name": "workflow_state",
+            "kind": {
+              "Enum": [
+                "inactive",
+                "stable",
+                "unstable"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "bc23796ca504fbba6274fcd827cc03f2924294a7313897b27d6fc99025535e98"
+}

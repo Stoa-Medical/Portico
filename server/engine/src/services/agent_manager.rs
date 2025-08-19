@@ -1,4 +1,4 @@
-use portico_shared::models::{Agent, Workflow, DatabaseItem, IdFields};
+use portico_database::models::{Agent, Workflow, DatabaseItem, IdFields};
 use sqlx::PgPool;
 use tonic::Status;
 use serde_json::Value;
@@ -77,7 +77,7 @@ impl AgentManagerService {
     /// Create a Workflow struct from WorkflowSpec
     async fn create_workflow_from_spec(
         &self,
-        workflow_spec: &portico_shared::models::WorkflowSpec,
+        workflow_spec: &portico_database::models::WorkflowSpec,
         agent_id: i32,
         workflow_uuid: String,
         is_ephemeral: bool,
@@ -92,14 +92,14 @@ impl AgentManagerService {
                 local_id: None, // Will be set by database
                 global_uuid: workflow_uuid,
             },
-            timestamps: portico_shared::TimestampFields {
+            timestamps: portico_database::TimestampFields {
                 created: now,
                 updated: now,
             },
             name: Some(workflow_spec.name.clone()),
             workflow_type: workflow_spec.workflow_type.clone(),
             description: workflow_spec.description.clone(),
-            workflow_state: portico_shared::models::workflows::WorkflowState::Inactive,
+            workflow_state: portico_database::models::workflows::WorkflowState::Inactive,
             workflow_name: Some(workflow_spec.name.clone()),
             created_by_agent_id: Some(agent_id),
             version: "v1".to_string(),

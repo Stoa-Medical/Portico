@@ -1,7 +1,7 @@
 // Disabled due to shared library compilation issues
-// use portico_shared::models::agents::{Agent, AgentCapabilities, AgentPolicy};
-// use portico_shared::models::workflows::{WorkflowPlanner, PlanRequest, PlanResponse, WorkflowValidator};
-// use portico_shared::{DatabaseItem, IdFields};
+// use portico_database::models::agents::{Agent, AgentCapabilities, AgentPolicy};
+// use portico_database::models::workflows::{WorkflowPlanner, PlanRequest, PlanResponse, WorkflowValidator};
+// use portico_database::{DatabaseItem, IdFields};
 use sqlx::PgPool;
 use tonic::Status;
 use serde_json::Value;

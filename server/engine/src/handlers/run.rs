@@ -1,7 +1,7 @@
 use crate::SharedWorkflowMap;
 use crate::proto::SignalResponse;
 use crate::json_to_proto_struct;
-use portico_shared::{DatabaseItem, RuntimeSession};
+use portico_database::{DatabaseItem, RuntimeSession};
 use serde_json::Value;
 use sqlx::PgPool;
 use tonic::Status;

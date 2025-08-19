@@ -6,7 +6,7 @@ use crate::services::{
     simple_workflow_planner::SimpleWorkflowPlannerService,
 };
 // Disabled due to shared library compilation issues
-// use portico_shared::models::agents::{AgentCapabilities, AgentPolicy};
+// use portico_database::models::agents::{AgentCapabilities, AgentPolicy};
 
 // Temporary placeholder types
 #[derive(Debug, Clone)]

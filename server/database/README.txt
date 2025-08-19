@@ -1,4 +1,4 @@
-This is the shared crate containing core Rust data models, utilities, and logic for both the Engine and future Tauri app.
+This is the shared crate containing core Rust data models, utilities, and logic for both the Engine
 
 Requirements:
 - Rust >=1.60 and Cargo

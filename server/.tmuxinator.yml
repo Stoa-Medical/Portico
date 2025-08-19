@@ -9,6 +9,7 @@ windows:
       layout: main-vertical
       panes:
         - supabase:
+          - cd database
           - supabase start
         - engine:
           - cd engine

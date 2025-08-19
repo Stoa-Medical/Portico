@@ -1,5 +1,6 @@
 use super::types::Signal;
 use crate::{DatabaseItem, IdFields, TimestampFields};
+use crate::models::signals::SignalType;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use sqlx::{PgPool, Row};
@@ -73,7 +74,7 @@ impl DatabaseItem for Signal {
             signal_type_str,
             &self.initial_data as _,
             &self.response_data as _,
-            &self.error_message.as_deref(),
+            self.error_message.as_deref(),
             &self.timestamps.created,
             &self.timestamps.updated
         )
@@ -114,7 +115,7 @@ impl DatabaseItem for Signal {
             signal_type_str,
             &self.initial_data as _,
             &self.response_data as _,
-            &self.error_message.as_deref(),
+            self.error_message.as_deref(),
             &self.timestamps.updated,
             id
         )
@@ -145,7 +146,7 @@ impl DatabaseItem for Signal {
             SELECT
                 id, global_uuid, user_requested_uuid, created_at, updated_at,
                 workflow_id, initiator_agent_id, rts_id,
-                signal_type as "signal_type: _",
+                signal_type as "signal_type!: SignalType",
                 initial_data, response_data, error_message
             FROM signals
             ORDER BY created_at DESC
@@ -184,13 +185,13 @@ impl DatabaseItem for Signal {
         pool: &PgPool,
         id: &IdFields<Self::IdType>,
     ) -> Result<Option<Self>> {
-        let row_opt = if let Some(local_id) = id.local_id {
-            sqlx::query!(
+        if let Some(local_id) = id.local_id {
+            let row_opt = sqlx::query!(
                 r#"
                 SELECT
                     id, global_uuid, user_requested_uuid, created_at, updated_at,
                     workflow_id, initiator_agent_id, rts_id,
-                    signal_type as "signal_type: _",
+                    signal_type as "signal_type!: SignalType",
                     initial_data, response_data, error_message
                 FROM signals
                 WHERE id = $1
@@ -199,15 +200,34 @@ impl DatabaseItem for Signal {
             )
             .fetch_optional(pool)
             .await
-            .map_err(|e| anyhow!("Failed to fetch signal by local ID: {}", e))?
+            .map_err(|e| anyhow!("Failed to fetch signal by local ID: {}", e))?;
+
+            Ok(row_opt.map(|row| Signal {
+                identifiers: IdFields {
+                    local_id: Some(row.id),
+                    global_uuid: row.global_uuid.to_string(),
+                },
+                timestamps: TimestampFields {
+                    created: row.created_at,
+                    updated: row.updated_at,
+                },
+                user_requested_uuid: row.user_requested_uuid.to_string(),
+                workflow_id: row.workflow_id,
+                initiator_agent_id: row.initiator_agent_id,
+                rts_id: row.rts_id,
+                signal_type: row.signal_type,
+                initial_data: row.initial_data,
+                response_data: row.response_data,
+                error_message: row.error_message,
+            }))
         } else {
             let uuid_parsed = Uuid::parse_str(&id.global_uuid)?;
-            sqlx::query!(
+            let row_opt = sqlx::query!(
                 r#"
                 SELECT
                     id, global_uuid, user_requested_uuid, created_at, updated_at,
                     workflow_id, initiator_agent_id, rts_id,
-                    signal_type as "signal_type: _",
+                    signal_type as "signal_type!: SignalType",
                     initial_data, response_data, error_message
                 FROM signals
                 WHERE global_uuid = $1
@@ -216,26 +236,26 @@ impl DatabaseItem for Signal {
             )
             .fetch_optional(pool)
             .await
-            .map_err(|e| anyhow!("Failed to fetch signal by UUID: {}", e))?
-        };
+            .map_err(|e| anyhow!("Failed to fetch signal by UUID: {}", e))?;
 
-        Ok(row_opt.map(|row| Signal {
-            identifiers: IdFields {
-                local_id: Some(row.id),
-                global_uuid: row.global_uuid.to_string(),
-            },
-            timestamps: TimestampFields {
-                created: row.created_at,
-                updated: row.updated_at,
-            },
-            user_requested_uuid: row.user_requested_uuid.to_string(),
-            workflow_id: row.workflow_id,
-            initiator_agent_id: row.initiator_agent_id,
-            rts_id: row.rts_id,
-            signal_type: row.signal_type,
-            initial_data: row.initial_data,
-            response_data: row.response_data,
-            error_message: row.error_message,
-        }))
+            Ok(row_opt.map(|row| Signal {
+                identifiers: IdFields {
+                    local_id: Some(row.id),
+                    global_uuid: row.global_uuid.to_string(),
+                },
+                timestamps: TimestampFields {
+                    created: row.created_at,
+                    updated: row.updated_at,
+                },
+                user_requested_uuid: row.user_requested_uuid.to_string(),
+                workflow_id: row.workflow_id,
+                initiator_agent_id: row.initiator_agent_id,
+                rts_id: row.rts_id,
+                signal_type: row.signal_type,
+                initial_data: row.initial_data,
+                response_data: row.response_data,
+                error_message: row.error_message,
+            }))
+        }
     }
 }

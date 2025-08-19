@@ -7,7 +7,6 @@ services:
       - "54322:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./examples/seed.sql:/docker-entrypoint-initdb.d/seed.sql
     environment:
       POSTGRES_PASSWORD: postgres
       POSTGRES_USER: postgres

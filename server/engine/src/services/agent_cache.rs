@@ -1,5 +1,5 @@
 /// Agent caching service for improved performance
-use portico_shared::models::agents::{AgentCapabilities, AgentPolicy};
+use portico_database::models::agents::{AgentCapabilities, AgentPolicy};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};

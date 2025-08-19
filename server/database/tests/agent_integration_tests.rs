@@ -1,9 +1,9 @@
-use shared::models::{
+use models::models::{
     Agent, AgentCapabilities, AgentPolicy, AgentManager,
     WorkflowValidator, ValidationResult, GarbageCollectionPolicy,
     PlanRequest, WorkflowPlanner
 };
-use shared::{IdFields, TimestampFields};
+use models::{IdFields, TimestampFields};
 use serde_json::{json, Value};
 use sqlx::PgPool;
 use std::env;

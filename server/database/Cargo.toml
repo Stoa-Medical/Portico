@@ -1,5 +1,5 @@
 [package]
-name = "portico-shared"
+name = "portico-database"
 version = "0.2.0"
 edition = "2021"
 

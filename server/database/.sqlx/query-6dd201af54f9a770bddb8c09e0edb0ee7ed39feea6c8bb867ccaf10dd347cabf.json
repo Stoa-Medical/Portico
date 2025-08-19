@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO signals (\n                global_uuid, user_requested_uuid, workflow_id, initiator_agent_id, rts_id,\n                signal_type, initial_data, response_data, error_message, created_at, updated_at\n            ) VALUES ($1, $2, $3, $4, $5, ($6::text)::signal_type, $7, $8, $9, $10, $11)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Int4",
+        "Int8",
+        "Text",
+        "Json",
+        "Json",
+        "Text",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6dd201af54f9a770bddb8c09e0edb0ee7ed39feea6c8bb867ccaf10dd347cabf"
+}

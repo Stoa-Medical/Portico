@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
+use std::str::FromStr;
 
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Workflow {
     fn from_row(row: &sqlx::postgres::PgRow) -> sqlx::Result<Self> {
@@ -141,7 +142,7 @@ impl DatabaseItem for Workflow {
         let workflow_state = self.state(); // Get the current state
 
         // Use query_scalar! for inserting the workflow and returning the ID
-        let workflow_id = sqlx::query_scalar!(
+        let _workflow_id = sqlx::query_scalar!(
             r#"
             INSERT INTO workflows (
                 global_uuid, description, workflow_state, created_at, updated_at
@@ -150,8 +151,8 @@ impl DatabaseItem for Workflow {
             RETURNING id
             "#,
             uuid_parsed,
-            &self.description,
-            workflow_state as WorkflowState,
+            self.description.as_deref(),
+            workflow_state as &WorkflowState,
             &self.timestamps.created,
             &self.timestamps.updated
         )
@@ -176,8 +177,8 @@ impl DatabaseItem for Workflow {
                 updated_at = $3
             WHERE global_uuid = $4
             "#,
-            &self.description,
-            workflow_state as WorkflowState,
+            self.description.as_deref(),
+            workflow_state as &WorkflowState,
             &self.timestamps.updated,
             uuid_parsed
         )
