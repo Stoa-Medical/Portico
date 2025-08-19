@@ -1,4 +1,4 @@
-use super::types::{Agent, AgentCapabilities, AgentPolicy};
+use super::types::Agent;
 use anyhow::{anyhow, Result};
 use serde_json::Value;
 

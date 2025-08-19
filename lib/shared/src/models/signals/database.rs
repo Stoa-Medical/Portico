@@ -1,9 +1,7 @@
 use super::types::Signal;
-use crate::models::SignalType;
 use crate::{DatabaseItem, IdFields, TimestampFields};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use serde_json::Value;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 

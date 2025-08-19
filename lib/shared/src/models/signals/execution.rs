@@ -1,5 +1,4 @@
 use super::types::{RunPayload, Signal, SignalType, SyncPayload};
-use anyhow::{anyhow, Result};
 use serde_json::Value;
 
 impl Signal {

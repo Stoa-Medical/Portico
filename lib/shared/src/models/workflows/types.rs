@@ -1,4 +1,3 @@
-use crate::models::steps::Step;
 use crate::{IdFields, TimestampFields};
 use serde::{Deserialize, Serialize};
 

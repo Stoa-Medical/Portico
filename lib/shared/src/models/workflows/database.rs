@@ -1,12 +1,9 @@
 use super::types::{Workflow, WorkflowState};
-use crate::models::steps::Step;
 use crate::{DatabaseItem, IdFields, JsonLike, TimestampFields};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde_json::Value;
-use sqlx::types::JsonValue;
 use sqlx::{PgPool, Row};
-use std::str::FromStr;
 use uuid::Uuid;
 
 impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Workflow {
