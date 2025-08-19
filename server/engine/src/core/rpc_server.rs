@@ -7,8 +7,8 @@ use crate::services::agent_cache::AgentCacheService;
 use crate::services::request_batcher::{RequestBatcherService, BatchConfig};
 use crate::proto::bridge_service_server::{BridgeService, BridgeServiceServer};
 use crate::proto::{
-    CreateWorkflowRequest, DeleteWorkflowRequest, GeneralResponse, PlanWorkflowRequest,
-    PlanWorkflowResponse, ServerInitRequest, SignalRequest, SignalResponse,
+    CreateWorkflowRequest, DeleteWorkflowRequest, GeneralResponse,
+    ServerInitRequest, SignalRequest, SignalResponse,
 };
 use crate::SharedWorkflowMap;
 use sqlx::PgPool;

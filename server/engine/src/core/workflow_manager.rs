@@ -2,14 +2,11 @@ use crate::handlers::{run, fyi, sync};
 use crate::proto::{SignalRequest, SignalResponse, SignalType};
 use crate::proto_struct_to_json;
 use crate::SharedWorkflowMap;
-use portico_database::models::{DatabaseItem, RunningStatus, RuntimeSession};
-use serde_json::json;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tonic::Status;
-use uuid;
 
 // Workflow manager handles message queuing and processing
 pub struct WorkflowManager {

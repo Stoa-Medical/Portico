@@ -1,4 +1,5 @@
-use portico_database::models::{Agent, Workflow, DatabaseItem, IdFields};
+use portico_database::models::Workflow;
+use portico_database::{DatabaseItem, IdFields};
 use sqlx::PgPool;
 use tonic::Status;
 use serde_json::Value;
@@ -40,17 +41,18 @@ impl AgentManagerService {
 
         // 2. If validation failed, return without creating workflow
         if !plan_result.validation_result.is_valid {
+            let requires_approval = plan_result.validation_result.requires_approval;
             return Ok(WorkflowCreationResult {
                 workflow_uuid: None,
                 plan_result,
                 was_saved: false,
-                requires_approval: plan_result.validation_result.requires_approval,
+                requires_approval,
             });
         }
 
         // 3. Create workflow from specification
         let workflow_uuid = Uuid::new_v4().to_string();
-        let mut workflow = self.create_workflow_from_spec(
+        let workflow = self.create_workflow_from_spec(
             &plan_result.plan_response.workflow_spec,
             agent_id,
             workflow_uuid.clone(),
@@ -58,19 +60,19 @@ impl AgentManagerService {
         ).await?;
 
         let mut was_saved = false;
+        let requires_approval = plan_result.validation_result.requires_approval;
 
         // 4. Save to database if requested and doesn't require approval
-        if save_to_db && !plan_result.validation_result.requires_approval {
+        if save_to_db && !requires_approval {
             workflow.try_db_create(&self.db_pool).await
                 .map_err(|e| Status::internal(format!("Failed to save workflow: {}", e)))?;
             was_saved = true;
         }
-
         Ok(WorkflowCreationResult {
             workflow_uuid: Some(workflow_uuid),
             plan_result,
             was_saved,
-            requires_approval: plan_result.validation_result.requires_approval,
+            requires_approval,
         })
     }
 

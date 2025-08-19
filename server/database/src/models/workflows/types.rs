@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 /// A Workflow represents a sequence of configurable steps that can be executed.
 /// Workflows define the processing logic and can be dynamically created by Agents.
 /// NOTE: Workflows are created in the UI, and Supabase is the source-of-truth for their state.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Workflow {
     pub identifiers: IdFields,
     pub timestamps: TimestampFields,

@@ -1,56 +1,9 @@
-// Disabled due to shared library compilation issues
-// use portico_database::models::agents::{Agent, AgentCapabilities, AgentPolicy};
-// use portico_database::models::workflows::{WorkflowPlanner, PlanRequest, PlanResponse, WorkflowValidator};
-// use portico_database::{DatabaseItem, IdFields};
 use sqlx::PgPool;
 use tonic::Status;
 use serde_json::Value;
-use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
-
-// Temporary placeholder types while shared library is being fixed
-#[derive(Debug, Clone)]
-pub struct Agent {
-    pub id: i32,
-    pub name: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PlanRequest {
-    pub agent_id: i32,
-    pub objective: String,
-    pub context: Option<Value>,
-    pub constraints: Option<Value>,
-    pub is_ephemeral: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PlanResponse {
-    pub workflow_spec: WorkflowSpec,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorkflowSpec {
-    pub name: String,
-    pub description: Option<String>,
-    pub workflow_type: Option<String>,
-    pub steps: Vec<StepSpec>,
-    pub is_ephemeral: bool,
-    pub version: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StepSpec {
-    pub name: String,
-    pub action: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ValidationResult {
-    pub is_valid: bool,
-    pub errors: Vec<String>,
-    pub requires_approval: bool,
-}
+use portico_database::models::{PlanResponse, WorkflowSpec, StepSpec};
+use portico_database::models::ValidationResult;
 
 #[derive(Debug, Clone)]
 pub struct PlanValidationResult {
@@ -69,7 +22,7 @@ impl PlanValidationResult {
 /// Engine-side workflow planning service that integrates with shared library components
 pub struct WorkflowPlannerService {
     db_pool: PgPool,
-    agent_cache: HashMap<i32, Agent>,
+    agent_cache: HashMap<i32, ()>, // Simplified until agent integration
 }
 
 impl WorkflowPlannerService {
@@ -83,38 +36,43 @@ impl WorkflowPlannerService {
     /// Plan a workflow based on agent capabilities and objective (placeholder implementation)
     pub async fn plan_workflow_for_agent(
         &mut self,
-        agent_id: i32,
+        _agent_id: i32,
         objective: String,
         _context: Option<Value>,
         _constraints: Option<Value>,
-        _is_ephemeral: bool,
+        is_ephemeral: bool,
     ) -> Result<PlanValidationResult, Status> {
         // Placeholder implementation until shared library is fixed
 
-        // Create a simple workflow spec
+        // Create a simple workflow spec using database types
         let workflow_spec = WorkflowSpec {
             name: format!("Workflow for: {}", objective.chars().take(50).collect::<String>()),
             description: Some(format!("Auto-generated workflow for objective: {}", objective)),
             workflow_type: Some("auto_generated".to_string()),
             steps: vec![
                 StepSpec {
-                    name: "analyze_objective".to_string(),
-                    action: format!("Analyze: {}", objective),
+                    name: Some("analyze_objective".to_string()),
+                    description: Some(format!("Analyze: {}", objective)),
+                    step_type: "prompt".to_string(),
+                    config: serde_json::json!({ "objective": objective }),
                 },
                 StepSpec {
-                    name: "execute_task".to_string(),
-                    action: "Execute the planned task".to_string(),
-                },
-                StepSpec {
-                    name: "report_results".to_string(),
-                    action: "Report task completion".to_string(),
+                    name: Some("execute_task".to_string()),
+                    description: Some("Execute the planned task".to_string()),
+                    step_type: "python".to_string(),
+                    config: serde_json::json!({}),
                 },
             ],
-            is_ephemeral: _is_ephemeral,
+            is_ephemeral,
             version: "v1".to_string(),
         };
 
-        let plan_response = PlanResponse { workflow_spec };
+        let plan_response = PlanResponse {
+            workflow_spec,
+            validation_errors: vec![],
+            estimated_steps: 2,
+            requires_approval: false,
+        };
 
         // Simple validation - approve if objective is reasonable
         let validation_result = ValidationResult {
@@ -126,24 +84,15 @@ impl WorkflowPlannerService {
             } else {
                 vec![]
             },
+            warnings: vec![],
             requires_approval: objective.to_lowercase().contains("delete")
                 || objective.to_lowercase().contains("admin")
                 || objective.to_lowercase().contains("critical"),
         };
 
-        // 5. Return comprehensive result
         Ok(PlanValidationResult {
             plan_response,
             validation_result,
-        })
-    }
-
-    /// Load agent from database with caching (placeholder implementation)
-    async fn _load_agent(&mut self, agent_id: i32) -> Result<Agent, String> {
-        // Placeholder implementation - just create a simple agent
-        Ok(Agent {
-            id: agent_id,
-            name: format!("Agent {}", agent_id),
         })
     }
 
@@ -153,8 +102,8 @@ impl WorkflowPlannerService {
     }
 
     /// Remove specific agent from cache
-    pub fn invalidate_agent(&mut self, agent_id: i32) {
-        self.agent_cache.remove(&agent_id);
+    pub fn invalidate_agent(&mut self, _agent_id: i32) {
+        // No-op placeholder until agent integration
     }
 
     /// Get cached agent count for monitoring
@@ -162,7 +111,6 @@ impl WorkflowPlannerService {
         self.agent_cache.len()
     }
 }
-
 
 #[cfg(test)]
 mod tests {

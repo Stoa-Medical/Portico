@@ -1,6 +1,6 @@
 /// Agent caching service for improved performance
 use portico_database::models::agents::{AgentCapabilities, AgentPolicy};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
@@ -145,7 +145,7 @@ impl AgentCacheService {
     pub async fn cleanup_expired(&self) {
         let mut cache = self.cache.write().await;
         let mut stats = self.stats.write().await;
-        let now = Instant::now();
+        let _now = Instant::now();
 
         let initial_count = cache.len();
         cache.retain(|_, agent| agent.last_updated.elapsed() < self.ttl);

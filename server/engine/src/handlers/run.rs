@@ -1,7 +1,8 @@
 use crate::SharedWorkflowMap;
 use crate::proto::SignalResponse;
 use crate::json_to_proto_struct;
-use portico_database::{DatabaseItem, RuntimeSession};
+use portico_database::{DatabaseItem, IdFields};
+use portico_database::models::Step;
 use serde_json::Value;
 use sqlx::PgPool;
 use tonic::Status;
@@ -27,22 +28,33 @@ pub async fn handle_run_signal(
         workflow.identifiers.global_uuid.clone()
     };
 
-    // Get the workflow and run it
-    let runtime_session = {
+    // Get the workflow with steps
+    let workflow = {
         let workflows = workflow_map.read().await;
-        let workflow = workflows.get(&workflow_uuid).ok_or_else(|| {
-            Status::not_found(format!("Workflow {} not found", workflow_uuid))
-        })?;
+        workflows.get(&workflow_uuid)
+            .cloned()
+            .ok_or_else(|| Status::not_found(format!("Workflow {} not found", workflow_uuid)))?
+    };
+    let step_ids = workflow.step_ids.clone().unwrap_or_default();
 
-        match workflow.run(run_data).await {
-            Ok(session) => session,
-            Err(e) => {
-                eprintln!("[ERROR] Failed to run workflow {}: {}", workflow_uuid, e);
-                return Err(Status::internal(format!(
-                    "Failed to execute workflow: {}",
-                    e
-                )));
-            }
+    // Load steps by local IDs
+    let mut steps: Vec<Step> = Vec::new();
+    for local_id in step_ids {
+        let id = IdFields::with_values(Some(local_id), String::new());
+        if let Some(step) = Step::try_db_select_by_id(&pool, &id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to load step {}: {}", local_id, e)))?
+        {
+            steps.push(step);
+        }
+    }
+
+    // Run workflow with loaded steps
+    let runtime_session = match workflow.run_with_steps(run_data, steps).await {
+        Ok(session) => session,
+        Err(e) => {
+            eprintln!("[ERROR] Failed to run workflow {}: {}", workflow_uuid, e);
+            return Err(Status::internal(format!("Failed to execute workflow: {}", e)));
         }
     };
 

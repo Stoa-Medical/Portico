@@ -2,9 +2,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, Mutex, RwLock};
-use tokio::time::{sleep, timeout};
-use serde::{Deserialize, Serialize};
+use tokio::sync::{mpsc, RwLock};
+use tokio::time::timeout;
+use serde::Serialize;
 
 /// Batch request types
 #[derive(Debug)]
