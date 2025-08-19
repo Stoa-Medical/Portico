@@ -32,3 +32,21 @@ digest.txt
 server/test.sql
 # SpecStory explanation file
 .specstory/.what-is-this.md
+
+# BEGIN roobert
+# Roobert
+.roobert/
+.DS_Store
+# Common dev tools
+.cursor/
+.cursor*
+.kiro/
+.specstory/
+.paic/
+claude/
+.aider*
+diff.txt
+temp.txt
+digest.txt
+repomix-output.xml
+# END roobert
