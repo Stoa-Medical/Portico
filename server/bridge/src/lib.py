@@ -1,3 +1,4 @@
+from __future__ import annotations
 import logging
 import json
 import uuid
@@ -552,7 +553,7 @@ async def handle_workflow_insert(payload: dict[str, Any], client: BridgeClient) 
         logger.info(f"🔔 New workflow created: {safe_payload}")
 
         # Extract record data from the Supabase payload using pydian get
-        record = get(safe_payload, "data.record", {})
+        record = get(payload, "record", {})
 
         if not record:
             logger.error("No record found in workflow insert payload")
@@ -596,7 +597,7 @@ async def handle_workflow_delete(payload: dict[str, Any], client: BridgeClient) 
         logger.info(f"🔔 Workflow deleted: {safe_payload}")
 
         # Extract record data from the Supabase payload using pydian get
-        record = get(safe_payload, "data.record", {})
+        record = get(payload, "record", {})
 
         if not record:
             logger.error("No record found in workflow delete payload")

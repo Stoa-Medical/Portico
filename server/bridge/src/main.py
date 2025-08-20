@@ -30,9 +30,8 @@ from signal import SIGINT, SIGTERM
 from supabase import create_async_client
 from dotenv import load_dotenv
 
-from src.lib import logger
-from src.lib import (
-    BridgeClient,
+from src.bridge import BridgeClient, logger
+from src.bridge.handlers import (
     handle_signal_insert,
     handle_workflow_insert,
     handle_workflow_delete,
