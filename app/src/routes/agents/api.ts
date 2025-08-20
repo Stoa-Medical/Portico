@@ -4,28 +4,23 @@ import type {
   Agent,
   AgentCapabilities,
   AgentPolicy,
+  Workflow,
   WorkflowCompositionRequest,
 } from "$lib/types";
 
-// Omit both "id" and "owner_id" fields for creation:
+// Omit id and timestamp fields for creation:
 export type CreateAgentPayload = Omit<
   Agent,
-  "id" | "owner_id" | "created_at" | "updated_at"
+  "id" | "global_uuid" | "created_at" | "updated_at"
 >;
 
 // Allow partial Agent updates:
 export type UpdateAgentPayload = Partial<Agent> & { id: number };
 
 export const getAgents = async (): Promise<Agent[]> => {
-  const userId = await getUserIdIfEnforced();
-  const query = supabase.from("agents").select("*");
-
-  // Only filter by owner_id if enforceAgentOwnership is enabled
-  if (userId) {
-    query.eq("owner_id", userId);
-  }
-
-  const { data, error } = await query;
+  // Note: ownership filtering removed as owner_id doesn't exist in schema
+  // Future: implement organization-based filtering if needed
+  const { data, error } = await supabase.from("agents").select("*");
   if (error) throw error;
   return data;
 };
@@ -33,10 +28,7 @@ export const getAgents = async (): Promise<Agent[]> => {
 export const saveAgent = async (
   agent: CreateAgentPayload,
 ): Promise<Agent[]> => {
-  const userId = await getUserId();
-  const { error } = await supabase
-    .from("agents")
-    .insert([{ ...agent, owner_id: userId, agent_state: "stable" }]);
+  const { error } = await supabase.from("agents").insert([agent]);
   if (error) throw error;
   return getAgents();
 };
@@ -72,54 +64,23 @@ export const deleteAgent = async (
 export const getAgentCapabilities = async (
   agentId: number,
 ): Promise<AgentCapabilities | null> => {
-  const userId = await getUserIdIfEnforced();
-
-  // Verify ownership if enforcement is enabled
-  if (userId) {
-    const { data: agentData } = await supabase
-      .from("agents")
-      .select("capabilities")
-      .eq("id", agentId)
-      .eq("owner_id", userId);
-
-    if (!agentData || agentData.length === 0) {
-      return null;
-    }
-    return agentData[0].capabilities;
-  }
-
   const { data, error } = await supabase
     .from("agents")
-    .select("capabilities")
+    .select("capabilities_json")
     .eq("id", agentId)
     .single();
 
   if (error) throw error;
-  return data.capabilities;
+  return data.capabilities_json;
 };
 
 export const updateAgentCapabilities = async (
   agentId: number,
   capabilities: AgentCapabilities,
 ): Promise<void> => {
-  const userId = await getUserIdIfEnforced();
-
-  // Verify ownership if enforcement is enabled
-  if (userId) {
-    const { data: agentData } = await supabase
-      .from("agents")
-      .select("id")
-      .eq("id", agentId)
-      .eq("owner_id", userId);
-
-    if (!agentData || agentData.length === 0) {
-      throw new Error("Agent not found or access denied");
-    }
-  }
-
   const { error } = await supabase
     .from("agents")
-    .update({ capabilities })
+    .update({ capabilities_json: capabilities })
     .eq("id", agentId);
 
   if (error) throw error;
@@ -128,54 +89,23 @@ export const updateAgentCapabilities = async (
 export const getAgentPolicy = async (
   agentId: number,
 ): Promise<AgentPolicy | null> => {
-  const userId = await getUserIdIfEnforced();
-
-  // Verify ownership if enforcement is enabled
-  if (userId) {
-    const { data: agentData } = await supabase
-      .from("agents")
-      .select("policy")
-      .eq("id", agentId)
-      .eq("owner_id", userId);
-
-    if (!agentData || agentData.length === 0) {
-      return null;
-    }
-    return agentData[0].policy;
-  }
-
   const { data, error } = await supabase
     .from("agents")
-    .select("policy")
+    .select("policy_json")
     .eq("id", agentId)
     .single();
 
   if (error) throw error;
-  return data.policy;
+  return data.policy_json;
 };
 
 export const updateAgentPolicy = async (
   agentId: number,
   policy: AgentPolicy,
 ): Promise<void> => {
-  const userId = await getUserIdIfEnforced();
-
-  // Verify ownership if enforcement is enabled
-  if (userId) {
-    const { data: agentData } = await supabase
-      .from("agents")
-      .select("id")
-      .eq("id", agentId)
-      .eq("owner_id", userId);
-
-    if (!agentData || agentData.length === 0) {
-      throw new Error("Agent not found or access denied");
-    }
-  }
-
   const { error } = await supabase
     .from("agents")
-    .update({ policy })
+    .update({ policy_json: policy })
     .eq("id", agentId);
 
   if (error) throw error;
@@ -185,33 +115,103 @@ export const updateAgentPolicy = async (
 export const requestPlanWorkflow = async (
   payload: WorkflowCompositionRequest,
 ): Promise<void> => {
-  const userId = await getUserId();
-
-  // Verify agent ownership if enforcement is enabled
-  const userIdIfEnforced = await getUserIdIfEnforced();
-  if (userIdIfEnforced) {
-    const { data: agentData } = await supabase
-      .from("agents")
-      .select("id")
-      .eq("id", payload.agent_id)
-      .eq("owner_id", userIdIfEnforced);
-
-    if (!agentData || agentData.length === 0) {
-      throw new Error("Agent not found or access denied");
-    }
-  }
-
-  // Create a composition request that the bridge service will pick up
-  const { error } = await supabase.from("agent_composition_requests").insert([
+  // Create a signal to trigger agent workflow composition
+  // The bridge service will handle this signal and coordinate with the engine
+  const { error } = await supabase.from("signals").insert([
     {
-      agent_id: payload.agent_id,
-      objective: payload.objective,
-      context: payload.context ?? {},
-      constraints: payload.constraints ?? {},
-      is_ephemeral: !!payload.is_ephemeral,
-      auto_execute: !!payload.auto_execute,
+      initiator_agent_id: payload.agent_id,
+      user_requested_uuid: crypto.randomUUID(),
+      signal_type: "run",
+      initial_data: {
+        action: "compose_workflow",
+        agent_id: payload.agent_id,
+        objective: payload.objective,
+        context: payload.context ?? {},
+        constraints: payload.constraints ?? {},
+        is_ephemeral: !!payload.is_ephemeral,
+        auto_execute: !!payload.auto_execute,
+      },
     },
   ]);
 
   if (error) throw error;
+};
+
+// Get workflows created by a specific agent
+export const getAgentWorkflowHistory = async (
+  agentId: number,
+  includeEphemeral = false,
+): Promise<Workflow[]> => {
+  let query = supabase
+    .from("workflows")
+    .select("*")
+    .eq("created_by_agent_id", agentId)
+    .order("created_at", { ascending: false });
+
+  if (!includeEphemeral) {
+    query = query.eq("is_ephemeral", false);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+};
+
+// Get execution metrics for workflows created by an agent
+export const getAgentExecutionMetrics = async (
+  agentId: number,
+  timeRange?: { from: Date; to: Date },
+) => {
+  // Get workflows created by this agent
+  const { data: workflows } = await supabase
+    .from("workflows")
+    .select("id")
+    .eq("created_by_agent_id", agentId);
+
+  const workflowIds = workflows?.map((w) => w.id) ?? [];
+
+  if (workflowIds.length === 0) {
+    return {
+      totalWorkflowsCreated: 0,
+      totalExecutions: 0,
+      successRate: 0,
+      avgExecutionTime: "0s",
+    };
+  }
+
+  let query = supabase
+    .from("runtime_sessions")
+    .select("*")
+    .in("workflow_id", workflowIds);
+
+  if (timeRange) {
+    query = query
+      .gte("created_at", timeRange.from.toISOString())
+      .lte("created_at", timeRange.to.toISOString());
+  }
+
+  const { data: sessions } = await query;
+
+  // Calculate metrics
+  const totalExecutions = sessions?.length ?? 0;
+  const successfulExecutions =
+    sessions?.filter((s) => s.rts_status === "completed").length ?? 0;
+  const totalTime =
+    sessions?.reduce(
+      (sum, s) => sum + parseFloat(s.total_execution_time ?? 0),
+      0,
+    ) ?? 0;
+
+  return {
+    totalWorkflowsCreated: workflowIds.length,
+    totalExecutions,
+    successRate:
+      totalExecutions > 0
+        ? Math.round((successfulExecutions / totalExecutions) * 100)
+        : 0,
+    avgExecutionTime:
+      totalExecutions > 0
+        ? (totalTime / totalExecutions).toFixed(2) + "s"
+        : "0s",
+  };
 };

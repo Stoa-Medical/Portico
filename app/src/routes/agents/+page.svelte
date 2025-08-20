@@ -13,7 +13,6 @@
     Label,
     Input,
     Textarea,
-    Select,
     Badge,
     Tabs,
     TabItem,
@@ -35,6 +34,8 @@
     updateAgentCapabilities,
     getAgentPolicy,
     updateAgentPolicy,
+    getAgentWorkflowHistory,
+    getAgentExecutionMetrics,
   } from "./api";
   import { getWorkflowsByAgent } from "../workflows/api";
   import type { WorkflowCompositionRequest } from "$lib/types";
@@ -50,6 +51,11 @@
   let originalAgent = $state<any | null>(null);
   let agentWorkflows = $state<any[]>([]);
   let showComposeModal = $state(false);
+
+  // Agent metrics and configuration
+  let agentMetrics = $state<any | null>(null);
+  let agentCapabilities = $state<any | null>(null);
+  let agentPolicy = $state<any | null>(null);
   let compositionRequest = $state<WorkflowCompositionRequest>({
     agent_id: 0,
     objective: "",
@@ -81,17 +87,16 @@
 
   let agentFormData = $state({
     name: "",
-    type: "Workflow",
     description: "",
-    isActive: true,
   });
 
-  const agentTypes = [
-    { value: "Workflow", name: "Workflow" },
-    { value: "Information", name: "Information" },
-    { value: "Integration", name: "Integration" },
-    { value: "Transform", name: "Transform" },
-    { value: "Custom", name: "Custom" },
+  // Workflow patterns for capabilities
+  const workflowPatterns = [
+    "data-processing",
+    "web-scraping",
+    "code-generation",
+    "analysis",
+    "integration",
   ];
 
   async function loadAgents() {
@@ -114,8 +119,17 @@
         return;
       }
       agentWorkflows = await getWorkflowsByAgent(id);
+      // Load additional agent data
+      const [capabilities, policy, metrics] = await Promise.all([
+        getAgentCapabilities(id),
+        getAgentPolicy(id),
+        getAgentExecutionMetrics(id),
+      ]);
+      agentCapabilities = capabilities;
+      agentPolicy = policy;
+      agentMetrics = metrics;
     } catch (err) {
-      console.error("Failed to load agent workflows", err);
+      console.error("Failed to load agent data", err);
       agentWorkflows = [];
     }
   }
@@ -145,9 +159,7 @@
       const agentToClone = {
         id: agentProxy.id,
         name: agentProxy.name,
-        type: agentProxy.type,
         description: agentProxy.description,
-        agent_state: agentProxy.agent_state,
         created_at: agentProxy.created_at,
         updated_at: agentProxy.updated_at,
       };
@@ -214,7 +226,10 @@
       alert("Workflow composition request submitted successfully!");
     } catch (err) {
       console.error("Failed to request workflow composition", err);
-      alert("Failed to request workflow composition: " + err.message);
+      alert(
+        "Failed to request workflow composition: " +
+          (err instanceof Error ? err.message : String(err)),
+      );
     }
   }
 
@@ -270,10 +285,8 @@
 
   async function handleSubmit() {
     const newAgent = {
-      description: agentFormData.description,
-      agent_state: agentFormData.isActive ? "stable" : "inactive",
       name: agentFormData.name,
-      type: agentFormData.type,
+      description: agentFormData.description,
     };
 
     agents = await saveAgent(newAgent);
@@ -285,9 +298,7 @@
   function resetForm() {
     agentFormData = {
       name: "",
-      type: "Workflow",
       description: "",
-      isActive: true,
     };
   }
 
@@ -347,18 +358,12 @@
                       class={selectedAgent?.id === agent.id ? "text-sea" : ""}
                       >{agent.name}</TableBodyCell
                     >
-                    <TableBodyCell>{agent.type}</TableBodyCell>
+                    <TableBodyCell>Composer</TableBodyCell>
                     <TableBodyCell class="truncate max-w-xs"
                       >{agent.description}</TableBodyCell
                     >
                     <TableBodyCell>
-                      <Badge
-                        color={agent.agent_state === "stable"
-                          ? "green"
-                          : "yellow"}
-                      >
-                        {agent.agent_state}
-                      </Badge>
+                      <Badge color="green">Active</Badge>
                     </TableBodyCell>
                     <TableBodyCell
                       >{readableDate(agent.updated_at)}</TableBodyCell
@@ -415,10 +420,11 @@
                     </div>
                     <div>
                       <Label for="type" class="mb-2">Agent Type</Label>
-                      <Select
+                      <Input
                         id="type"
-                        items={agentTypes}
-                        bind:value={selectedAgent.type}
+                        value="Composer"
+                        disabled
+                        placeholder="All agents are composers"
                       />
                     </div>
                   </div>
@@ -490,7 +496,7 @@
                                   ? "green"
                                   : workflow.workflow_state === "unstable"
                                     ? "yellow"
-                                    : "gray"}
+                                    : "dark"}
                               >
                                 {workflow.workflow_state}
                               </Badge>
@@ -598,10 +604,11 @@
       </div>
       <div>
         <Label for="modalAgentType" class="mb-2">Agent Type</Label>
-        <Select
+        <Input
           id="modalAgentType"
-          items={agentTypes}
-          bind:value={agentFormData.type}
+          value="Composer"
+          disabled
+          placeholder="All agents are composers"
         />
       </div>
       <div>

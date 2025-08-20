@@ -21,29 +21,13 @@ export type UpdateStepPayload = Partial<Step> & {
 
 // Workflow CRUD operations
 export const getWorkflows = async (): Promise<Workflow[]> => {
-  const userId = await getUserIdIfEnforced();
-  let query = supabase
+  // Note: ownership filtering removed as owner_id doesn't exist
+  // Future: implement organization-based filtering if needed
+  const { data, error } = await supabase
     .from("workflows")
     .select("*")
     .order("created_at", { ascending: false });
 
-  // If enforceAgentOwnership is enabled, only show workflows created by user's agents
-  if (userId) {
-    const { data: agentData } = await supabase
-      .from("agents")
-      .select("id")
-      .eq("owner_id", userId);
-
-    const agentIds = agentData?.map((a) => a.id) ?? [];
-    if (agentIds.length > 0) {
-      query = query.in("created_by_agent_id", agentIds);
-    } else {
-      // No owned agents, return empty array
-      return [];
-    }
-  }
-
-  const { data, error } = await query;
   if (error) throw error;
   return data;
 };
@@ -51,25 +35,12 @@ export const getWorkflows = async (): Promise<Workflow[]> => {
 export const getWorkflow = async (
   workflowId: number,
 ): Promise<Workflow | null> => {
-  const userId = await getUserIdIfEnforced();
-  let query = supabase.from("workflows").select("*").eq("id", workflowId);
+  const { data, error } = await supabase
+    .from("workflows")
+    .select("*")
+    .eq("id", workflowId)
+    .single();
 
-  // Verify ownership if enforcement is enabled
-  if (userId) {
-    const { data: agentData } = await supabase
-      .from("agents")
-      .select("id")
-      .eq("owner_id", userId);
-
-    const agentIds = agentData?.map((a) => a.id) ?? [];
-    if (agentIds.length > 0) {
-      query = query.in("created_by_agent_id", agentIds);
-    } else {
-      return null;
-    }
-  }
-
-  const { data, error } = await query.single();
   if (error) {
     if (error.code === "PGRST116") return null; // Not found
     throw error;
@@ -121,18 +92,11 @@ export const deleteWorkflow = async (
 
 // Step operations for workflows
 export const getSteps = async (workflowId: number): Promise<Step[]> => {
-  const userId = await getUserIdIfEnforced();
-  let query = supabase.from("steps").select("*").eq("workflow_id", workflowId);
+  const { data, error } = await supabase
+    .from("steps")
+    .select("*")
+    .eq("workflow_id", workflowId);
 
-  // If enforceAgentOwnership is enabled, verify the workflow is owned by user's agents
-  if (userId) {
-    const workflow = await getWorkflow(workflowId);
-    if (!workflow) {
-      return [];
-    }
-  }
-
-  const { data, error } = await query;
   if (error) throw error;
   return data;
 };
@@ -173,22 +137,12 @@ export const deleteStep = async (
 export const getRuntimeSessions = async (
   workflowId: number,
 ): Promise<RuntimeSession[]> => {
-  const userId = await getUserIdIfEnforced();
-  let query = supabase
+  const { data, error } = await supabase
     .from("runtime_sessions")
     .select("*")
     .eq("workflow_id", workflowId)
     .order("created_at", { ascending: false });
 
-  // If enforceAgentOwnership is enabled, verify the workflow is owned by user's agents
-  if (userId) {
-    const workflow = await getWorkflow(workflowId);
-    if (!workflow) {
-      return [];
-    }
-  }
-
-  const { data, error } = await query;
   if (error) throw error;
   return data;
 };
@@ -199,17 +153,6 @@ export const runWorkflow = async (
   initialData: any = {},
   initiatorAgentId?: number,
 ): Promise<void> => {
-  const userId = await getUserId();
-
-  // Verify workflow exists and ownership if enforcement is enabled
-  const userIdIfEnforced = await getUserIdIfEnforced();
-  if (userIdIfEnforced) {
-    const workflow = await getWorkflow(workflowId);
-    if (!workflow) {
-      throw new Error("Workflow not found or access denied");
-    }
-  }
-
   // Create a signal to trigger workflow execution
   const { error } = await supabase.from("signals").insert([
     {
@@ -217,7 +160,7 @@ export const runWorkflow = async (
       initiator_agent_id: initiatorAgentId ?? null,
       user_requested_uuid: crypto.randomUUID(),
       signal_type: "run",
-      initial_data: JSON.stringify(initialData),
+      initial_data: initialData,
     },
   ]);
 
@@ -228,27 +171,12 @@ export const runWorkflow = async (
 export const getWorkflowsByAgent = async (
   agentId: number,
 ): Promise<Workflow[]> => {
-  const userId = await getUserIdIfEnforced();
-  let query = supabase
+  const { data, error } = await supabase
     .from("workflows")
     .select("*")
     .eq("created_by_agent_id", agentId)
     .order("created_at", { ascending: false });
 
-  // Verify agent ownership if enforcement is enabled
-  if (userId) {
-    const { data: agentData } = await supabase
-      .from("agents")
-      .select("id")
-      .eq("id", agentId)
-      .eq("owner_id", userId);
-
-    if (!agentData || agentData.length === 0) {
-      return [];
-    }
-  }
-
-  const { data, error } = await query;
   if (error) throw error;
   return data;
 };

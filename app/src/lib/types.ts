@@ -58,19 +58,18 @@ export type RuntimeSession = {
 };
 
 /**
- * Agent type - updated for composition/orchestration role
+ * Agent type - Composer/Orchestrator role
+ * Agents create and manage workflows based on their capabilities
  */
 export type Agent = {
   id: number;
+  global_uuid: string;
   name: string;
-  agent_state: string;
-  type: string;
-  description: string;
-  owner_id: string;
-  capabilities?: AgentCapabilities;
-  policy?: AgentPolicy;
-  created_at?: string;
-  updated_at?: string;
+  description?: string | null;
+  capabilities_json?: AgentCapabilities | null;
+  policy_json?: AgentPolicy | null;
+  created_at: string;
+  updated_at: string;
 };
 
 /**
@@ -81,6 +80,8 @@ export type AgentCapabilities = {
   models: string[];
   max_steps?: number;
   can_create_ephemeral: boolean;
+  can_auto_execute?: boolean;
+  workflow_patterns?: string[];
   metadata?: Record<string, any>;
 };
 
@@ -89,9 +90,33 @@ export type AgentCapabilities = {
  */
 export type AgentPolicy = {
   max_workflows_per_hour?: number;
-  allowed_patterns: string[];
+  max_ephemeral_workflows?: number;
+  allowed_patterns?: string[];
+  allowed_workflow_types?: string[];
+  execution_constraints?: {
+    max_runtime_seconds?: number;
+    max_retries?: number;
+  };
   security_constraints?: Record<string, any>;
   metadata?: Record<string, any>;
+};
+
+/**
+ * Signal type for workflow execution requests
+ */
+export type Signal = {
+  id: number;
+  global_uuid: string;
+  workflow_id?: number | null;
+  initiator_agent_id?: number | null;
+  user_requested_uuid: string;
+  signal_type: "run" | "sync" | "fyi";
+  initial_data?: any;
+  response_data?: any;
+  error_message?: string | null;
+  created_at: string;
+  updated_at: string;
+  rts_id?: number | null;
 };
 
 /**

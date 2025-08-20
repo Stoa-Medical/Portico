@@ -377,6 +377,11 @@
                     >
                       {workflow.workflow_state}
                     </span>
+                    {#if workflow.created_by_agent_id}
+                      <span class="text-blue-400"
+                        >Agent #{workflow.created_by_agent_id}</span
+                      >
+                    {/if}
                     <span>Created: {formatDate(workflow.created_at)}</span>
                     {#if workflow.workflow_type}
                       <span>Type: {workflow.workflow_type}</span>
@@ -433,6 +438,19 @@
             {#if selectedWorkflow.description}
               <p class="text-gray-300 mb-2">{selectedWorkflow.description}</p>
             {/if}
+            {#if selectedWorkflow.created_by_agent_id}
+              <div
+                class="bg-blue-900/20 border border-blue-700 text-blue-300 px-3 py-2 rounded mb-2 inline-block"
+              >
+                Created by Agent #{selectedWorkflow.created_by_agent_id}
+                <a
+                  href="/agents?id={selectedWorkflow.created_by_agent_id}"
+                  class="ml-2 text-blue-400 hover:text-blue-300 underline"
+                >
+                  View Agent →
+                </a>
+              </div>
+            {/if}
             <div class="flex items-center gap-4 text-sm text-gray-400">
               <span
                 class={`font-medium ${getWorkflowStateColor(selectedWorkflow.workflow_state)}`}
@@ -444,7 +462,11 @@
                 <span>Type: {selectedWorkflow.workflow_type}</span>
               {/if}
               {#if selectedWorkflow.is_ephemeral}
-                <span class="text-yellow-400">Ephemeral</span>
+                <span
+                  class="bg-yellow-900/30 border border-yellow-700 text-yellow-400 px-2 py-1 rounded text-xs"
+                >
+                  Ephemeral - Will be auto-deleted after execution
+                </span>
               {/if}
             </div>
           </div>

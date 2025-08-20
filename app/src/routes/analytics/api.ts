@@ -8,25 +8,6 @@ export const getAnalyticsCounts = async (
   timePeriod: string = DEFAULT_TIME_PERIOD,
 ) => {
   const fromDate = getStartDateFromTimePeriod(timePeriod);
-  const userId = await getUserId();
-
-  const { data: agentsData, error: agentsError } = await supabase
-    .from("agents")
-    .select("id")
-    .eq("owner_id", userId);
-
-  if (agentsError) throw agentsError;
-
-  const agentIds = agentsData?.map((a) => a.id) ?? [];
-
-  if (agentIds.length === 0) {
-    return {
-      agentCount: 0,
-      workflowCount: 0,
-      runtimeSessionCount: 0,
-      stepCount: 0,
-    };
-  }
 
   const [
     { count: agentCount, error: agentError },
@@ -34,14 +15,8 @@ export const getAnalyticsCounts = async (
     { count: sessionCount, error: sessionError },
     { count: stepCount, error: stepError },
   ] = await Promise.all([
-    supabase
-      .from("agents")
-      .select("id", { count: "exact", head: true })
-      .eq("owner_id", userId),
-    supabase
-      .from("workflows")
-      .select("id", { count: "exact", head: true })
-      .in("created_by_agent_id", agentIds),
+    supabase.from("agents").select("id", { count: "exact", head: true }),
+    supabase.from("workflows").select("id", { count: "exact", head: true }),
     supabase
       .from("runtime_sessions")
       .select("id", { count: "exact", head: true })
@@ -70,24 +45,13 @@ export const getWorkflowPerformance = async (
   timePeriod: string = DEFAULT_TIME_PERIOD,
 ) => {
   const fromDate = getStartDateFromTimePeriod(timePeriod);
-  const userId = await getUserId();
-
-  // Get workflows created by user's agents
-  const { data: agentData, error: agentError } = await supabase
-    .from("agents")
-    .select("id")
-    .eq("owner_id", userId);
-
-  if (agentError) throw agentError;
-  const agentIds = agentData.map((a) => a.id);
 
   const { data: workflowData, error: workflowError } = await supabase
     .from("workflows")
-    .select("id, name")
-    .in("created_by_agent_id", agentIds);
+    .select("id, name");
 
   if (workflowError) throw workflowError;
-  const workflowIds = workflowData.map((w) => w.id);
+  const workflowIds = workflowData?.map((w) => w.id) ?? [];
 
   if (workflowIds.length === 0) {
     return [];
@@ -136,24 +100,13 @@ export const getStepPerformance = async (
   timePeriod: string = DEFAULT_TIME_PERIOD,
 ) => {
   const fromDate = getStartDateFromTimePeriod(timePeriod);
-  const userId = await getUserId();
-
-  // Get workflows created by user's agents
-  const { data: agentData, error: agentError } = await supabase
-    .from("agents")
-    .select("id")
-    .eq("owner_id", userId);
-
-  if (agentError) throw agentError;
-  const agentIds = agentData.map((a) => a.id);
 
   const { data: workflowData, error: workflowError } = await supabase
     .from("workflows")
-    .select("id, name")
-    .in("created_by_agent_id", agentIds);
+    .select("id, name");
 
   if (workflowError) throw workflowError;
-  const workflowIds = workflowData.map((w) => w.id);
+  const workflowIds = workflowData?.map((w) => w.id) ?? [];
 
   if (workflowIds.length === 0) {
     return [];
@@ -207,24 +160,13 @@ export const getErrorDistribution = async (
   timePeriod: string = DEFAULT_TIME_PERIOD,
 ) => {
   const fromDate = getStartDateFromTimePeriod(timePeriod);
-  const userId = await getUserId();
-
-  // Get workflows created by user's agents
-  const { data: agentData, error: agentError } = await supabase
-    .from("agents")
-    .select("id")
-    .eq("owner_id", userId);
-
-  if (agentError) throw agentError;
-  const agentIds = agentData.map((a) => a.id);
 
   const { data: workflowData, error: workflowError } = await supabase
     .from("workflows")
-    .select("id")
-    .in("created_by_agent_id", agentIds);
+    .select("id");
 
   if (workflowError) throw workflowError;
-  const workflowIds = workflowData.map((w) => w.id);
+  const workflowIds = workflowData?.map((w) => w.id) ?? [];
 
   if (workflowIds.length === 0) {
     return {
