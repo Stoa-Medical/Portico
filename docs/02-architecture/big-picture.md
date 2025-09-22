@@ -1,16 +1,16 @@
 # System Architecture – Big Picture
 
-Portico is an **agent-centric integration engine**. At a high level there are only two deployable artefacts:
+Portico is an **agent-orchestrated workflow engine**. At a high level there are only two deployable artefacts:
 
-1. **Server Stack** – runs the runtime that executes agents.
+1. **Server Stack** – runs the runtime that executes workflows.
 2. **Desktop App** – a Tauri-based UI and local orchestrator.
 
 ## 1. Server Stack
 
 | Component        | Language | Purpose |
 | ---------------- | -------- | ------- |
-| **Engine**       | Rust     | gRPC service that executes agents, persists results to Postgres (via Supabase) |
-| **Bridge**       | Python   | Listens to Supabase Realtime events and forwards them as gRPC calls to Engine |
+| **Engine**       | Rust     | gRPC service that executes workflows and persists results to Postgres (via Supabase) |
+| **Bridge**       | Python   | Listens to Supabase Realtime events and forwards signals and composition requests as gRPC calls to Engine |
 | **Supabase**     | N/A      | Postgres + Auth + Realtime; single source of truth |
 
 All three services are brought up together via `server/docker-compose.yml`.

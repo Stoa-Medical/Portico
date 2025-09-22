@@ -138,15 +138,6 @@ wheels = [
 ]
 
 [[package]]
-name = "asyncio"
-version = "3.4.3"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/da/54/054bafaf2c0fb8473d423743e191fcdf49b2c1fd5e9af3524efbe097bafd/asyncio-3.4.3.tar.gz", hash = "sha256:83360ff8bc97980e4ff25c964c7bd3923d333d177aa4f7fb736b019f26c7cb41", size = 204411 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/22/74/07679c5b9f98a7cb0fc147b1ef1cc1853bc07a4eb9cb5731e24732c5f773/asyncio-3.4.3-py3-none-any.whl", hash = "sha256:c4d18b22701821de07bd6aea8b53d21449ec0ec5680645e5317062ea21817d2d", size = 101767 },
-]
-
-[[package]]
 name = "attrs"
 version = "25.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -183,17 +174,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/5a/d3/8ae2869247df154b64c1884d7346d412fed0c49df84db635aab2d1c40e62/deprecation-2.1.0.tar.gz", hash = "sha256:72b3bde64e5d778694b0cf68178aed03d15e15477116add3fb773e581f9518ff", size = 173788 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/02/c3/253a89ee03fc9b9682f1541728eb66db7db22148cd94f89ab22528cd1e1b/deprecation-2.1.0-py2.py3-none-any.whl", hash = "sha256:a10811591210e1fb0e768a8c25517cabeabcba6f0bf96564f8ff45189f90b14a", size = 11178 },
-]
-
-[[package]]
-name = "dotenv"
-version = "0.9.9"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "python-dotenv" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/b2/b7/545d2c10c1fc15e48653c91efde329a790f2eecfbbf2bd16003b5db2bab0/dotenv-0.9.9-py2.py3-none-any.whl", hash = "sha256:29cf74a087b31dafdb5a446b6d7e11cbce8ed2741540e2339c69fbef92c94ce9", size = 1892 },
 ]
 
 [[package]]
@@ -643,21 +623,13 @@ name = "portico-bridge"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "asyncio" },
-    { name = "dotenv" },
-    { name = "gotrue" },
     { name = "grpcio" },
     { name = "grpcio-tools" },
-    { name = "httpx" },
-    { name = "postgrest" },
     { name = "protobuf" },
     { name = "pydian" },
     { name = "python-dotenv" },
-    { name = "realtime" },
     { name = "result" },
-    { name = "storage3" },
     { name = "supabase" },
-    { name = "supafunc" },
 ]
 
 [package.dev-dependencies]
@@ -671,21 +643,13 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "asyncio", specifier = ">=3.4.3" },
-    { name = "dotenv", specifier = ">=0.9.9" },
-    { name = "gotrue", specifier = ">=2.0.0" },
     { name = "grpcio", specifier = ">=1.62.1" },
     { name = "grpcio-tools", specifier = ">=1.62.1" },
-    { name = "httpx", specifier = ">=0.24.0" },
-    { name = "postgrest", specifier = ">=0.15.0" },
     { name = "protobuf", specifier = ">=4.25.3" },
     { name = "pydian", specifier = ">=0.4.3" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
-    { name = "realtime", specifier = ">=1.0.0" },
     { name = "result", specifier = ">=0.17.0" },
-    { name = "storage3", specifier = ">=0.8.0" },
     { name = "supabase", specifier = ">=2.13.0" },
-    { name = "supafunc", specifier = ">=0.3.0" },
 ]
 
 [package.metadata.requires-dev]

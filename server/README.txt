@@ -1,88 +1,186 @@
-This is the server code: Supabase configuration, a Python bridge service that forwards Supabase Realtime events, and a Rust gRPC engine that executes workflow steps.
+PORTICO SERVER
+==============
 
-## Quick Start (tmuxinator)
+The Portico server is a microservices architecture comprising:
+- PostgreSQL Database (via Supabase) - Core data storage
+- Rust Database Crate (shared library) - Database models and operations
+- Rust Engine - Processes signals and manages workflows via gRPC
+- Python Bridge - Connects database events to the engine
 
-From inside `server/`, run:
+Communication flow: Frontend ↔ Database ← Bridge → Engine
 
-```bash
-tmuxinator start
-```
+## QUICK START
 
-This command launches a tmux session (defined in `.tmuxinator.yml`) with three panes:
+### Option 1: Everything with Docker Compose
+From server/ directory:
 
-- Supabase (pane 1) – `supabase start`
-- Engine (pane 2)   – `cargo run` inside `engine/`
-- Bridge (pane 3)   – `python -m src.main` inside `bridge/` (after the engine is listening on port 50051)
+  docker compose up --build
 
-Detach with `Ctrl-b d` and re-attach anytime with `tmux attach -t portico-server`.
+This launches:
+- PostgreSQL database (port 54322)
+- Schema migration with Atlas
+- Engine service (gRPC on port 50051)
+- Bridge service (connects to engine)
 
-## Quick Start (Docker Compose)
+Use Ctrl-C to stop all services.
 
-From the repository root (or inside `server/`), run:
+### Option 2: Development with tmuxinator
+From server/ directory:
 
-```bash
-# build & start Supabase, Bridge, and Engine
-docker compose up --build
-```
+  tmuxinator start
 
-This command launches:
+Launches a 3-pane tmux session:
+- Pane 1: Supabase (database/supabase start)
+- Pane 2: Engine (engine/cargo run)
+- Pane 3: Bridge (bridge/python -m src.main)
 
-- Supabase (API: 54321, DB: 54322, Studio: 54323)
-- Bridge service (Python, port 50051 inside network)
-- Engine service (Rust, port 50051 inside network)
+Detach: Ctrl-b d
+Re-attach: tmux attach -t portico-server
 
-Use `Ctrl-C` to stop all services. For granular control continue with the sections below.
+## MANUAL COMPONENT SETUP
 
-To run components independently:
+### 1. Database Setup
+  cd database
+  supabase start                    # Start local Supabase
+  ../reset_db.sh                    # Apply schema & seed data
 
-1. Supabase (local dev only)
-   - cd supabase
-   - Review `config.toml` (API: 54321, DB: 54322, Studio: 54323)
-   - Start: `supabase start`
-   - Reset schema & seed data: `../reset_db.sh`
+Database will be available at:
+- API: http://localhost:54321
+- Direct connection: postgresql://postgres:postgres@localhost:54322/postgres
+- Studio: http://localhost:54323
 
-2. Python Bridge
-   - cd bridge
-   - Install uv & create venv: `uv venv`
-   - Activate venv: `source .venv/bin/activate`
-   - Install deps: `uv pip install -e .`
-   - Copy & configure env: `cp .env-example .env` (set SUPABASE_URL, SUPABASE_KEY, ENGINE_URL)
-   - Run: `python -m src.main`
+### 2. Rust Engine
+  cd engine
+  cp .env-example .env              # Configure DATABASE_URL
+  cargo check                       # Verify compilation
+  cargo run                         # Start gRPC server on :50051
 
-3. Rust Engine
-   - cd engine
-   - Copy & configure env: `cp .env-example .env` (set DATABASE_URL)
-   - Check & build: `cargo check` or `cargo build`
-   - Run: `cargo run`
+### 3. Python Bridge
+  cd bridge
+  ./install_deps.sh                 # Setup uv environment
+  source .venv/bin/activate
+  cp .env-example .env              # Configure DATABASE_URL, ENGINE_*
+  python -m src.main                # Start bridge service
 
-REPO STRUCTURE
-- `supabase/` – Supabase local instance config
-- `bridge/`   – Python middleware forwarding Realtime events to engine
-- `engine/`   – Rust gRPC server executing multi-step workflows
-- `proto/`    – shared protobuf definitions
-- `scheme.hcl`– database schema (source of truth)
-- `examples/` – SQL scripts for seeding and test scenarios
-- `reset_db.sh`– reset schema & seed script (uses supabase db reset & atlas)
-- `docker-compose.yml`– Compose file for bridge & engine
+## ARCHITECTURE OVERVIEW
 
-TESTS
-- Engine (Rust)
-  - Unit: `engine/src/lib.rs` & submodules
-  - Integration: `engine/tests/`
-  - Run: `cargo test`
-- Bridge (Python)
-  - Tests: `bridge/tests/`
-  - Run: `python -m pytest`
+### Database Crate (/database/)
+Shared Rust library containing:
+- Database models (Agent, Workflow, Step, Signal, RuntimeSession)
+- Database operations via sqlx
+- Type definitions and validation
+- Agent-workflow system implementation
 
-LOCAL TOOLKIT
+Key traits:
+- DatabaseItem: CRUD operations for all entities
+- JsonLike: JSON serialization/deserialization
+
+### Engine (/engine/)
+Rust gRPC server that:
+- Receives signals via gRPC (run, sync, fyi)
+- Manages workflow execution with step loading
+- Coordinates agent planning and validation
+- Persists runtime sessions to database
+
+Key components:
+- WorkflowManager: Message queuing and processing
+- AgentManager: Agent-driven workflow composition
+- Signal handlers: run, sync, fyi operations
+
+### Bridge (/bridge/)
+Python service that:
+- Monitors database changes via Supabase realtime
+- Forwards events to Engine via gRPC
+- Handles connection resilience and retries
+
+### Shared Database Schema (/scheme.hcl)
+Atlas HCL schema defining:
+- Core entities: workflows, steps, signals, runtime_sessions, agents
+- Relationships and constraints
+- Enums: workflow_state, step_type, signal_type, running_status
+
+## DEVELOPMENT WORKFLOWS
+
+### Testing
+Engine (Rust):
+  cd engine && cargo test
+
+Bridge (Python):
+  cd bridge && source .venv/bin/activate && pytest
+
+Database (Rust):
+  cd database && cargo test
+
+### Database Operations
+Reset schema and data:
+  ./reset_db.sh
+
+Connect to database:
+  psql postgresql://postgres:postgres@localhost:54322/postgres
+
+View logs:
+  docker compose logs -f postgres
+
+### Agent-Workflow System
+The system implements agent-driven workflow composition:
+
+1. Agents analyze objectives and create workflow specifications
+2. Workflows execute steps using the runtime engine
+3. Results are persisted and can trigger further workflows
+
+Key files:
+- database/src/models/agents/planner.rs - Workflow planning logic
+- database/src/models/workflows/runtime.rs - Workflow execution
+- engine/src/services/agent_manager.rs - Agent coordination
+
+## REPOSITORY STRUCTURE
+
+/server/
+├── database/          # Shared Rust database library
+│   ├── src/models/    # Database entities and operations
+│   ├── scheme.hcl     # Atlas database schema
+│   └── tests/         # Database integration tests
+├── engine/            # Rust gRPC workflow engine
+│   ├── src/core/      # Core workflow management
+│   ├── src/handlers/  # Signal handlers (run, sync, fyi)
+│   └── src/services/  # Agent management, planning, caching
+├── bridge/            # Python database-to-engine bridge
+│   ├── src/           # Bridge service implementation
+│   └── tests/         # Bridge service tests
+├── proto/             # gRPC protocol definitions
+├── docker-compose.yml # Complete development environment
+└── .tmuxinator.yml    # Development session configuration
+
+## DEPENDENCIES
+
+### System Requirements
 - Docker & Docker Compose
-- supabase CLI
-- Python >=3.10 & uv (https://astral.sh/uv)
-- Rust & Cargo (`cargo install cargo-audit --features=fix`)
+- PostgreSQL client (psql)
+- Python 3.10+ with uv package manager
+- Rust with Cargo
+- Supabase CLI
 - Atlas CLI (https://atlasgo.io)
-- psql (PostgreSQL client)
 
-DEPENDENCIES
-- Python packages: see `bridge/pyproject.toml`
-- Rust crates: see `engine/Cargo.toml`
-- Supabase SDK, grpcio, protobuf, etc.
+### Language Dependencies
+- Rust: sqlx, tokio, tonic, serde, anyhow, uuid, chrono
+- Python: asyncio, grpcio, supabase, psycopg2
+- Database: PostgreSQL 15+
+
+### Environment Variables
+- DATABASE_URL: PostgreSQL connection string
+- ENGINE_HOST/ENGINE_PORT: Engine gRPC endpoint
+- SUPABASE_URL/SUPABASE_KEY: Supabase configuration
+
+## PERFORMANCE NOTES
+
+The system is designed for:
+- Concurrent workflow execution
+- Efficient step loading and caching
+- Agent-driven intelligent automation
+- Real-time event processing via database triggers
+
+For production deployment, consider:
+- Connection pooling configuration
+- Agent garbage collection policies
+- Workflow complexity limits
+- Resource monitoring and alerting

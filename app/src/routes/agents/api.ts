@@ -1,75 +1,26 @@
 import supabase from "$lib/supabase";
 import { getUserId, getUserIdIfEnforced } from "$lib/user";
+import type {
+  Agent,
+  AgentCapabilities,
+  AgentPolicy,
+  Workflow,
+  WorkflowCompositionRequest,
+} from "$lib/types";
 
-// TODO: Should be connected to a prompt step rather than the agent:
-type AgentLLMConfig = {
-  temperature: number;
-  maxTokens: number;
-  topP: number;
-  frequencyPenalty: number;
-  presencePenalty: number;
-};
+// Omit id and timestamp fields for creation:
+export type CreateAgentPayload = Omit<
+  Agent,
+  "id" | "global_uuid" | "created_at" | "updated_at"
+>;
 
-export type Agent = {
-  id: number;
-  name: string;
-  agent_state: string;
-  type: string;
-  // lastActive: string;
-  description: string;
-  owner_id: string;
-  // settings: AgentLLMConfig;
-  // capabilities: string[];
-  // isActive: boolean;
-  // model: string;
-  // created_at: string;
-};
-
-export type Step = {
-  id: number | string;
-  global_uuid: string;
-  agent_id: number;
-  name: string;
-  description?: string;
-  step_content: string;
-  step_type: "python" | "prompt" | "webscrape";
-};
-
-export type RuntimeSession = {
-  id: number;
-  global_uuid: string;
-  requested_by_agent_id: number;
-  created_at: string;
-  updated_at: string;
-  rts_status: "queued" | "running" | "completed" | "failed";
-  initial_data: any; // JSON blob
-  latest_step_idx: number;
-  latest_result: any | null; // nullable JSON
-};
-
-// Omit both "id" and "owner_id" fields for creation:
-export type CreateStepPayload = Omit<Step, "id" | "global_uuid">;
-
-// Omit both "id" and "owner_id" fields for creation:
-export type CreateAgentPayload = Omit<Agent, "id" | "owner_id">;
-
-// Allow partial Step and Agent updates:
-export type UpdateStepPayload = Partial<Step> & {
-  id: number;
-  agent_id: number;
-};
+// Allow partial Agent updates:
 export type UpdateAgentPayload = Partial<Agent> & { id: number };
 
 export const getAgents = async (): Promise<Agent[]> => {
-  const userId = await getUserIdIfEnforced();
-  const query = supabase.from("agents").select("*");
-
-  // Only filter by owner_id if enforceAgentOwnership is enabled
-  if (userId) {
-    query.eq("owner_id", userId);
-  }
-
-  const { data, error } = await query;
+  // Note: ownership filtering removed as owner_id doesn't exist in schema
+  // Future: implement organization-based filtering if needed
+  const { data, error } = await supabase.from("agents").select("*");
   if (error) throw error;
   return data;
 };
@@ -77,10 +28,7 @@ export const getAgents = async (): Promise<Agent[]> => {
 export const saveAgent = async (
   agent: CreateAgentPayload,
 ): Promise<Agent[]> => {
-  const userId = await getUserId();
-  const { error } = await supabase
-    .from("agents")
-    .insert([{ ...agent, owner_id: userId, agent_state: "stable" }]);
+  const { error } = await supabase.from("agents").insert([agent]);
   if (error) throw error;
   return getAgents();
 };
@@ -100,13 +48,8 @@ export const updateAgent = async (
 export const deleteAgent = async (
   agentIdToDelete: number,
 ): Promise<Agent[]> => {
-  // Delete dependent steps:
-  const { error: stepDeleteError } = await supabase
-    .from("steps")
-    .delete()
-    .eq("agent_id", agentIdToDelete);
-
-  if (stepDeleteError) throw stepDeleteError;
+  // Note: With the new architecture, we should also consider what to do with workflows
+  // created by this agent. For now, we'll leave them orphaned.
 
   // Delete Agent:
   const { error: agentDeleteError } = await supabase
@@ -117,124 +60,158 @@ export const deleteAgent = async (
   return getAgents();
 };
 
-export const getStep = async (stepId): Promise<Step[]> => {
+// Agent capabilities and policy management
+export const getAgentCapabilities = async (
+  agentId: number,
+): Promise<AgentCapabilities | null> => {
   const { data, error } = await supabase
-    .from("steps")
-    .select("*")
-    .eq("id", stepId);
+    .from("agents")
+    .select("capabilities_json")
+    .eq("id", agentId)
+    .single();
+
   if (error) throw error;
-  return data;
+  return data.capabilities_json;
 };
 
-export const getSteps = async (agentId: number): Promise<Step[]> => {
-  const userId = await getUserIdIfEnforced();
-  let query = supabase.from("steps").select("*").eq("agent_id", agentId);
-
-  // If enforceAgentOwnership is enabled, only show steps from agents owned by this user
-  if (userId) {
-    // First get the agent to verify ownership
-    const { data: agentData } = await supabase
-      .from("agents")
-      .select("id")
-      .eq("id", agentId)
-      .eq("owner_id", userId);
-
-    // If agent doesn't belong to user, return empty array
-    if (!agentData || agentData.length === 0) {
-      return [];
-    }
-  }
-
-  const { data, error } = await query;
-  if (error) throw error;
-  return data;
-};
-
-export const saveStep = async (step: CreateStepPayload): Promise<Step[]> => {
-  const { error: insertError } = await supabase.from("steps").insert([step]);
-  if (insertError) throw insertError;
-  return getSteps(step.agent_id);
-};
-
-export const updateStep = async (
-  updatedStep: UpdateStepPayload,
-): Promise<Step[]> => {
-  const { id, ...rest } = updatedStep;
-  const { error } = await supabase
-    .from("steps")
-    .update(rest)
-    .eq("id", updatedStep.id);
-  if (error) throw error;
-  return getStep(updatedStep.agent_id);
-};
-
-export const deleteStep = async (stepIdToDelete: number): Promise<void> => {
-  const { error } = await supabase
-    .from("steps")
-    .delete()
-    .eq("id", stepIdToDelete);
-  if (error) throw error;
-};
-
-export const getRuntimeSessions = async (
+export const updateAgentCapabilities = async (
   agentId: number,
-): Promise<RuntimeSession[]> => {
-  const userId = await getUserIdIfEnforced();
-  let query = supabase
-    .from("runtime_sessions")
-    .select("*")
-    .eq("requested_by_agent_id", agentId)
-    .order("created_at", { ascending: false });
-
-  // If enforceAgentOwnership is enabled, verify the agent is owned by this user
-  if (userId) {
-    // First check if the agent belongs to the user
-    const { data: agentData } = await supabase
-      .from("agents")
-      .select("id")
-      .eq("id", agentId)
-      .eq("owner_id", userId);
-
-    // If agent doesn't belong to user, return empty array
-    if (!agentData || agentData.length === 0) {
-      return [];
-    }
-  }
-
-  const { data, error } = await query;
-  if (error) throw error;
-  return data;
-};
-
-export const runAgent = async (
-  agentId: number,
-  initialData: any = {},
+  capabilities: AgentCapabilities,
 ): Promise<void> => {
-  const userId = await getUserId();
+  const { error } = await supabase
+    .from("agents")
+    .update({ capabilities_json: capabilities })
+    .eq("id", agentId);
 
-  // Verify agent ownership if enforcement is enabled
-  const userIdIfEnforced = await getUserIdIfEnforced();
-  if (userIdIfEnforced) {
-    const { data: agentData } = await supabase
-      .from("agents")
-      .select("id")
-      .eq("id", agentId)
-      .eq("owner_id", userIdIfEnforced);
+  if (error) throw error;
+};
 
-    if (!agentData || agentData.length === 0) {
-      throw new Error("Agent not found or access denied");
-    }
-  }
+export const getAgentPolicy = async (
+  agentId: number,
+): Promise<AgentPolicy | null> => {
+  const { data, error } = await supabase
+    .from("agents")
+    .select("policy_json")
+    .eq("id", agentId)
+    .single();
 
-  // Create a signal to trigger agent execution
+  if (error) throw error;
+  return data.policy_json;
+};
+
+export const updateAgentPolicy = async (
+  agentId: number,
+  policy: AgentPolicy,
+): Promise<void> => {
+  const { error } = await supabase
+    .from("agents")
+    .update({ policy_json: policy })
+    .eq("id", agentId);
+
+  if (error) throw error;
+};
+
+// Workflow composition - the new primary action for agents
+export const requestPlanWorkflow = async (
+  payload: WorkflowCompositionRequest,
+): Promise<void> => {
+  // Create a signal to trigger agent workflow composition
+  // The bridge service will handle this signal and coordinate with the engine
   const { error } = await supabase.from("signals").insert([
     {
-      agent_id: agentId,
+      initiator_agent_id: payload.agent_id,
       user_requested_uuid: crypto.randomUUID(),
       signal_type: "run",
-      initial_data: JSON.stringify(initialData),
+      initial_data: {
+        action: "compose_workflow",
+        agent_id: payload.agent_id,
+        objective: payload.objective,
+        context: payload.context ?? {},
+        constraints: payload.constraints ?? {},
+        is_ephemeral: !!payload.is_ephemeral,
+        auto_execute: !!payload.auto_execute,
+      },
     },
   ]);
 
   if (error) throw error;
+};
+
+// Get workflows created by a specific agent
+export const getAgentWorkflowHistory = async (
+  agentId: number,
+  includeEphemeral = false,
+): Promise<Workflow[]> => {
+  let query = supabase
+    .from("workflows")
+    .select("*")
+    .eq("created_by_agent_id", agentId)
+    .order("created_at", { ascending: false });
+
+  if (!includeEphemeral) {
+    query = query.eq("is_ephemeral", false);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+};
+
+// Get execution metrics for workflows created by an agent
+export const getAgentExecutionMetrics = async (
+  agentId: number,
+  timeRange?: { from: Date; to: Date },
+) => {
+  // Get workflows created by this agent
+  const { data: workflows } = await supabase
+    .from("workflows")
+    .select("id")
+    .eq("created_by_agent_id", agentId);
+
+  const workflowIds = workflows?.map((w) => w.id) ?? [];
+
+  if (workflowIds.length === 0) {
+    return {
+      totalWorkflowsCreated: 0,
+      totalExecutions: 0,
+      successRate: 0,
+      avgExecutionTime: "0s",
+    };
+  }
+
+  let query = supabase
+    .from("runtime_sessions")
+    .select("*")
+    .in("workflow_id", workflowIds);
+
+  if (timeRange) {
+    query = query
+      .gte("created_at", timeRange.from.toISOString())
+      .lte("created_at", timeRange.to.toISOString());
+  }
+
+  const { data: sessions } = await query;
+
+  // Calculate metrics
+  const totalExecutions = sessions?.length ?? 0;
+  const successfulExecutions =
+    sessions?.filter((s) => s.rts_status === "completed").length ?? 0;
+  const totalTime =
+    sessions?.reduce(
+      (sum, s) => sum + parseFloat(s.total_execution_time ?? 0),
+      0,
+    ) ?? 0;
+
+  return {
+    totalWorkflowsCreated: workflowIds.length,
+    totalExecutions,
+    successRate:
+      totalExecutions > 0
+        ? Math.round((successfulExecutions / totalExecutions) * 100)
+        : 0,
+    avgExecutionTime:
+      totalExecutions > 0
+        ? (totalTime / totalExecutions).toFixed(2) + "s"
+        : "0s",
+  };
 };

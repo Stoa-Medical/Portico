@@ -1729,28 +1729,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f84267b20a16ea918e43c6a88433c2d54fa145c92a811b5b047ccbe153674483"
 
 [[package]]
-name = "portico-engine"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "dotenvy",
- "futures",
- "portico-shared",
- "prost",
- "prost-types",
- "serde",
- "serde_json",
- "sqlx",
- "tokio",
- "tonic",
- "tonic-build",
- "uuid",
-]
-
-[[package]]
-name = "portico-shared"
-version = "0.1.0"
+name = "portico-database"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1763,6 +1743,27 @@ dependencies = [
  "sqlx",
  "tokio",
  "url",
+ "uuid",
+]
+
+[[package]]
+name = "portico-engine"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "dotenvy",
+ "fastrand",
+ "futures",
+ "portico-database",
+ "prost",
+ "prost-types",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tonic",
+ "tonic-build",
  "uuid",
 ]
 

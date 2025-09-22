@@ -11,7 +11,8 @@ interface Signal {
   id: string;              // UUID
   type: 'run' | 'sync' | 'fyi';
   payload: JsonValue;      // Arbitrary JSON data
-  agent_id?: string;       // Target agent (required for 'run')
+  workflow_id: string;              // Target workflow (required for 'run')
+  initiator_agent_id?: string;      // Agent that initiated (optional)
   status: 'pending' | 'processing' | 'complete' | 'error';
   error?: string;          // Error message if status === 'error'
   runtime_session_id?: string;  // Link to execution record
@@ -22,8 +23,8 @@ interface Signal {
 
 ### Signal Types
 
-- **run**: Executes an Agent with the provided payload
-- **sync**: Forces Engine to reload Agent configurations from database
+- **run**: Executes a Workflow with the provided payload
+- **sync**: Forces Engine to reload Workflow configurations from database
 - **fyi**: Information-only signal for logging/metrics
 
 ### Signal Lifecycle
@@ -40,39 +41,60 @@ stateDiagram-v2
 
 ## Agent
 
-Represents an automation workflow composed of Steps.
+The orchestrator that plans and validates Workflows. Agents have capabilities and policies that constrain what workflows they can create and execute.
 
 ```typescript
 interface Agent {
-  id: string;              // UUID
-  name: string;            // Human-readable identifier
-  description: string;     // Purpose and behavior
-  is_active: boolean;      // Whether agent processes signals
-  owner_id?: string;       // User who created (if ownership enabled)
-  steps: Step[];           // Ordered list of actions
+  id: string;                       // UUID
+  name: string;
+  description?: string;
+  is_active: boolean;
+  owner_id?: string;
+  capabilities: AgentCapabilities;  // tools, models, limits
+  policy: AgentPolicy;              // constraints, allowed patterns
   created_at: timestamp;
   updated_at: timestamp;
 }
 ```
 
-### Agent Behavior
+## Workflow
 
-- Each Agent maintains its own FIFO queue for Signal processing
+The executable unit that contains and runs Steps. Each Workflow maintains its own execution queue and produces RuntimeSessions when executed.
+
+```typescript
+interface Workflow {
+  id: string;                       // UUID
+  name?: string;
+  description?: string;
+  workflow_state: 'inactive' | 'stable' | 'unstable';
+  workflow_type?: string;
+  created_by_agent_id?: string;     // Agent that composed this workflow
+  step_ids?: number[];
+  version: string;
+  is_ephemeral: boolean;
+  created_at: timestamp;
+  updated_at: timestamp;
+}
+```
+
+### Workflow Behavior
+
+- Each Workflow maintains its own FIFO queue for Signal processing
 - Steps execute sequentially unless configured otherwise
 - Failed Steps halt execution and mark Signal as error
 
 ## Step
 
-A single action within an Agent workflow.
+A single action within a Workflow.
 
 ```typescript
 interface Step {
   id: string;              // UUID
-  agent_id: string;        // Parent agent
+  workflow_id: string;              // Parent workflow
   name: string;            // Step identifier
   type: 'python' | 'llm';  // Execution type
   config: StepConfig;      // Type-specific configuration
-  position: number;        // Order within agent
+  position: number;                 // Order within workflow
   created_at: timestamp;
   updated_at: timestamp;
 }
@@ -96,22 +118,23 @@ interface LLMConfig {
 
 - Input: JSON value from previous step or Signal payload
 - Output: JSON value passed to next step
-- Errors: Captured and halt Agent execution
+- Errors: Captured and halt Workflow execution
 
 ## RuntimeSession
 
-Records the execution details of an Agent processing a Signal.
+Records the execution details of a Workflow processing a Signal.
 
 ```typescript
 interface RuntimeSession {
-  id: string;              // UUID
-  signal_id: string;       // Triggering signal
-  agent_id: string;        // Executing agent
-  started_at: timestamp;   // Execution start
-  completed_at?: timestamp;// Execution end (null if running)
+  id: string;                       // UUID
+  signal_id: string;                // Triggering signal
+  workflow_id: string;              // Executed workflow
+  initiator_agent_id?: string;      // Agent initiating run (optional)
+  started_at: timestamp;            // Execution start
+  completed_at?: timestamp;         // Execution end (null if running)
   status: 'running' | 'success' | 'error';
-  step_results: StepResult[];  // Per-step execution data
-  error?: string;          // Agent-level error
+  step_results: StepResult[];       // Per-step execution data
+  error?: string;                   // Workflow-level error
   created_at: timestamp;
 }
 
@@ -128,7 +151,8 @@ interface StepResult {
 
 ### Analytics Use Cases
 
-- Calculate average execution time per Agent
+- Calculate average execution time per Workflow
+- Aggregate metrics across workflows created by each Agent
 - Identify bottleneck Steps
 - Track error rates and patterns
 - Monitor system throughput
@@ -149,9 +173,9 @@ sequenceDiagram
   participant DB as PostgreSQL
   participant Engine
 
-  UI->>DB: INSERT Signal (type='run')
+  UI->>DB: INSERT Signal (type='run', workflow_id)
   DB-->>Engine: Realtime notification
-  Engine->>DB: SELECT Agent, Steps
+  Engine->>DB: SELECT Workflow, Steps
   Engine->>Engine: Execute Steps
   Engine->>DB: INSERT RuntimeSession
   Engine->>DB: UPDATE Signal (status='complete')
@@ -164,4 +188,10 @@ sequenceDiagram
 2. **Error Handling**: Always validate JSON schemas between Steps
 3. **Timeouts**: Set reasonable limits on Python/LLM Steps
 4. **Monitoring**: Use RuntimeSession data for performance tracking
-5. **Versioning**: Consider Agent versioning for production deployments
+5. **Versioning**: Consider Workflow versioning for production deployments
+
+## Key Relationships
+
+- Agents (1) ← (many) Workflows
+- Workflows (1) ← (many) Steps
+- Workflows (1) ← (many) Signals, RuntimeSessions

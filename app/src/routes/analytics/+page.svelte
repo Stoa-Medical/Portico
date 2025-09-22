@@ -20,7 +20,7 @@
   } from "flowbite-svelte-icons";
   import {
     getAnalyticsCounts,
-    getAgentPerformance,
+    getWorkflowPerformance,
     getErrorDistribution,
   } from "./api";
   import { onMount } from "svelte";
@@ -38,10 +38,12 @@
 
   let selectedTimePeriod = "30d";
   let agentCount = 0;
+  let workflowCount = 0;
   let runtimeSessionCount = 0;
   let stepCount = 0;
-  let agentPerformance: Array<{
-    agentId: number;
+  let workflowPerformance: Array<{
+    workflowId: number;
+    workflowName: string;
     successRate: number;
     totalRuns: number;
     avgResponseTime: string;
@@ -61,8 +63,8 @@
       <div class="h-40 w-full relative">
         <div class="absolute inset-0 flex items-center justify-center">
           <div class="text-center">
-            <div class="text-3xl font-bold">${agentPerformance.reduce((a, b) => a + b.totalRuns, 0)}</div>
-            <div class="text-sm text-gray-500">Total Agent Runs</div>
+            <div class="text-3xl font-bold">${workflowPerformance.reduce((a, b) => a + b.totalRuns, 0)}</div>
+            <div class="text-sm text-gray-500">Total Workflow Runs</div>
           </div>
         </div>
       </div>
@@ -129,15 +131,16 @@
     try {
       const analytics = await getAnalyticsCounts(timePeriod);
       agentCount = analytics.agentCount;
+      workflowCount = analytics.workflowCount;
       runtimeSessionCount = analytics.runtimeSessionCount;
       stepCount = analytics.stepCount;
 
-      const [agentPerf, errorDist] = await Promise.all([
-        getAgentPerformance(timePeriod),
+      const [workflowPerf, errorDist] = await Promise.all([
+        getWorkflowPerformance(timePeriod),
         getErrorDistribution(timePeriod),
       ]);
 
-      agentPerformance = agentPerf;
+      workflowPerformance = workflowPerf;
       errorDistribution = errorDist;
 
       renderUsageChart();
@@ -175,12 +178,20 @@
   <PageHeader title="Analytics" {breadcrumbs} {actionBar} />
 
   <!-- Summary Cards -->
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
     <Card padding="sm">
       <div class="flex flex-col p-4">
         <div class="text-gray-500 text-sm mb-1">Total Agents</div>
         <div class="text-2xl font-bold" data-testid="total-agents">
           {agentCount}
+        </div>
+      </div>
+    </Card>
+    <Card padding="sm">
+      <div class="flex flex-col p-4">
+        <div class="text-gray-500 text-sm mb-1">Total Workflows</div>
+        <div class="text-2xl font-bold" data-testid="total-workflows">
+          {workflowCount}
         </div>
       </div>
     </Card>
@@ -196,12 +207,12 @@
       <div class="flex flex-col p-4">
         <div class="text-gray-500 text-sm mb-1">Avg. Success Rate</div>
         <div class="text-2xl font-bold" data-testid="avg-success-rate">
-          {agentPerformance.length > 0
+          {workflowPerformance.length > 0
             ? Math.round(
-                agentPerformance.reduce(
+                workflowPerformance.reduce(
                   (acc, cur) => acc + cur.successRate,
                   0,
-                ) / agentPerformance.length,
+                ) / workflowPerformance.length,
               )
             : 0}%
         </div>
@@ -226,7 +237,7 @@
           <ChartBars3FromLeftOutline class="h-5 w-5 text-gray-500" />
         </div>
         <div id="success-rate-chart" class="w-full">
-          <SuccessChart {agentPerformance} />
+          <SuccessChart agentPerformance={workflowPerformance} />
         </div>
       </div>
     </Card>
@@ -239,7 +250,7 @@
           <ChartLineUpOutline class="h-5 w-5 text-gray-500" />
         </div>
         <div id="execution-time-chart" class="w-full">
-          <ResponseTimeChart {agentPerformance} />
+          <ResponseTimeChart agentPerformance={workflowPerformance} />
         </div>
       </div>
     </Card>
@@ -267,36 +278,36 @@
 
   <!-- Performance Tables -->
   <Tabs style="underline">
-    <TabItem open title="Agent Performance">
+    <TabItem open title="Workflow Performance">
       <Card class="max-w-full">
         <Table hoverable>
           <TableHead>
-            <TableHeadCell>Agent</TableHeadCell>
+            <TableHeadCell>Workflow</TableHeadCell>
             <TableHeadCell>Success Rate</TableHeadCell>
             <TableHeadCell>Total Runs</TableHeadCell>
             <TableHeadCell>Avg. Response Time</TableHeadCell>
           </TableHead>
           <TableBody>
-            {#each agentPerformance as agent}
+            {#each workflowPerformance as workflow}
               <TableBodyRow>
-                <TableBodyCell>Agent {agent.agentId}</TableBodyCell>
+                <TableBodyCell>{workflow.workflowName}</TableBodyCell>
                 <TableBodyCell>
                   <div class="flex items-center">
                     <div class="w-16 bg-gray-200 rounded-full h-2.5 mr-2">
                       <div
-                        class="bg-{agent.successRate >= 90
+                        class="bg-{workflow.successRate >= 90
                           ? 'green'
-                          : agent.successRate >= 70
+                          : workflow.successRate >= 70
                             ? 'yellow'
                             : 'red'}-500 h-2.5 rounded-full"
-                        style="width: {agent.successRate}%"
+                        style="width: {workflow.successRate}%"
                       ></div>
                     </div>
-                    <span>{agent.successRate}%</span>
+                    <span>{workflow.successRate}%</span>
                   </div>
                 </TableBodyCell>
-                <TableBodyCell>{agent.totalRuns}</TableBodyCell>
-                <TableBodyCell>{agent.avgResponseTime}</TableBodyCell>
+                <TableBodyCell>{workflow.totalRuns}</TableBodyCell>
+                <TableBodyCell>{workflow.avgResponseTime}</TableBodyCell>
               </TableBodyRow>
             {/each}
           </TableBody>

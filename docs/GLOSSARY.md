@@ -3,39 +3,47 @@
 ## Core Concepts
 
 ### Agent
-An automation unit that processes data through a series of Steps. Each Agent:
-- Has a unique identifier and descriptive goal
-- Contains one or more Steps executed in sequence
-- Processes Signals through its own FIFO queue
-- Creates RuntimeSessions to track execution
+Orchestrator that plans and validates Workflows. Agents can initiate Workflow runs. Each Agent:
+- Has capabilities and policies that constrain what workflows they can create
+- Plans workflow specifications based on objectives
+- Validates workflow specs against security and policy constraints
+- Can trigger execution of approved workflows
 
 ### Signal
 An event that triggers actions within the system. Three types:
-- **run**: Triggers an Agent execution with specific data
+- **run**: Triggers a Workflow execution with specific data
 - **sync**: Forces the Engine to refresh its state from the database
 - **fyi**: Logs data with timestamp without triggering execution
 
+### Workflow
+Executable unit that contains Steps and owns execution queue. Each Workflow:
+- Contains one or more Steps executed in sequence
+- Processes Signals through its own FIFO queue
+- Creates RuntimeSessions to track execution
+- Can be created by Agents or manually
+
 ### Step
-A unit of action within an Agent. Two types:
+A unit of action within a Workflow. Two types:
 - **Deterministic**: Python code execution
 - **Non-deterministic**: LLM prompt execution
 
 Each Step expects JSON input and returns `Result<Value, Error>`.
 
 ### RuntimeSession
-The execution record created when an Agent processes a Signal. Tracks:
+The execution record created when a Workflow processes a Signal. Tracks:
 - Execution timestamps and duration
 - Success/failure status of each Step
 - Input/output data
 - Error details if applicable
+- Optional link to the initiating Agent
 
 ## Architecture Components
 
 ### Engine
 The Rust-based runtime service that:
-- Executes Agents in a thread-pool
-- Maintains in-memory Agent state
-- Exposes gRPC API for communication
+- Executes Workflows in a thread-pool
+- Maintains in-memory Workflow state
+- Exposes gRPC API for workflow planning and execution
 - Persists results to PostgreSQL
 
 ### Bridge
@@ -54,7 +62,7 @@ Managed PostgreSQL platform providing:
 ## Technical Terms
 
 ### FIFO Queue
-First-In-First-Out queue maintained per Agent to ensure ordered processing of Signals.
+First-In-First-Out queue maintained per Workflow to ensure ordered processing of Signals.
 
 ### gRPC
 Google's Remote Procedure Call framework used for Engine ↔ Bridge communication.
@@ -69,4 +77,4 @@ Automatic REST API generated from PostgreSQL schema by Supabase.
 Supabase's WebSocket-based system for streaming database changes.
 
 ### Thread Pool
-Shared worker threads in Engine that process Agent queues concurrently.
+Shared worker threads in Engine that process Workflow queues concurrently.

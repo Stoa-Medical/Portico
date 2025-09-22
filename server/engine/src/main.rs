@@ -9,8 +9,8 @@ use tokio::sync::RwLock;
 use tonic::transport::Server;
 
 use portico_engine::RpcServer;
-use portico_shared::models::Agent;
-use portico_shared::DatabaseItem;
+use portico_database::models::Workflow;
+use portico_database::DatabaseItem;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -34,26 +34,26 @@ async fn main() -> Result<()> {
     let db_conn_pool = PgPoolOptions::new().connect(&db_url).await?;
     println!("Connected to the database successfully");
 
-    // Pull corresponding `Agents` and corresponding `Steps`
-    let agents: Vec<Agent> = Agent::try_db_select_all(&db_conn_pool)
+    // Pull corresponding `Workflows` and corresponding `Steps`
+    let workflows: Vec<Workflow> = Workflow::try_db_select_all(&db_conn_pool)
         .await
-        .expect("Failed to fetch agents from database");
+        .expect("Failed to fetch workflows from database");
 
-    println!("Fetched agents successfully, count: {}", agents.len());
+    println!("Fetched workflows successfully, count: {}", workflows.len());
 
-    // Create a thread-safe agent map
-    let agent_map: Arc<RwLock<HashMap<String, Agent>>> = Arc::new(RwLock::new(
-        agents
+    // Create a thread-safe workflow map
+    let workflow_map: Arc<RwLock<HashMap<String, Workflow>>> = Arc::new(RwLock::new(
+        workflows
             .into_iter()
-            .map(|agent| (agent.identifiers.global_uuid.clone(), agent))
+            .map(|workflow| (workflow.identifiers.global_uuid.clone(), workflow))
             .collect(),
     ));
 
     // Create an instance of our gRPC service
-    let bridge_service = RpcServer::new(agent_map, db_conn_pool);
+    let bridge_service = RpcServer::new(workflow_map, db_conn_pool);
 
     // Start the gRPC server
-    println!("Starting gRPC server with agent queuing support...");
+    println!("Starting gRPC server with workflow queuing support...");
     Server::builder()
         .add_service(bridge_service.with_server())
         .serve(addr)

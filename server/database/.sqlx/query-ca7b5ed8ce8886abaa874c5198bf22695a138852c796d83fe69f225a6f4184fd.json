@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE signals SET\n                user_requested_uuid = $1,\n                workflow_id = $2,\n                initiator_agent_id = $3,\n                rts_id = $4,\n                signal_type = ($5::text)::signal_type,\n                initial_data = $6,\n                response_data = $7,\n                error_message = $8,\n                updated_at = $9\n            WHERE id = $10\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Int4",
+        "Int8",
+        "Text",
+        "Json",
+        "Json",
+        "Text",
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ca7b5ed8ce8886abaa874c5198bf22695a138852c796d83fe69f225a6f4184fd"
+}

@@ -8,92 +8,82 @@ export const getAnalyticsCounts = async (
   timePeriod: string = DEFAULT_TIME_PERIOD,
 ) => {
   const fromDate = getStartDateFromTimePeriod(timePeriod);
-  const userId = await getUserId();
-
-  const { data: agentsData, error: agentsError } = await supabase
-    .from("agents")
-    .select("id")
-    .eq("owner_id", userId);
-
-  if (agentsError) throw agentsError;
-
-  const agentIds = agentsData?.map((a) => a.id) ?? [];
-
-  if (agentIds.length === 0) {
-    return { agentCount: 0, runtimeSessionCount: 0, stepCount: 0 };
-  }
 
   const [
     { count: agentCount, error: agentError },
+    { count: workflowCount, error: workflowError },
     { count: sessionCount, error: sessionError },
     { count: stepCount, error: stepError },
   ] = await Promise.all([
-    supabase
-      .from("agents")
-      .select("id", { count: "exact", head: true })
-      .eq("owner_id", userId),
+    supabase.from("agents").select("id", { count: "exact", head: true }),
+    supabase.from("workflows").select("id", { count: "exact", head: true }),
     supabase
       .from("runtime_sessions")
       .select("id", { count: "exact", head: true })
       .gte("created_at", fromDate)
-      .in("requested_by_agent_id", agentIds),
+      .not("workflow_id", "is", null),
     supabase
       .from("steps")
       .select("id", { count: "exact", head: true })
-      .in("agent_id", agentIds),
+      .not("workflow_id", "is", null),
   ]);
 
   if (agentError) throw agentError;
+  if (workflowError) throw workflowError;
   if (sessionError) throw sessionError;
   if (stepError) throw stepError;
 
   return {
     agentCount: agentCount ?? 0,
+    workflowCount: workflowCount ?? 0,
     runtimeSessionCount: sessionCount ?? 0,
     stepCount: stepCount ?? 0,
   };
 };
 
-export const getAgentPerformance = async (
+export const getWorkflowPerformance = async (
   timePeriod: string = DEFAULT_TIME_PERIOD,
 ) => {
   const fromDate = getStartDateFromTimePeriod(timePeriod);
-  const userId = await getUserId();
 
-  const { data: agentData, error: agentError } = await supabase
-    .from("agents")
-    .select("id")
-    .eq("owner_id", userId);
+  const { data: workflowData, error: workflowError } = await supabase
+    .from("workflows")
+    .select("id, name");
 
-  if (agentError) throw agentError;
-  const agentIds = agentData.map((a) => a.id);
+  if (workflowError) throw workflowError;
+  const workflowIds = workflowData?.map((w) => w.id) ?? [];
+
+  if (workflowIds.length === 0) {
+    return [];
+  }
 
   const { data, error } = await supabase
     .from("runtime_sessions")
-    .select("requested_by_agent_id, rts_status, total_execution_time")
+    .select("workflow_id, rts_status, total_execution_time")
     .gte("created_at", fromDate)
-    .in("requested_by_agent_id", agentIds);
+    .in("workflow_id", workflowIds);
 
   if (error) throw error;
 
   const grouped = new Map();
-  data.forEach(
-    ({ requested_by_agent_id, rts_status, total_execution_time }) => {
-      const group = grouped.get(requested_by_agent_id) || {
-        totalRuns: 0,
-        successRuns: 0,
-        totalTime: 0,
-      };
-      group.totalRuns++;
-      if (rts_status === "completed") group.successRuns++;
-      group.totalTime += parseFloat(total_execution_time ?? 0);
-      grouped.set(requested_by_agent_id, group);
-    },
-  );
+  data.forEach(({ workflow_id, rts_status, total_execution_time }) => {
+    const group = grouped.get(workflow_id) || {
+      totalRuns: 0,
+      successRuns: 0,
+      totalTime: 0,
+    };
+    group.totalRuns++;
+    if (rts_status === "completed") group.successRuns++;
+    group.totalTime += parseFloat(total_execution_time ?? 0);
+    grouped.set(workflow_id, group);
+  });
+
+  const workflowNameMap = new Map(workflowData.map((w) => [w.id, w.name]));
 
   return Array.from(grouped.entries()).map(
-    ([agentId, { totalRuns, successRuns, totalTime }]) => ({
-      agentId,
+    ([workflowId, { totalRuns, successRuns, totalTime }]) => ({
+      workflowId,
+      workflowName: workflowNameMap.get(workflowId) || `Workflow ${workflowId}`,
       successRate: totalRuns ? Math.round((successRuns / totalRuns) * 100) : 0,
       totalRuns,
       avgResponseTime: totalRuns
@@ -103,25 +93,30 @@ export const getAgentPerformance = async (
   );
 };
 
+// Keep the old function for backward compatibility but mark as deprecated
+export const getAgentPerformance = getWorkflowPerformance;
+
 export const getStepPerformance = async (
   timePeriod: string = DEFAULT_TIME_PERIOD,
 ) => {
   const fromDate = getStartDateFromTimePeriod(timePeriod);
-  const userId = await getUserId();
 
-  const { data: agentData, error: agentError } = await supabase
-    .from("agents")
-    .select("id")
-    .eq("owner_id", userId);
+  const { data: workflowData, error: workflowError } = await supabase
+    .from("workflows")
+    .select("id, name");
 
-  if (agentError) throw agentError;
-  const agentIds = agentData.map((a) => a.id);
+  if (workflowError) throw workflowError;
+  const workflowIds = workflowData?.map((w) => w.id) ?? [];
+
+  if (workflowIds.length === 0) {
+    return [];
+  }
 
   const { data: sessionData, error: sessionError } = await supabase
     .from("runtime_sessions")
-    .select("step_ids, step_execution_times")
+    .select("step_ids, step_execution_times, workflow_id")
     .gte("created_at", fromDate)
-    .in("requested_by_agent_id", agentIds);
+    .in("workflow_id", workflowIds);
 
   if (sessionError) throw sessionError;
 
@@ -139,15 +134,10 @@ export const getStepPerformance = async (
 
   const { data: stepsData } = await supabase
     .from("steps")
-    .select("id, name, step_type, agent_id")
-    .in("agent_id", agentIds);
+    .select("id, name, step_type, workflow_id")
+    .in("workflow_id", workflowIds);
 
-  const { data: agentsData } = await supabase
-    .from("agents")
-    .select("id, name")
-    .eq("owner_id", userId);
-
-  const agentMap = new Map(agentsData?.map((a) => [a.id, a.name]));
+  const workflowMap = new Map(workflowData?.map((w) => [w.id, w.name]));
 
   return (
     stepsData?.map((step) => {
@@ -160,7 +150,7 @@ export const getStepPerformance = async (
         avgExecutionTime: stat.runs
           ? (stat.totalTime / stat.runs).toFixed(2) + "s"
           : "0s",
-        agentName: agentMap.get(step.agent_id) ?? "Unknown",
+        workflowName: workflowMap.get(step.workflow_id) ?? "Unknown",
       };
     }) ?? []
   );
@@ -170,21 +160,28 @@ export const getErrorDistribution = async (
   timePeriod: string = DEFAULT_TIME_PERIOD,
 ) => {
   const fromDate = getStartDateFromTimePeriod(timePeriod);
-  const userId = await getUserId();
 
-  const { data: agentData, error: agentError } = await supabase
-    .from("agents")
-    .select("id")
-    .eq("owner_id", userId);
+  const { data: workflowData, error: workflowError } = await supabase
+    .from("workflows")
+    .select("id");
 
-  if (agentError) throw agentError;
-  const agentIds = agentData.map((a) => a.id);
+  if (workflowError) throw workflowError;
+  const workflowIds = workflowData?.map((w) => w.id) ?? [];
+
+  if (workflowIds.length === 0) {
+    return {
+      completed: 0,
+      cancelled: 0,
+      running: 0,
+      waiting: 0,
+    };
+  }
 
   const { data, error } = await supabase
     .from("runtime_sessions")
     .select("rts_status")
     .gte("created_at", fromDate)
-    .in("requested_by_agent_id", agentIds);
+    .in("workflow_id", workflowIds);
 
   if (error) throw error;
 

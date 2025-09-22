@@ -12,8 +12,11 @@ service BridgeService {
   rpc ProcessSignal(SignalRequest) returns (SignalResponse);
 
   // Process changes
-  rpc CreateAgent(CreateAgentRequest) returns (GeneralResponse);
-  rpc DeleteAgent(DeleteAgentRequest) returns (GeneralResponse);
+  rpc CreateWorkflow(CreateWorkflowRequest) returns (GeneralResponse);
+  rpc DeleteWorkflow(DeleteWorkflowRequest) returns (GeneralResponse);
+
+  // Agent composition
+  rpc PlanWorkflow(PlanWorkflowRequest) returns (PlanWorkflowResponse);
 }
 
 // === Core definitions ===
@@ -30,7 +33,7 @@ message GeneralResponse {
 // Signal request structure
 message SignalRequest {
   int32 signal_id = 1;
-  int32 agent_id = 2;
+  int32 workflow_id = 2;
   SignalType signal_type = 3;
 
   // Optional payload based on signal type
@@ -49,12 +52,30 @@ message SignalResponse {
   google.protobuf.Struct result_data = 4;
 }
 
-message CreateAgentRequest {
-  google.protobuf.Struct agent_json = 1;
+message CreateWorkflowRequest {
+  google.protobuf.Struct workflow_json = 1;
 }
 
-message DeleteAgentRequest {
+message DeleteWorkflowRequest {
+  int32 workflow_id = 1;
+}
+
+message PlanWorkflowRequest {
   int32 agent_id = 1;
+  string objective = 2;
+  google.protobuf.Struct context = 3;
+  google.protobuf.Struct constraints = 4;
+  bool is_ephemeral = 5;
+}
+
+message PlanWorkflowResponse {
+  bool success = 1;
+  string message = 2;
+  google.protobuf.Struct workflow_spec = 3;
+  repeated string validation_errors = 4;
+  int32 estimated_steps = 5;
+  bool requires_approval = 6;
+  string workflow_uuid = 7; // If workflow was created
 }
 
 // === Sub definitions ===
@@ -70,7 +91,7 @@ message SyncPayload {
   SyncScope scope = 1;
 
   // Optional specific UUIDs to sync (if not ALL)
-  repeated string agent_uuids = 2;
+  repeated string workflow_uuids = 2;
 }
 
 enum SyncScope {

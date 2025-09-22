@@ -2,11 +2,8 @@ import uuid
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.lib import (
-    BridgeClient,
-    create_signal_request,
-    create_sync_payload,
-)
+from src.bridge import BridgeClient
+from src.bridge.converters import create_signal_request
 from src.proto import bridge_message_pb2 as pb2
 
 
@@ -14,19 +11,15 @@ from src.proto import bridge_message_pb2 as pb2
 def signal_data():
     """Sample signal data for testing"""
     return {
-        "data": {
-            "table": "signals",
-            "type": "INSERT",
-            "record": {
-                "global_uuid": str(uuid.uuid4()),
-                "user_requested_uuid": str(uuid.uuid4()),
-                "signal_type": "RUN",
-                "initial_data": {
-                    "operation": "CREATE",
-                    "entity_type": "AGENT",
-                    "entity_uuid": str(uuid.uuid4()),
-                    "data": {"name": "Test Agent", "description": "Test description"},
-                },
+        "record": {
+            "id": 1,
+            "workflow_id": 123,
+            "signal_type": "RUN",
+            "initial_data": {
+                "operation": "CREATE",
+                "entity_type": "AGENT",
+                "entity_uuid": str(uuid.uuid4()),
+                "data": {"name": "Test Agent", "description": "Test description"},
             },
         }
     }
@@ -36,15 +29,11 @@ def signal_data():
 def sync_data():
     """Sample sync data for testing"""
     return {
-        "data": {
-            "table": "signals",
-            "type": "INSERT",
-            "record": {
-                "global_uuid": str(uuid.uuid4()),
-                "user_requested_uuid": str(uuid.uuid4()),
-                "signal_type": "SYNC",
-                "initial_data": {"scope": "ALL", "entity_types": ["AGENT", "STEP"]},
-            },
+        "record": {
+            "id": 2,
+            "workflow_id": 124,
+            "signal_type": "SYNC",
+            "initial_data": {"scope": "ALL", "entity_types": ["AGENT", "STEP"]},
         }
     }
 
@@ -53,82 +42,55 @@ def sync_data():
 def fyi_data():
     """Sample FYI data for testing"""
     return {
-        "data": {
-            "table": "signals",
-            "type": "INSERT",
-            "record": {
-                "global_uuid": str(uuid.uuid4()),
-                "user_requested_uuid": str(uuid.uuid4()),
-                "signal_type": "FYI",
-                "initial_data": {"message": "Test FYI", "data": {"some": "value"}},
-            },
+        "record": {
+            "id": 3,
+            "workflow_id": 125,
+            "signal_type": "FYI",
+            "initial_data": {"message": "Test FYI", "data": {"some": "value"}},
         }
     }
 
 
-@pytest.mark.asyncio
-async def test_create_sync_payload():
-    """Test creating a sync payload"""
-    data = {
-        "scope": "SPECIFIC",
-        "entity_uuids": ["uuid1", "uuid2"],
-        "entity_types": ["AGENT", "STEP"],
-    }
-
-    payload = create_sync_payload(data)
-
-    assert payload.scope == pb2.SyncScope.SPECIFIC
-    assert len(payload.entity_uuids) == 2
-    assert len(payload.entity_types) == 2
-    assert payload.entity_types[0] == pb2.EntityType.AGENT
-    assert payload.entity_types[1] == pb2.EntityType.STEP
+# Removed create_sync_payload test as it's now handled internally
 
 
 @pytest.mark.asyncio
 async def test_create_signal_request_run(signal_data):
     """Test creating a run signal request"""
-    request = await create_signal_request(signal_data)
+    request = create_signal_request(signal_data)
 
     assert request is not None
-    assert request.signal_type == pb2.SignalType.RUN
-    assert request.global_uuid == signal_data["data"]["record"]["global_uuid"]
-    assert (
-        request.user_requested_uuid
-        == signal_data["data"]["record"]["user_requested_uuid"]
-    )
+    assert request.signal_type == pb2.RUN
+    assert request.signal_id == signal_data["record"]["id"]
+    assert request.workflow_id == signal_data["record"]["workflow_id"]
     assert request.run_data is not None
     # Verify the data was serialized correctly
-    initial_data = signal_data["data"]["record"]["initial_data"]
+    initial_data = signal_data["record"]["initial_data"]
     assert "operation" in initial_data
 
 
 @pytest.mark.asyncio
 async def test_create_signal_request_sync(sync_data):
     """Test creating a sync signal request"""
-    request = await create_signal_request(sync_data)
+    request = create_signal_request(sync_data)
 
     assert request is not None
-    assert request.signal_type == pb2.SignalType.SYNC
-    assert request.global_uuid == sync_data["data"]["record"]["global_uuid"]
-    assert (
-        request.user_requested_uuid
-        == sync_data["data"]["record"]["user_requested_uuid"]
-    )
-    assert request.sync.scope == pb2.SyncScope.ALL
-    assert len(request.sync.entity_types) == 2
+    assert request.signal_type == pb2.SYNC
+    assert request.signal_id == sync_data["record"]["id"]
+    assert request.workflow_id == sync_data["record"]["workflow_id"]
+    assert request.sync.scope == pb2.ALL
+    assert len(request.sync.workflow_uuids) == 0
 
 
 @pytest.mark.asyncio
 async def test_create_signal_request_fyi(fyi_data):
     """Test creating an FYI signal request"""
-    request = await create_signal_request(fyi_data)
+    request = create_signal_request(fyi_data)
 
     assert request is not None
-    assert request.signal_type == pb2.SignalType.FYI
-    assert request.global_uuid == fyi_data["data"]["record"]["global_uuid"]
-    assert (
-        request.user_requested_uuid == fyi_data["data"]["record"]["user_requested_uuid"]
-    )
+    assert request.signal_type == pb2.FYI
+    assert request.signal_id == fyi_data["record"]["id"]
+    assert request.workflow_id == fyi_data["record"]["workflow_id"]
     # FYI data is stored in a Struct
     assert request.fyi_data is not None
 
@@ -163,9 +125,9 @@ async def test_bridge_client():
 
     # Test process_signal
     request = pb2.SignalRequest(
-        global_uuid=str(uuid.uuid4()),
-        user_requested_uuid=str(uuid.uuid4()),
-        signal_type=pb2.SignalType.RUN,
+        signal_id=1,
+        workflow_id=123,
+        signal_type=pb2.RUN,
     )
     response = await client.process_signal(request)
     assert response is not None
