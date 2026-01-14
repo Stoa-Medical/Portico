@@ -1,1 +1,0 @@
-"""Portico bridge package."""
