@@ -17,9 +17,6 @@ RUN cargo install sqlx-cli --no-default-features --features postgres
 # Create the workspace structure
 WORKDIR /app
 
-# Copy the shared crate
-COPY shared/ /app/shared/
-
 # Copy schema for migrations
 COPY server/scheme.hcl /app/server/scheme.hcl
 

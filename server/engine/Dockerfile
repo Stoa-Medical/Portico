@@ -19,8 +19,8 @@ ENV PYTHONPATH=/usr/lib/python3/dist-packages \
 # Create the workspace structure
 WORKDIR /app
 
-# Copy the entire shared crate first - including its full structure
-COPY shared/ /app/shared/
+# Copy the entire database crate first - including its full structure
+COPY server/database/ /app/database/
 # Copy proto files
 COPY server/proto/ /app/server/proto/
 # Copy the engine crate

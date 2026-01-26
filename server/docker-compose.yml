@@ -35,23 +35,6 @@ services:
     networks:
       - portico-network
 
-  # Prepare SQLx query files
-  shared_prepare:
-    build:
-      context: ..
-      dockerfile: ./shared/Dockerfile
-    depends_on:
-      schema_migrator:
-        condition: service_completed_successfully
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/postgres
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-    volumes:
-      - sqlx_data:/app/shared/.sqlx
-    networks:
-      - portico-network
-
   # Engine service processes signals
   engine:
     build:
@@ -60,14 +43,10 @@ services:
     ports:
       - "50051:50051"
     depends_on:
-      shared_prepare:
-        condition: service_completed_successfully
       postgres:
         condition: service_healthy
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/postgres
-    volumes:
-      - sqlx_data:/app/shared/.sqlx:ro
     networks:
       - portico-network
     restart: unless-stopped
