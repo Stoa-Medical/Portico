@@ -20,7 +20,7 @@ ENV PYTHONPATH=/usr/lib/python3/dist-packages \
 WORKDIR /app
 
 # Copy the entire database crate first - including its full structure
-COPY server/database/ /app/database/
+COPY server/database/ /app/server/database/
 # Copy proto files
 COPY server/proto/ /app/server/proto/
 # Copy the engine crate

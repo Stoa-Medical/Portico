@@ -20,6 +20,9 @@ WORKDIR /app
 # Copy schema for migrations
 COPY server/scheme.hcl /app/server/scheme.hcl
 
+# Copy the database crate for SQLx preparation
+COPY server/database/ /app/server/database/
+
 # Create a script to prepare SQLx files
 RUN echo '#!/bin/bash \n\
 set -e \n\
@@ -29,7 +32,7 @@ until nc -z $POSTGRES_HOST $POSTGRES_PORT; do \n\
     sleep 1 \n\
 done \n\
 echo "Postgres is up, preparing SQLx query files..." \n\
-cd /app/shared \n\
+cd /app/server/database \n\
 SQLX_OFFLINE=false cargo sqlx prepare -- --tests \n\
 echo "SQLx preparation complete" \n\
 ' > /app/prepare.sh && chmod +x /app/prepare.sh

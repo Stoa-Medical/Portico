@@ -25,9 +25,9 @@
     "@tauri-apps/api": "^2.6.0",
     "@tauri-apps/plugin-opener": "^2.4.0",
     "codemirror": "^6.0.2",
-    "flowbite": "^1.8.1",
-    "flowbite-svelte": "^0.44.24",
-    "flowbite-svelte-icons": "^0.4.5"
+    "flowbite": "^2.5.2",
+    "flowbite-svelte": "^1.31.0",
+    "flowbite-svelte-icons": "^3.1.0"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.8",
