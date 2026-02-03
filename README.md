@@ -1,183 +1,91 @@
-# Portico
+<img
+  src="assets/Logo-Inline-Portico.svg"
+  alt="Portico Logo"
+  style="height: 56px; width: auto; max-width: 100%;"
+/>
 
-An agentic integration engine and database system for scalable data interchange. Optimized for healthcare IT teams.
+Portico is an **agentic integration engine**: an event-driven backend (Signals → Agents → Steps) with a desktop app for configuration, built for healthcare-style integration workflows.
 
-## Overview
+**Project status**: MVP/prototype. I plan to rewrite this repo later; this version focuses on proving the core architecture and developer experience.
 
-Portico is a source-available agentic integration engine built with a microservices architecture. It operates in two modes:
+### Project Highlights
 
-1. **Server** - Production-ready concurrent server with multi-threading support
-2. **App** - Desktop application that can connect to a server or run locally with embedded database
+- **Desktop configuration UI**: a Svelte 5 + SvelteKit + Tauri app with Supabase auth/client integration and a CodeMirror-based Python editor UI.
+- **Event-driven workflow engine**: a Rust gRPC server processes `run` / `sync` / `fyi` signals and persists `RuntimeSession` results to Postgres.
+- **Clean service boundary**: a Python “bridge” listens to **Supabase Realtime** (Postgres changes) and forwards events to the Rust engine over **gRPC/Protobuf**.
+- **Schema-as-code**: database schema is defined in **Atlas** HCL (`server/database/scheme.hcl`) and applied in dev with `atlas schema apply`.
+- **Safety-oriented step model**: step capabilities are validated (tool gating), and the `webscrape` step includes a robots.txt check in the shared DB crate.
 
-Built with first-principles design, Portico delivers both exceptional performance and intuitive user experience.
+If you want the deeper product/architecture intent, see `design/1-mvp.md`.
 
-## Architecture
+### Repository structure
+
+- **`app/`**: Tauri 2.0 desktop app (SvelteKit + Svelte 5 + TypeScript + Tailwind + Flowbite-Svelte).
+- **`server/engine/`**: Rust gRPC engine (signal handlers, workflow execution, caching/monitoring utilities).
+- **`server/bridge/`**: Python bridge service (Supabase Realtime → gRPC).
+- **`server/database/`**: shared Rust crate for models + validation + SQLx queries + utilities (incl. `webscrape`).
+- **`server/proto/`**: Protobuf definitions shared across services.
+
+### Architecture at a glance
 
 ```mermaid
 graph TB
     subgraph "Desktop App"
-        A[SvelteKit Frontend]
-        B[Tauri Backend]
+        A[SvelteKit (Svelte 5)]
+        B[Tauri (Rust)]
         A <-->|IPC| B
     end
 
     subgraph "Server"
-        C[(PostgreSQL/Supabase)]
+        C[(Postgres via Supabase)]
         D[Python Bridge]
-        E[Rust Engine]
+        E[Rust Engine (gRPC)]
 
         C -->|Supabase Realtime| D
         D -->|gRPC| E
-        E -->|SQLx write queries| C
+        E -->|SQLx| C
     end
 
-    B <-->|API| C
-
-    style A fill:#ECD8A8,color:#000,stroke:#333,stroke-width:2px
-    style E fill:#B0C3E8,color:#000,stroke:#333,stroke-width:2px
-    style D fill:#A7E7DF,color:#000,stroke:#333,stroke-width:2px
+    A <-->|Supabase| C
 ```
 
-### Components
+### Getting started (dev)
 
-- **Desktop App** (`/app`) - Tauri 2.0 desktop application with SvelteKit frontend
-- **PostgreSQL Database** - Core data storage via Supabase (local or cloud)
-- **Python Bridge** (`/server/bridge`) - Converts Supabase realtime events to gRPC calls
-- **Rust Engine** (`/server/engine`) - High-performance signal processor and workflow executor
-- **Shared Library** (`/lib/shared`) - Common Rust models and database interfaces
+This repo has detailed setup docs per component:
+- **Server**: `server/README.txt`
+- **Desktop app**: `app/README.txt`
 
-## Quick Start
+#### Server (recommended path)
+
+The bridge relies on **Supabase Realtime**, so the recommended dev flow is the Supabase CLI + local engine/bridge:
 
 ```bash
-# Clone repository
-git clone https://github.com/Stoa-Medical/Portico.git
-cd Portico
-
-# Start backend services
 cd server
-./start.sh
+tmuxinator start
+```
 
-# In another terminal, start the desktop app
+#### App
+
+```bash
 cd app
+cp .env-example .env   # set VITE_SUPABASE_URL / VITE_SUPABASE_KEY
 pnpm install
 pnpm tauri dev
 ```
 
-For detailed setup instructions:
-- [Server Documentation](./server/README.txt)
-- [App Documentation](./app/README.txt)
+### Contributing
 
-## Technology Stack
+See `CONTRIBUTING.md`.
 
-### Frontend
-- **Framework**: SvelteKit 2 with Svelte 5 (Runes API)
-- **Desktop**: Tauri 2.0
-- **Styling**: TailwindCSS + Flowbite
-- **Language**: TypeScript
-- **Testing**: Vitest
+### Security
 
-### Backend
-- **Engine**: Rust with Tokio async runtime
-- **Bridge**: Python 3.10+ with asyncio
-- **Database**: PostgreSQL via Supabase
-- **Communication**: gRPC (Protocol Buffers)
-- **Schema**: Atlas for migrations
+For security issues, please email `security@stoamedical.com` instead of using the issue tracker.
 
-### DevOps
-- **Containers**: Docker Compose
-- **Package Managers**: pnpm (JS), Cargo (Rust), uv (Python)
+### License
 
-## Development
+Portico is licensed under the **Business Source License 1.1 (BSL 1.1)**.
 
-### Prerequisites
+- **Free** for internal use processing **≤ 2 production interfaces** or generating **≤ $1M** in trailing-12-month gross charges
+- **Change date**: **2030-07-01** (converts to **Apache 2.0**)
 
-- Rust (latest stable)
-- Node.js 18+ with pnpm
-- Python 3.10+
-- Docker & Docker Compose
-- PostgreSQL client (psql)
-- Supabase CLI
-- Atlas CLI (schema & ORM management)
-- uv (Python package manager, recommended for fast installs)
-
-### Best Practices
-
-1. **Code Quality**
-   - Follow existing patterns and conventions
-   - Use standard library over external dependencies when possible
-   - Write comprehensive tests for new features
-   - Ensure proper error handling with `Result<T, E>` in Rust
-
-2. **Frontend Development**
-   - Use Svelte 5 Runes (`$state()`, `$derived()`, `$effect()`)
-   - Keep components small and focused
-   - Use TypeScript for type safety
-   - Follow TailwindCSS utility-first approach
-
-3. **Backend Development**
-   - Use async/await patterns consistently
-   - Validate all inputs from frontend
-   - Log errors appropriately
-   - Follow gRPC best practices for service design
-
-4. **Database**
-   - Use migrations for schema changes
-   - Keep queries performant with proper indexing
-   - Use transactions for data consistency
-
-## Features
-
-### Agent Management
-- Create and manage workflow agents
-- Support for multi-step workflows
-- Python script execution
-- Web scraping capabilities
-- Real-time status updates
-
-### Agent Ownership
-Configurable data visibility controls:
-
-- **Default**: All agents visible to all users
-- **Scoped**: Users see only their own agents
-
-Toggle via admin settings or programmatically:
-```typescript
-import { updateConfig } from "$lib/stores/configStore";
-updateConfig({ enforceAgentOwnership: true });
-```
-
-### Analytics
-- Response time tracking
-- Success rate monitoring
-- Interactive charts and visualizations
-
-## Contributing
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
-
-## Security
-
-For security issues, please email security@stoamedical.com instead of using the issue tracker.
-
-## License
-
-This project is licensed under the Business Source License 1.1 (BSL).
-
-**Key Points:**
-- Source code is available for viewing and non-production use
-- Production use requires a commercial license for:
-  - More than 2 production interfaces
-  - Over $1M in annual gross charges
-- **Converts to Apache 2.0 on July 1, 2030**
-
-See [LICENSE.txt](./LICENSE.txt) for full terms.
-
-## Support
-
-- Documentation: [docs/](./docs/)
-- Issues: [GitHub Issues](https://github.com/Stoa-Medical/Portico/issues)
-- Email: support@stoamedical.com
-
----
-
-Built with ❤️ 🐍 ☕️ by Stoa Medical, Inc.
+See `LICENSE.txt` for full terms.

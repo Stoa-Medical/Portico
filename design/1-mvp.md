@@ -4,7 +4,7 @@ Last significant update: Apr 30, 2025
 
 Overview:
 
-* Data isn’t organized well, and there’s too much vaporware adding complexity instead of removing it. Portico is an agentic integration engine (aka interface engine) for connecting and mapping data with Python code and LLM prompts.
+* Data isn’t organized well, and there’s clear opportuntiy to leverage data within the integration layer for empirical analysis. Portico is an agentic integration engine (aka interface engine) for connecting and mapping data with Python code and LLM prompts.
   * By simplifying and consolidating the **integration layer**, this will free-up developers and enable them to build tools that actually service providers.
 * There are 2 main services: the **server** and the end-user **app for configuration**
   * **server** – this is backend service with 3 components:
