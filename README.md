@@ -31,15 +31,15 @@ If you want the deeper product/architecture intent, see `design/1-mvp.md`.
 ```mermaid
 graph TB
     subgraph "Desktop App"
-        A[SvelteKit (Svelte 5)]
-        B[Tauri (Rust)]
+        A["SvelteKit (Svelte 5)"]
+        B["Tauri (Rust)"]
         A <-->|IPC| B
     end
 
     subgraph "Server"
-        C[(Postgres via Supabase)]
+        C[("Postgres via Supabase")]
         D[Python Bridge]
-        E[Rust Engine (gRPC)]
+        E["Rust Engine (gRPC)"]
 
         C -->|Supabase Realtime| D
         D -->|gRPC| E
