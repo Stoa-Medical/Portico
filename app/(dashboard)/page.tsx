@@ -5,20 +5,13 @@ import { sql, eq } from 'drizzle-orm'
 export default async function DashboardPage() {
   const db = getDb()
 
-  const [agentCount] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(agents)
-
-  const [pendingCount] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(signals)
-    .where(eq(signals.status, 'pending'))
-
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
-  const [sessionCount] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(runtimeSessions)
-    .where(sql`${runtimeSessions.createdAt} >= ${oneDayAgo}`)
+
+  const [[agentCount], [pendingCount], [sessionCount]] = await Promise.all([
+    db.select({ count: sql<number>`count(*)::int` }).from(agents),
+    db.select({ count: sql<number>`count(*)::int` }).from(signals).where(eq(signals.status, 'pending')),
+    db.select({ count: sql<number>`count(*)::int` }).from(runtimeSessions).where(sql`${runtimeSessions.createdAt} >= ${oneDayAgo}`),
+  ])
 
   return (
     <div>

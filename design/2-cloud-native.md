@@ -262,7 +262,7 @@ Every component in the system is classified by whether it is **permitted to proc
 | **Python sidecar** | Yes — transient PHI in memory | Same as engine (same infrastructure) | Executes user-written steps that may operate on clinical data. Same transient-only rule. |
 | **Neon Postgres** | Conditional — operational data may reference PHI | Yes if signals/runtime\_sessions contain clinical payloads | Signal `payload` and `response_data` fields may contain PHI. Options: (a) store only FHIR resource references (Patient/123), not inline data, or (b) treat Neon as PHI-capable and sign Neon's BAA. Decision required before production. |
 | **Upstash Redis** | Conditional — async queue payloads | Yes if signal payloads flow through Redis Streams | Same decision as Neon: reference-only payloads avoid PHI in Redis. If payloads contain clinical data, Redis needs BAA coverage. |
-| **Vercel (Next.js)** | No — configuration and UI only | No | Never stores or processes clinical data. Webhook endpoints receive messages but immediately dispatch to the engine — Vercel Functions are passthrough. Signal payloads in transit are encrypted (TLS), not persisted on Vercel. |
+| **Vercel (Next.js)** | Transient — webhook ingestion | Evaluate for production | Webhook endpoints receive raw HL7v2/FHIR payloads containing PHI. Payloads are in transit only (TLS-encrypted, not persisted on Vercel), but Vercel Functions do parse and validate message content before dispatching to the engine. If processing goes beyond simple dispatch (e.g., extracting fields for signal metadata), BAA coverage with Vercel should be evaluated. |
 | **Clerk** | No | No | Auth only. No clinical data touches Clerk. |
 | **AI Gateway / LLM providers** | **Requires explicit decision** | If yes, provider must have BAA | See below. |
 
@@ -887,7 +887,7 @@ Environment Variables:
 | Engine | `DATABASE_URL` | Neon Postgres connection string |
 | Engine | `GRPC_PORT` | gRPC listen port (default 50051) |
 | Engine | `AI_GATEWAY_URL` | AI Gateway endpoint for LLM steps |
-| Engine | `AI_GATEWAY_API_KEY` | AI Gateway auth key |
+| Engine | `AI_GATEWAY_API_KEY` | AI Gateway auth key (required — engine runs outside Vercel so OIDC is not available; use manual API key) |
 | Engine | `MEDPLUM_BASE_URL` | Medplum FHIR API base URL |
 | Engine | `MEDPLUM_CLIENT_ID` | Medplum OAuth client ID |
 | Engine | `MEDPLUM_CLIENT_SECRET` | Medplum OAuth client secret |

@@ -182,27 +182,29 @@ impl DatabaseItem for Signal {
 
         let signals = rows
             .iter()
-            .filter_map(|row| {
-                let signal_type_str: &str = row.try_get("signal_type").ok()?;
-                let signal_type: SignalType = signal_type_str.parse().ok()?;
+            .map(|row| {
+                let signal_type_str: &str = row.try_get("signal_type")?;
+                let signal_type: SignalType = signal_type_str
+                    .parse()
+                    .map_err(|e| sqlx::Error::Decode(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Invalid signal type: {}", e)))))?;
 
-                Some(Signal {
+                Ok(Signal {
                     identifiers: IdFields {
-                        local_id: row.try_get("id").ok(),
-                        global_uuid: row.try_get::<Uuid, _>("global_uuid").ok()?.to_string(),
+                        local_id: row.try_get("id")?,
+                        global_uuid: row.try_get::<Uuid, _>("global_uuid")?.to_string(),
                     },
                     timestamps: TimestampFields {
-                        created: row.try_get("created_at").ok()?,
-                        updated: row.try_get("updated_at").ok()?,
+                        created: row.try_get("created_at")?,
+                        updated: row.try_get("updated_at")?,
                     },
-                    user_requested_uuid: row.try_get::<Uuid, _>("user_requested_uuid").ok()?.to_string(),
-                    workflow_id: row.try_get("workflow_id").ok()?,
-                    initiator_agent_id: row.try_get("initiator_agent_id").ok()?,
-                    rts_id: row.try_get("rts_id").ok()?,
+                    user_requested_uuid: row.try_get::<Uuid, _>("user_requested_uuid")?.to_string(),
+                    workflow_id: row.try_get("workflow_id")?,
+                    initiator_agent_id: row.try_get("initiator_agent_id")?,
+                    rts_id: row.try_get("rts_id")?,
                     signal_type,
-                    initial_data: row.try_get("initial_data").ok()?,
-                    response_data: row.try_get("response_data").ok()?,
-                    error_message: row.try_get("error_message").ok()?,
+                    initial_data: row.try_get("initial_data")?,
+                    response_data: row.try_get("response_data")?,
+                    error_message: row.try_get("error_message")?,
                     source: row.try_get("source").unwrap_or(None),
                     idempotency_key: row.try_get("idempotency_key").unwrap_or(None),
                     source_metadata: row.try_get("source_metadata").unwrap_or(None),
@@ -210,7 +212,8 @@ impl DatabaseItem for Signal {
                     lease_expires_at: row.try_get("lease_expires_at").unwrap_or(None),
                 })
             })
-            .collect();
+            .collect::<std::result::Result<Vec<_>, sqlx::Error>>()
+            .map_err(|e| anyhow!("Failed to decode signal row: {}", e))?;
 
         Ok(signals)
     }
@@ -256,33 +259,52 @@ impl DatabaseItem for Signal {
             .map_err(|e| anyhow!("Failed to fetch signal by UUID: {}", e))?
         };
 
-        Ok(row_opt.and_then(|row| {
-            let signal_type_str: &str = row.try_get("signal_type").ok()?;
-            let signal_type: SignalType = signal_type_str.parse().ok()?;
+        match row_opt {
+            None => Ok(None),
+            Some(row) => {
+                let signal_type_str: &str = row.try_get("signal_type")
+                    .map_err(|e| anyhow!("Failed to decode signal_type: {}", e))?;
+                let signal_type: SignalType = signal_type_str
+                    .parse()
+                    .map_err(|e| anyhow!("Invalid signal type: {}", e))?;
 
-            Some(Signal {
-                identifiers: IdFields {
-                    local_id: row.try_get("id").ok(),
-                    global_uuid: row.try_get::<Uuid, _>("global_uuid").ok()?.to_string(),
-                },
-                timestamps: TimestampFields {
-                    created: row.try_get("created_at").ok()?,
-                    updated: row.try_get("updated_at").ok()?,
-                },
-                user_requested_uuid: row.try_get::<Uuid, _>("user_requested_uuid").ok()?.to_string(),
-                workflow_id: row.try_get("workflow_id").ok()?,
-                initiator_agent_id: row.try_get("initiator_agent_id").ok()?,
-                rts_id: row.try_get("rts_id").ok()?,
-                signal_type,
-                initial_data: row.try_get("initial_data").ok()?,
-                response_data: row.try_get("response_data").ok()?,
-                error_message: row.try_get("error_message").ok()?,
-                source: row.try_get("source").unwrap_or(None),
-                idempotency_key: row.try_get("idempotency_key").unwrap_or(None),
-                source_metadata: row.try_get("source_metadata").unwrap_or(None),
-                leased_at: row.try_get("leased_at").unwrap_or(None),
-                lease_expires_at: row.try_get("lease_expires_at").unwrap_or(None),
-            })
-        }))
+                Ok(Some(Signal {
+                    identifiers: IdFields {
+                        local_id: row.try_get("id")
+                            .map_err(|e| anyhow!("Failed to decode id: {}", e))?,
+                        global_uuid: row.try_get::<Uuid, _>("global_uuid")
+                            .map_err(|e| anyhow!("Failed to decode global_uuid: {}", e))?
+                            .to_string(),
+                    },
+                    timestamps: TimestampFields {
+                        created: row.try_get("created_at")
+                            .map_err(|e| anyhow!("Failed to decode created_at: {}", e))?,
+                        updated: row.try_get("updated_at")
+                            .map_err(|e| anyhow!("Failed to decode updated_at: {}", e))?,
+                    },
+                    user_requested_uuid: row.try_get::<Uuid, _>("user_requested_uuid")
+                        .map_err(|e| anyhow!("Failed to decode user_requested_uuid: {}", e))?
+                        .to_string(),
+                    workflow_id: row.try_get("workflow_id")
+                        .map_err(|e| anyhow!("Failed to decode workflow_id: {}", e))?,
+                    initiator_agent_id: row.try_get("initiator_agent_id")
+                        .map_err(|e| anyhow!("Failed to decode initiator_agent_id: {}", e))?,
+                    rts_id: row.try_get("rts_id")
+                        .map_err(|e| anyhow!("Failed to decode rts_id: {}", e))?,
+                    signal_type,
+                    initial_data: row.try_get("initial_data")
+                        .map_err(|e| anyhow!("Failed to decode initial_data: {}", e))?,
+                    response_data: row.try_get("response_data")
+                        .map_err(|e| anyhow!("Failed to decode response_data: {}", e))?,
+                    error_message: row.try_get("error_message")
+                        .map_err(|e| anyhow!("Failed to decode error_message: {}", e))?,
+                    source: row.try_get("source").unwrap_or(None),
+                    idempotency_key: row.try_get("idempotency_key").unwrap_or(None),
+                    source_metadata: row.try_get("source_metadata").unwrap_or(None),
+                    leased_at: row.try_get("leased_at").unwrap_or(None),
+                    lease_expires_at: row.try_get("lease_expires_at").unwrap_or(None),
+                }))
+            }
+        }
     }
 }

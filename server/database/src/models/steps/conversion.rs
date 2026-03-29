@@ -43,7 +43,9 @@ impl JsonLike for Step {
         let config = obj.get("config").cloned();
         let name = obj["name"].as_str().map(|s| s.to_string());
         let description = obj["description"].as_str().map(|s| s.to_string());
-        let step_order = obj["step_order"].as_i64().map(|v| v as i32);
+        let step_order = obj.get("step_order")
+            .and_then(|v| v.as_i64())
+            .and_then(|v| i32::try_from(v).ok());
 
         // Handle ID fields
         let local_id = obj["id"].as_i64().map(|id| id as i32);

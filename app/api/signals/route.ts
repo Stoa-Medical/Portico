@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     }
 
     const db = getDb()
-    const key = idempotencyKey ?? crypto.randomUUID()
+    const key = idempotencyKey || crypto.randomUUID()
 
     // Check for existing signal with this idempotency key
     const [existing] = await db

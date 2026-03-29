@@ -8,14 +8,13 @@ impl EngineState {
         sqlx::query(
             r#"
             INSERT INTO engine_state (id, last_redis_stream_id, last_heartbeat, updated_at)
-            VALUES ($1, $2, $3, $4)
+            VALUES (1, $1, $2, $3)
             ON CONFLICT (id) DO UPDATE SET
                 last_redis_stream_id = EXCLUDED.last_redis_stream_id,
                 last_heartbeat = EXCLUDED.last_heartbeat,
                 updated_at = EXCLUDED.updated_at
             "#,
         )
-        .bind(self.id)
         .bind(self.last_redis_stream_id.as_deref())
         .bind(&self.last_heartbeat)
         .bind(&self.updated_at)

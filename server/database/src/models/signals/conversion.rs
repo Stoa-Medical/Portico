@@ -81,8 +81,14 @@ impl JsonLike for Signal {
             source: obj.get("source").and_then(|v| v.as_str()).map(|s| s.to_string()),
             idempotency_key: obj.get("idempotency_key").and_then(|v| v.as_str()).map(|s| s.to_string()),
             source_metadata: obj.get("source_metadata").cloned(),
-            leased_at: None,
-            lease_expires_at: None,
+            leased_at: obj.get("leased_at")
+                .and_then(|v| v.as_str())
+                .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                .map(|dt| dt.with_timezone(&chrono::Utc)),
+            lease_expires_at: obj.get("lease_expires_at")
+                .and_then(|v| v.as_str())
+                .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                .map(|dt| dt.with_timezone(&chrono::Utc)),
         })
     }
 }

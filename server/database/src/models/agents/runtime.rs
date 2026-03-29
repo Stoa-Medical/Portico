@@ -213,20 +213,12 @@ impl AgentRuntime {
             // Convert step type string to enum
             let step_type = match step_spec.step_type.as_str() {
                 "python" => StepType::Python,
-                "prompt" => {
-                    let model = step_spec.config
-                        .get("model")
-                        .and_then(|m| m.as_str())
-                        .unwrap_or("default_model")
-                        .to_string();
-                    StepType::Prompt(model)
-                },
-                "webscrape" => StepType::WebScrape,
+                "llm" => StepType::LLM,
+                "transform" => StepType::Transform,
+                "validate" => StepType::Validate,
+                "fhir" => StepType::FHIR,
                 _ => return Err(anyhow!("Unknown step type: {}", step_spec.step_type)),
             };
-
-            // Convert the config to a JSON string for step_content
-            let step_content = serde_json::to_string(&step_spec.config)?;
 
             let step = Step {
                 identifiers: IdFields {
@@ -237,9 +229,11 @@ impl AgentRuntime {
                     created: chrono::Utc::now(),
                     updated: chrono::Utc::now(),
                 },
+                name: step_spec.name.clone(),
                 description: step_spec.description.clone(),
                 step_type,
-                step_content,
+                config: Some(step_spec.config.clone()),
+                step_order: None,
             };
 
             // Save step to database

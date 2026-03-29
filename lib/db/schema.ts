@@ -89,7 +89,7 @@ export const steps = pgTable('steps', {
 export const runtimeSessions = pgTable('runtime_sessions', {
   id: uuid('id').primaryKey().defaultRandom(),
   agentId: uuid('agent_id').references(() => agents.id),
-  signalId: uuid('signal_id'),
+  signalId: uuid('signal_id'), // No DB FK — circular with signals.runtimeSessionId. Linked via Drizzle relations.
   status: runningStatusEnum('status').notNull().default('waiting'),
   stepResults: jsonb('step_results'),
   stepExecutionMs: jsonb('step_execution_ms'),

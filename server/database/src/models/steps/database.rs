@@ -147,30 +147,31 @@ impl DatabaseItem for Step {
 
         let steps = rows
             .iter()
-            .filter_map(|row| {
-                let step_type_str: &str = row.try_get("step_type").ok()?;
-                let step_type = StepType::from_str(step_type_str).ok()?;
+            .map(|row| {
+                let step_type_str: &str = row.try_get("step_type")?;
+                let step_type = StepType::from_str(step_type_str)
+                    .map_err(|e| sqlx::Error::Decode(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Invalid step type: {}", e)))))?;
 
-                Some(Step {
+                Ok(Step {
                     identifiers: IdFields {
-                        local_id: row.try_get("id").ok(),
+                        local_id: row.try_get("id")?,
                         global_uuid: row
-                            .try_get::<Uuid, _>("global_uuid")
-                            .ok()?
+                            .try_get::<Uuid, _>("global_uuid")?
                             .to_string(),
                     },
                     timestamps: TimestampFields {
-                        created: row.try_get("created_at").ok()?,
-                        updated: row.try_get("updated_at").ok()?,
+                        created: row.try_get("created_at")?,
+                        updated: row.try_get("updated_at")?,
                     },
                     name: row.try_get("name").unwrap_or(None),
-                    description: row.try_get("description").ok()?,
+                    description: row.try_get("description")?,
                     step_type,
                     config: row.try_get("config").unwrap_or(None),
                     step_order: row.try_get("step_order").unwrap_or(None),
                 })
             })
-            .collect();
+            .collect::<std::result::Result<Vec<_>, sqlx::Error>>()
+            .map_err(|e| anyhow!("Failed to decode step row: {}", e))?;
 
         Ok(steps)
     }
@@ -210,28 +211,37 @@ impl DatabaseItem for Step {
             .await?
         };
 
-        Ok(row_opt.and_then(|row| {
-            let step_type_str: &str = row.try_get("step_type").ok()?;
-            let step_type = StepType::from_str(step_type_str).ok()?;
+        match row_opt {
+            None => Ok(None),
+            Some(row) => {
+                let step_type_str: &str = row.try_get("step_type")
+                    .map_err(|e| anyhow!("Failed to decode step_type: {}", e))?;
+                let step_type = StepType::from_str(step_type_str)
+                    .map_err(|e| anyhow!("Invalid step type: {}", e))?;
 
-            Some(Step {
-                identifiers: IdFields {
-                    local_id: row.try_get("id").ok(),
-                    global_uuid: row
-                        .try_get::<Uuid, _>("global_uuid")
-                        .ok()?
-                        .to_string(),
-                },
-                timestamps: TimestampFields {
-                    created: row.try_get("created_at").ok()?,
-                    updated: row.try_get("updated_at").ok()?,
-                },
-                name: row.try_get("name").unwrap_or(None),
-                description: row.try_get("description").ok()?,
-                step_type,
-                config: row.try_get("config").unwrap_or(None),
-                step_order: row.try_get("step_order").unwrap_or(None),
-            })
-        }))
+                Ok(Some(Step {
+                    identifiers: IdFields {
+                        local_id: row.try_get("id")
+                            .map_err(|e| anyhow!("Failed to decode id: {}", e))?,
+                        global_uuid: row
+                            .try_get::<Uuid, _>("global_uuid")
+                            .map_err(|e| anyhow!("Failed to decode global_uuid: {}", e))?
+                            .to_string(),
+                    },
+                    timestamps: TimestampFields {
+                        created: row.try_get("created_at")
+                            .map_err(|e| anyhow!("Failed to decode created_at: {}", e))?,
+                        updated: row.try_get("updated_at")
+                            .map_err(|e| anyhow!("Failed to decode updated_at: {}", e))?,
+                    },
+                    name: row.try_get("name").unwrap_or(None),
+                    description: row.try_get("description")
+                        .map_err(|e| anyhow!("Failed to decode description: {}", e))?,
+                    step_type,
+                    config: row.try_get("config").unwrap_or(None),
+                    step_order: row.try_get("step_order").unwrap_or(None),
+                }))
+            }
+        }
     }
 }
