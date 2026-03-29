@@ -1,38 +1,36 @@
 use crate::{IdFields, TimestampFields};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sqlx::{postgres::PgArgumentBuffer, Postgres};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum StepType {
     Python,
-    Prompt(String),
-    WebScrape,
+    LLM,
+    Transform,
+    Validate,
+    FHIR,
 }
 
 impl StepType {
     pub fn from_str(s: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         match s {
             "python" => Ok(StepType::Python),
-            "prompt" => Ok(StepType::Prompt(
-                crate::JsonModeLLMs::MetaLlama33_70b.to_string(),
-            )),
-            "webscrape" => Ok(StepType::WebScrape),
-            _ => Err("Invalid step type".into()),
+            "llm" => Ok(StepType::LLM),
+            "transform" => Ok(StepType::Transform),
+            "validate" => Ok(StepType::Validate),
+            "fhir" => Ok(StepType::FHIR),
+            _ => Err(format!("Invalid step type: {}", s).into()),
         }
     }
 
     pub fn as_str(&self) -> &'static str {
         match self {
             StepType::Python => "python",
-            StepType::Prompt(_) => "prompt",
-            StepType::WebScrape => "webscrape",
-        }
-    }
-
-    pub fn get_llm_model(&self) -> Option<String> {
-        match self {
-            StepType::Prompt(model) => Some(model.clone()),
-            _ => None,
+            StepType::LLM => "llm",
+            StepType::Transform => "transform",
+            StepType::Validate => "validate",
+            StepType::FHIR => "fhir",
         }
     }
 }
@@ -47,14 +45,7 @@ impl<'r> sqlx::Decode<'r, Postgres> for StepType {
     fn decode(
         value: sqlx::postgres::PgValueRef<'r>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        match value.as_str()? {
-            "python" => Ok(StepType::Python),
-            "prompt" => Ok(StepType::Prompt(
-                crate::JsonModeLLMs::MetaLlama33_70b.to_string(),
-            )),
-            "webscrape" => Ok(StepType::WebScrape),
-            s => Err(format!("Invalid step type: {}", s).into()),
-        }
+        StepType::from_str(value.as_str()?)
     }
 }
 
@@ -73,67 +64,28 @@ impl<'q> sqlx::Encode<'q, Postgres> for StepType {
 pub struct Step {
     pub identifiers: IdFields,
     pub timestamps: TimestampFields,
+    pub name: Option<String>,
     pub description: Option<String>,
     pub step_type: StepType,
-    pub step_content: String,
+    pub config: Option<Value>,
+    pub step_order: Option<i32>,
 }
 
 impl Step {
     pub fn new(
         identifiers: IdFields,
         step_type: StepType,
-        step_content: String,
+        config: Option<Value>,
         description: Option<String>,
     ) -> Self {
         Self {
             identifiers,
             timestamps: TimestampFields::new(),
+            name: None,
             step_type,
-            step_content,
+            config,
             description,
+            step_order: None,
         }
-    }
-
-    pub fn new_prompt(
-        identifiers: IdFields,
-        step_content: String,
-        description: Option<String>,
-        llm_model: Option<String>,
-    ) -> Self {
-        Self {
-            identifiers,
-            timestamps: TimestampFields::new(),
-            step_type: StepType::Prompt(
-                llm_model.unwrap_or_else(|| crate::JsonModeLLMs::MetaLlama33_70b.to_string()),
-            ),
-            step_content,
-            description,
-        }
-    }
-
-    pub fn new_webscrape(identifiers: IdFields, url: String, description: Option<String>) -> Self {
-        Self {
-            identifiers,
-            timestamps: TimestampFields::new(),
-            step_type: StepType::WebScrape,
-            step_content: url,
-            description,
-        }
-    }
-
-    pub fn is_python_step(&self) -> bool {
-        matches!(self.step_type, StepType::Python)
-    }
-
-    pub fn is_prompt_step(&self) -> bool {
-        matches!(self.step_type, StepType::Prompt(_))
-    }
-
-    pub fn is_webscrape_step(&self) -> bool {
-        matches!(self.step_type, StepType::WebScrape)
-    }
-
-    pub fn get_llm_model(&self) -> Option<String> {
-        self.step_type.get_llm_model()
     }
 }

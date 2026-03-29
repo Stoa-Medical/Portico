@@ -31,6 +31,8 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
             AgentPolicy::default()
         };
 
+        let preferred_model: Option<String> = row.try_get("preferred_model").unwrap_or(None);
+
         Ok(Self {
             identifiers: IdFields {
                 local_id: Some(id),
@@ -44,6 +46,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for Agent {
             description,
             capabilities,
             policy,
+            preferred_model,
         })
     }
 }
@@ -59,6 +62,7 @@ impl JsonLike for Agent {
             "description": self.description,
             "capabilities": serde_json::to_value(&self.capabilities).unwrap_or_default(),
             "policy": serde_json::to_value(&self.policy).unwrap_or_default(),
+            "preferred_model": self.preferred_model,
         })
     }
 
@@ -112,6 +116,10 @@ impl JsonLike for Agent {
                     .map(|s| s.to_string()),
                 capabilities,
                 policy,
+                preferred_model: obj
+                    .get("preferred_model")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
             })
         } else {
             Err(anyhow!("Expected JSON object"))
@@ -140,9 +148,9 @@ impl DatabaseItem for Agent {
         sqlx::query(
             r#"
             INSERT INTO agents (
-                global_uuid, name, description, capabilities_json, policy_json, created_at, updated_at
+                global_uuid, name, description, capabilities_json, policy_json, preferred_model, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             "#,
         )
         .bind(uuid_parsed)
@@ -150,6 +158,7 @@ impl DatabaseItem for Agent {
         .bind(self.description.as_deref())
         .bind(capabilities_json)
         .bind(policy_json)
+        .bind(self.preferred_model.as_deref())
         .bind(&self.timestamps.created)
         .bind(&self.timestamps.updated)
         .execute(pool)
@@ -170,14 +179,16 @@ impl DatabaseItem for Agent {
                 description = $2,
                 capabilities_json = $3,
                 policy_json = $4,
-                updated_at = $5
-            WHERE global_uuid = $6
+                preferred_model = $5,
+                updated_at = $6
+            WHERE global_uuid = $7
             "#,
         )
         .bind(&self.name)
         .bind(self.description.as_deref())
         .bind(capabilities_json)
         .bind(policy_json)
+        .bind(self.preferred_model.as_deref())
         .bind(&self.timestamps.updated)
         .bind(uuid_parsed)
         .execute(pool)
@@ -199,7 +210,7 @@ impl DatabaseItem for Agent {
     async fn try_db_select_all(pool: &PgPool) -> Result<Vec<Self>> {
         let rows = sqlx::query_as::<_, Agent>(
             r#"
-            SELECT id, global_uuid, name, description, capabilities_json, policy_json, created_at, updated_at
+            SELECT id, global_uuid, name, description, capabilities_json, policy_json, preferred_model, created_at, updated_at
             FROM agents
             ORDER BY created_at DESC
             "#
@@ -217,7 +228,7 @@ impl DatabaseItem for Agent {
         let row_opt = if let Some(local_id) = id.local_id {
             sqlx::query_as::<_, Agent>(
                 r#"
-                SELECT id, global_uuid, name, description, capabilities_json, policy_json, created_at, updated_at
+                SELECT id, global_uuid, name, description, capabilities_json, policy_json, preferred_model, created_at, updated_at
                 FROM agents
                 WHERE id = $1
                 "#,
@@ -229,7 +240,7 @@ impl DatabaseItem for Agent {
             let uuid_parsed = Uuid::parse_str(&id.global_uuid)?;
             sqlx::query_as::<_, Agent>(
                 r#"
-                SELECT id, global_uuid, name, description, capabilities_json, policy_json, created_at, updated_at
+                SELECT id, global_uuid, name, description, capabilities_json, policy_json, preferred_model, created_at, updated_at
                 FROM agents
                 WHERE global_uuid = $1
                 "#,

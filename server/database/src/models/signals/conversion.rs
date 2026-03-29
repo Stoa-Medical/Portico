@@ -18,7 +18,12 @@ impl JsonLike for Signal {
             "signal_type": self.signal_type.as_str(),
             "initial_data": self.initial_data,
             "response_data": self.response_data,
-            "error_message": self.error_message
+            "error_message": self.error_message,
+            "source": self.source,
+            "idempotency_key": self.idempotency_key,
+            "source_metadata": self.source_metadata,
+            "leased_at": self.leased_at,
+            "lease_expires_at": self.lease_expires_at
         })
     }
 
@@ -73,6 +78,11 @@ impl JsonLike for Signal {
             initial_data,
             response_data,
             error_message,
+            source: obj.get("source").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            idempotency_key: obj.get("idempotency_key").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            source_metadata: obj.get("source_metadata").cloned(),
+            leased_at: None,
+            lease_expires_at: None,
         })
     }
 }

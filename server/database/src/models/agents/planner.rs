@@ -152,23 +152,6 @@ impl WorkflowPlanner {
         // Simple objective parsing - in a real implementation, this would be more sophisticated
         let objective_lower = objective.to_lowercase();
 
-        // If objective mentions web scraping
-        if objective_lower.contains("scrape") || objective_lower.contains("web") {
-            if agent.can_use_tool("webscrape") {
-                steps.push(StepSpec {
-                    name: Some("Web Scraping".to_string()),
-                    description: Some("Extract data from web sources".to_string()),
-                    step_type: "webscrape".to_string(),
-                    config: json!({
-                        "tool": "webscrape",
-                        "url": context.and_then(|c| c.get("url")).unwrap_or(&Value::Null)
-                    }),
-                });
-            } else {
-                return Err(anyhow!("Objective requires web scraping but agent lacks this capability"));
-            }
-        }
-
         // If objective mentions analysis or processing
         if objective_lower.contains("analyze") || objective_lower.contains("process") {
             if !agent.capabilities.models.is_empty() {
@@ -176,13 +159,37 @@ impl WorkflowPlanner {
                 steps.push(StepSpec {
                     name: Some("Analysis".to_string()),
                     description: Some("Analyze and process data".to_string()),
-                    step_type: "prompt".to_string(),
+                    step_type: "llm".to_string(),
                     config: json!({
                         "model": model,
                         "prompt": format!("Analyze the following objective: {}", objective)
                     }),
                 });
             }
+        }
+
+        // If objective mentions FHIR or healthcare data
+        if objective_lower.contains("fhir") || objective_lower.contains("healthcare") {
+            if agent.can_use_tool("fhir") {
+                steps.push(StepSpec {
+                    name: Some("FHIR Processing".to_string()),
+                    description: Some("Process FHIR healthcare data".to_string()),
+                    step_type: "fhir".to_string(),
+                    config: json!({
+                        "tool": "fhir"
+                    }),
+                });
+            }
+        }
+
+        // If objective mentions transform or convert
+        if objective_lower.contains("transform") || objective_lower.contains("convert") {
+            steps.push(StepSpec {
+                name: Some("Transform".to_string()),
+                description: Some("Transform data".to_string()),
+                step_type: "transform".to_string(),
+                config: json!({}),
+            });
         }
 
         // If objective mentions code execution
@@ -206,7 +213,7 @@ impl WorkflowPlanner {
             steps.push(StepSpec {
                 name: Some("General Task".to_string()),
                 description: Some("Handle the requested objective".to_string()),
-                step_type: "prompt".to_string(),
+                step_type: "llm".to_string(),
                 config: json!({
                     "model": model,
                     "prompt": objective
@@ -299,7 +306,7 @@ mod tests {
             name: "Test Agent".to_string(),
             description: Some("Test agent for planning".to_string()),
             capabilities: AgentCapabilities {
-                tools: vec!["python".to_string(), "webscrape".to_string()],
+                tools: vec!["python".to_string(), "fhir".to_string()],
                 models: vec!["gpt-4".to_string()],
                 max_steps: Some(10),
                 can_create_ephemeral: true,
@@ -311,6 +318,7 @@ mod tests {
                 security_constraints: Value::Null,
                 metadata: Value::Null,
             },
+            preferred_model: None,
         }
     }
 

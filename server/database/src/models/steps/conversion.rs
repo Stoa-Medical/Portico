@@ -19,22 +19,17 @@ impl Step {
 
 impl JsonLike for Step {
     fn to_json(&self) -> Value {
-        let mut json = json!({
+        json!({
             "id": self.identifiers.local_id,
             "global_uuid": self.identifiers.global_uuid,
+            "name": self.name,
             "description": self.description,
             "step_type": self.step_type.as_str(),
-            "step_content": self.step_content,
+            "config": self.config,
+            "step_order": self.step_order,
             "created_at": self.timestamps.created.format("%Y-%m-%d %H:%M:%S").to_string(),
             "updated_at": self.timestamps.updated.format("%Y-%m-%d %H:%M:%S").to_string(),
-        });
-
-        // Add llm_model field only for Prompt steps
-        if let StepType::Prompt(model) = &self.step_type {
-            json["llm_model"] = json!(model);
-        }
-
-        json
+        })
     }
 
     fn from_json(obj: Value) -> Result<Self> {
@@ -42,22 +37,13 @@ impl JsonLike for Step {
             .as_str()
             .ok_or_else(|| anyhow!("Missing step_type"))?;
 
-        let step_content = obj["step_content"]
-            .as_str()
-            .ok_or_else(|| anyhow!("Missing step_content"))?;
+        let step_type = StepType::from_str(step_type_str)
+            .map_err(|e| anyhow!("Invalid step_type: {}", e))?;
 
-        // Handle optional fields
+        let config = obj.get("config").cloned();
+        let name = obj["name"].as_str().map(|s| s.to_string());
         let description = obj["description"].as_str().map(|s| s.to_string());
-        let llm_model = obj["llm_model"].as_str().map(|s| s.to_string());
-
-        // Create the appropriate StepType based on the type string and llm_model
-        let step_type = match step_type_str {
-            "python" => StepType::Python,
-            "prompt" => StepType::Prompt(
-                llm_model.unwrap_or_else(|| crate::JsonModeLLMs::MetaLlama33_70b.to_string()),
-            ),
-            _ => return Err(anyhow!("Invalid step type: {}", step_type_str)),
-        };
+        let step_order = obj["step_order"].as_i64().map(|v| v as i32);
 
         // Handle ID fields
         let local_id = obj["id"].as_i64().map(|id| id as i32);
@@ -90,9 +76,11 @@ impl JsonLike for Step {
                 global_uuid,
             },
             timestamps: TimestampFields { created, updated },
+            name,
             description,
             step_type,
-            step_content: step_content.to_string(),
+            config,
+            step_order,
         })
     }
 }

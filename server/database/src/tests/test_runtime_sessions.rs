@@ -14,41 +14,36 @@ fn create_test_session() -> RuntimeSession {
 
 #[test]
 fn test_session_creation() {
-    let _session = create_test_session();
-    // We can only test through public APIs
-    // In a more complete test we would test processing
+    let session = create_test_session();
+    assert!(session.data_quality_score.is_none());
+    assert!(session.signal_id.is_none());
 }
 
 #[test]
 fn test_empty_session_execution() {
     let mut session = create_test_session();
 
-    // Running a session with no steps should succeed
+    // Running a session now returns an error directing to engine dispatch
     let result = tokio_test::block_on(session.start());
-    assert!(result.is_ok(), "Empty session should execute successfully");
-
-    // The result should match the input since there were no steps
-    if let Ok(value) = result {
-        assert_eq!(value, json!({"value": 5}));
-    }
+    assert!(result.is_err(), "Session execution should direct to engine dispatch");
 }
 
 #[test]
 fn test_session_with_steps() {
-    // Create a test step
+    // Create a test step with the new config-based API
     let id_fields = IdFields::new();
     let step = Step::new(
         id_fields,
         StepType::Python,
-        "source['value'] += 10\nresult = source".to_string(),
+        Some(json!({"script": "source['value'] += 10\nresult = source"})),
         Some("A test step".to_string()),
     );
 
     // Create session with our test step
     let source_data = json!({"value": 5});
-    let _session = RuntimeSession::new(source_data, vec![step], None);
+    let session = RuntimeSession::new(source_data, vec![step], None);
 
-    // Since we can't directly access private fields, we'll test
-    // the session through its public API in a real test
-    // For now this is just a placeholder showing how to create a session with steps
+    assert_eq!(session.steps.len(), 1);
+    assert!(session.data_quality_score.is_none());
+    assert!(session.signal_id.is_none());
 }

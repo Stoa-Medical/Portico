@@ -15,6 +15,8 @@ pub struct RuntimeSession {
     pub total_execution_time: Duration,      // Stores total runtime
     pub requested_by_agent_id: Option<i32>, // The local ID of the agent that requested this session
     pub step_results: Vec<Option<Value>>,   // Stores result for each step (None if failed)
+    pub data_quality_score: Option<f32>,
+    pub signal_id: Option<i32>,
 }
 
 impl RuntimeSession {
@@ -31,6 +33,8 @@ impl RuntimeSession {
             total_execution_time: Duration::ZERO,
             requested_by_agent_id,
             step_results: Vec::new(),
+            data_quality_score: None,
+            signal_id: None,
         }
     }
 }

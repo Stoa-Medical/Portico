@@ -12,6 +12,7 @@ pub struct Agent {
     pub description: Option<String>,
     pub capabilities: AgentCapabilities,
     pub policy: AgentPolicy,
+    pub preferred_model: Option<String>,
 }
 
 /// Capabilities define what tools, models, and operations an agent can use
@@ -56,6 +57,7 @@ impl Agent {
             description,
             capabilities: AgentCapabilities::default(),
             policy: AgentPolicy::default(),
+            preferred_model: None,
         }
     }
 
