@@ -68,15 +68,13 @@ impl RpcServer {
             }
         });
 
-        // Initialize workflow queues in the background
-        let manager_clone = Arc::clone(&instance.workflow_manager);
-        tokio::spawn(async move {
-            if let Err(e) = manager_clone.lock().await.init_workflow_queues().await {
-                eprintln!("[ERROR] Failed to initialize workflow queues: {}", e);
-            }
-        });
-
         instance
+    }
+
+    /// Returns a clone of the Arc holding the WorkflowManager.
+    /// Use this before calling `with_server()` (which consumes self).
+    pub fn workflow_manager(&self) -> Arc<tokio::sync::Mutex<WorkflowManager>> {
+        Arc::clone(&self.workflow_manager)
     }
 
     pub fn with_server(self) -> BridgeServiceServer<Self> {
