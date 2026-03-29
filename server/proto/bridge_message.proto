@@ -42,6 +42,12 @@ message SignalRequest {
     SyncPayload sync = 5;
     google.protobuf.Struct fyi_data = 6;
   }
+
+  // v2 additions
+  string source = 7;                         // webhook | medplum-subscription | ui | api
+  string idempotency_key = 8;                // dedupe key
+  google.protobuf.Struct source_metadata = 9; // message type, sending facility, etc.
+  string signal_uuid = 10;                    // UUID string for v2 signals
 }
 
 // Response with the result of processing the signal
