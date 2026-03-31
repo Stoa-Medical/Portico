@@ -146,9 +146,6 @@ For security issues, please email `security@stoamedical.com` instead of using th
 
 ### License
 
-Portico is licensed under the **Business Source License 1.1 (BSL 1.1)**.
-
-- **Free** for internal use processing **≤ 2 production interfaces** or generating **≤ $1M** in trailing-12-month gross charges
-- **Change date**: **2030-07-01** (converts to **Apache 2.0**)
+Portico is licensed under the **Apache 2.0 License**.
 
 See [`LICENSE.txt`](LICENSE.txt) for full terms.
