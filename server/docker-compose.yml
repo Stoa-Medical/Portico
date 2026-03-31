@@ -1,5 +1,5 @@
 services:
-  # Supabase services
+  # PostgreSQL (local dev — production uses Neon)
   postgres:
     image: supabase/postgres:15.1.0.117
     restart: unless-stopped
@@ -26,7 +26,7 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - ./scheme.hcl:/scheme.hcl
+      - ./database/scheme.hcl:/scheme.hcl
     command: >
       schema apply
         --url "postgresql://postgres:postgres@postgres:5432/postgres?search_path=public&sslmode=disable"
@@ -35,37 +35,54 @@ services:
     networks:
       - portico-network
 
-  # Engine service processes signals
+  # Rust engine — workflow orchestrator
   engine:
     build:
       context: ..
       dockerfile: ./server/engine/Dockerfile
     ports:
       - "50051:50051"
+      - "8080:8080"    # Health check endpoint
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/postgres
+      - GRPC_PORT=50051
+      - HEALTH_PORT=8080
+      - PYTHON_SIDECAR_URL=http://python-sidecar:8001
+      - AI_GATEWAY_URL=https://ai-gateway.vercel.sh
+      - AI_GATEWAY_API_KEY=${AI_GATEWAY_API_KEY:-}
+      - MEDPLUM_BASE_URL=${MEDPLUM_BASE_URL:-https://api.medplum.com}
+      - MEDPLUM_CLIENT_ID=${MEDPLUM_CLIENT_ID:-}
+      - MEDPLUM_CLIENT_SECRET=${MEDPLUM_CLIENT_SECRET:-}
+      - REDIS_URL=${REDIS_URL:-}
     networks:
       - portico-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
-  # Bridge service connects to Supabase and forwards signals to the engine
-  bridge:
+  # Python sidecar — sandboxed Python step execution
+  python-sidecar:
     build:
-      context: ..
-      dockerfile: ./server/bridge/Dockerfile
-    depends_on:
-      engine:
-        condition: service_started
+      context: ./python-sidecar
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/postgres
-      - ENGINE_HOST=engine
-      - ENGINE_PORT=50051
+      - MAX_EXECUTION_TIME=60
     networks:
       - portico-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
 networks:
   portico-network:
@@ -73,4 +90,3 @@ networks:
 
 volumes:
   postgres_data:
-  sqlx_data:

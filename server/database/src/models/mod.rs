@@ -17,7 +17,25 @@ pub mod workflows;
 pub use workflows::Workflow;
 
 pub mod steps;
-pub use steps::Step;
+pub use steps::{Step, StepType};
 
 pub mod runtime_sessions;
 pub use runtime_sessions::RuntimeSession;
+
+pub mod data_mappings;
+pub use data_mappings::DataMapping;
+
+pub mod integrations;
+pub use integrations::Integration;
+
+pub mod audit_log;
+pub use audit_log::AuditLogEntry;
+
+pub mod dead_letter_signals;
+pub use dead_letter_signals::DeadLetterSignal;
+
+pub mod outbox_events;
+pub use outbox_events::OutboxEvent;
+
+pub mod engine_state;
+pub use engine_state::EngineState;

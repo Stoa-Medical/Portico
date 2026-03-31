@@ -1,25 +1,21 @@
 FROM rust:1.84-slim AS builder
 
-# Install required build dependencies including Python for PyO3 and OpenSSL
+# Install required build dependencies (no Python/PyO3 needed in v2)
 RUN apt-get update && apt-get install -y \
     protobuf-compiler \
     pkg-config \
-    python3 \
-    python3-dev \
-    python3-pip \
     libssl-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Set Python environment variables for PyO3 and SQLx offline mode
-ENV PYTHONPATH=/usr/lib/python3/dist-packages \
-    PYO3_PYTHON=/usr/bin/python3 \
-    SQLX_OFFLINE=true \
+# Set SQLx offline mode
+ENV SQLX_OFFLINE=true \
     DATABASE_URL=postgresql://postgres:postgres@postgres:5432/postgres
 
 # Create the workspace structure
 WORKDIR /app
 
-# Copy the entire database crate first - including its full structure
+# Copy the entire database crate first
 COPY server/database/ /app/server/database/
 # Copy proto files
 COPY server/proto/ /app/server/proto/
@@ -35,7 +31,7 @@ FROM debian:bookworm-slim
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     ca-certificates \
-    netcat-traditional \
+    curl \
     libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
@@ -48,16 +44,17 @@ RUN chmod +x /usr/local/bin/portico-engine
 # Create directory for any runtime files
 WORKDIR /app
 
-# Expose port for gRPC
+# Expose ports for gRPC and health check
 EXPOSE 50051
+EXPOSE 8080
 
 # Set default environment variables
-ENV LLM_API_ENDPOINT="https://api.together.xyz/v1/chat/completions" \
-    GRPC_PORT=50051
+ENV GRPC_PORT=50051 \
+    HEALTH_PORT=8080
 
-# Set healthcheck
-HEALTHCHECK --interval=5s --timeout=5s --start-period=5s --retries=3 \
-    CMD nc -z localhost 50051 || exit 1
+# Health check via HTTP endpoint
+HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -sf http://localhost:8080/health || exit 1
 
 # Run the engine
 CMD ["portico-engine"]

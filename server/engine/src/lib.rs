@@ -14,6 +14,7 @@ pub mod proto {
 pub mod core;
 pub mod handlers;
 pub mod services;
+pub mod steps;
 
 // Re-export important types
 pub use crate::core::rpc_server::RpcServer;

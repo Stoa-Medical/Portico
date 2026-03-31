@@ -21,6 +21,11 @@ impl Signal {
             initial_data,
             response_data: None,
             error_message: None,
+            source: None,
+            idempotency_key: None,
+            source_metadata: None,
+            leased_at: None,
+            lease_expires_at: None,
         }
     }
 

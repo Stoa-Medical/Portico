@@ -102,7 +102,7 @@ impl WorkflowValidator {
             .ok_or_else(|| anyhow!("Step {} step_type must be a string", index))?;
 
         match step_type {
-            "python" | "prompt" | "webscrape" => {},
+            "python" | "llm" | "transform" | "validate" | "fhir" => {},
             _ => return Err(anyhow!("Step {} has unknown step_type: {}", index, step_type)),
         }
 
@@ -140,17 +140,15 @@ impl WorkflowValidator {
                     return Err(anyhow!("Step {}: Agent cannot use Python tool", index));
                 }
             },
-            "webscrape" => {
-                if !agent.can_use_tool("webscrape") {
-                    return Err(anyhow!("Step {}: Agent cannot use webscrape tool", index));
-                }
-            },
-            "prompt" => {
+            "llm" => {
                 if let Some(model) = config.get("model").and_then(|m| m.as_str()) {
                     if !agent.can_use_model(model) {
                         return Err(anyhow!("Step {}: Agent cannot use model: {}", index, model));
                     }
                 }
+            },
+            "transform" | "validate" | "fhir" => {
+                // These step types are validated by the engine dispatch
             },
             _ => return Err(anyhow!("Step {}: Unknown step type: {}", index, step_type)),
         }
@@ -261,17 +259,6 @@ impl WorkflowValidator {
                                 index, pattern
                             ));
                         }
-                    }
-                }
-            },
-            "webscrape" => {
-                // Validate URL patterns
-                if let Some(url) = config.get("url").and_then(|u| u.as_str()) {
-                    if url.starts_with("file://") || url.contains("localhost") || url.contains("127.0.0.1") {
-                        return Err(anyhow!(
-                            "Step {}: Webscraping local/file URLs is not allowed",
-                            index
-                        ));
                     }
                 }
             },
@@ -421,7 +408,7 @@ mod tests {
             name: "Test Agent".to_string(),
             description: Some("Test agent for validation".to_string()),
             capabilities: super::types::AgentCapabilities {
-                tools: vec!["python".to_string(), "webscrape".to_string()],
+                tools: vec!["python".to_string(), "fhir".to_string()],
                 models: vec!["gpt-4".to_string()],
                 max_steps: Some(10),
                 can_create_ephemeral: true,
@@ -435,6 +422,7 @@ mod tests {
                 }),
                 metadata: Value::Null,
             },
+            preferred_model: None,
         }
     }
 

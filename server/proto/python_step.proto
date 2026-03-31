@@ -1,0 +1,19 @@
+syntax = "proto3";
+package portico.sidecar;
+
+service PythonStepService {
+  rpc ExecuteStep(StepRequest) returns (StepResponse);
+}
+
+message StepRequest {
+  string code = 1;
+  string input_json = 2;
+  int32 timeout_seconds = 3;
+}
+
+message StepResponse {
+  bool success = 1;
+  string output_json = 2;
+  string error = 3;
+  int32 execution_ms = 4;
+}

@@ -4,6 +4,10 @@ pub mod simple_workflow_planner;
 pub mod agent_monitoring;
 pub mod agent_cache;
 pub mod request_batcher;
+pub mod fhir_client;
+pub mod outbox;
+pub mod hl7_parser;
+pub mod mllp_listener;
 
 #[cfg(test)]
 pub mod test_simple_planner;

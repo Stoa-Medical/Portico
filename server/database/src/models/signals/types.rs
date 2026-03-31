@@ -96,4 +96,9 @@ pub struct Signal {
     pub initial_data: Option<Value>,
     pub response_data: Option<Value>,
     pub error_message: Option<String>,
+    pub source: Option<String>,
+    pub idempotency_key: Option<String>,
+    pub source_metadata: Option<Value>,
+    pub leased_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub lease_expires_at: Option<chrono::DateTime<chrono::Utc>>,
 }
