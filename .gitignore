@@ -57,3 +57,6 @@ temp.txt
 digest.txt
 repomix-output.xml
 # END roobert
+
+# clerk configuration (can include secrets)
+/.clerk/

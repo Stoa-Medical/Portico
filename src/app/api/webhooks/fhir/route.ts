@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDb } from '@/lib/db/client'
-import { signals } from '@/lib/db/schema'
+import { getSql } from '@/lib/db/client'
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,18 +9,13 @@ export async function POST(request: NextRequest) {
     const bundleType = body?.type ?? null
     const entryCount = Array.isArray(body?.entry) ? body.entry.length : 0
 
-    const db = getDb()
+    const sql = getSql()
 
-    const [inserted] = await db
-      .insert(signals)
-      .values({
-        signalType: 'run',
-        source: 'fhir-webhook',
-        idempotencyKey: crypto.randomUUID(),
-        payload: body,
-        sourceMetadata: { resourceType, bundleType, entryCount },
-      })
-      .returning({ id: signals.id })
+    const [inserted] = await sql<[{ id: string }]>`
+      INSERT INTO signals (signal_type, source, idempotency_key, payload, source_metadata)
+      VALUES ('run', 'fhir-webhook', ${crypto.randomUUID()}, ${JSON.stringify(body)}, ${JSON.stringify({ resourceType, bundleType, entryCount })})
+      RETURNING id
+    `
 
     return NextResponse.json({ accepted: true, signalId: inserted.id })
   } catch (error) {

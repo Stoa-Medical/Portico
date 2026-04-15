@@ -15,7 +15,7 @@ Overview:
   * **Web app** – Next.js on Vercel (replaces Tauri desktop app)
     * Agent/workflow configuration, analytics dashboard, AI-assisted data mapping
     * API routes for signal ingestion (webhooks for HL7, FHIR, external systems)
-    * Auth via Clerk, data in Neon Postgres
+    * Auth via Supabase Auth, data in Supabase Postgres
   * **Medplum** – FHIR-native clinical data repository
     * All clinical data (Patient, Observation, Encounter, etc.) stored as FHIR R4 resources
     * Subscriptions for event-driven workflows
@@ -72,8 +72,8 @@ Key Technical Decisions (min 1):
 
 * **Medplum as the FHIR data layer:** Medplum provides FHIR R4 storage, subscriptions, SMART on FHIR auth, and US Core compliance out of the box. Portico does not try to store clinical data in its own Postgres — that would mean rebuilding FHIR validation, resource versioning, search parameters, and compliance certifications. Instead:
   * **Medplum owns:** all clinical FHIR resources (Patient, Observation, Encounter, DiagnosticReport, etc.)
-  * **Neon Postgres owns:** Portico's operational data (agents, steps, signals, runtime\_sessions, data\_mappings, audit\_log)
-  * The Rust engine reads/writes FHIR via Medplum's REST API and reads/writes operational state via SQLx to Neon
+  * **Supabase Postgres owns:** Portico's operational data (agents, steps, signals, runtime\_sessions, data\_mappings, audit\_log)
+  * The Rust engine reads/writes FHIR via Medplum's REST API and reads/writes operational state via SQLx to Supabase Postgres
 
 * **AI Gateway for all LLM calls:** Instead of hardcoding a single LLM provider, all LLM steps route through Vercel AI Gateway. This gives: automatic failover across providers, cost tracking per agent/step, OIDC auth (no API keys to manage), and the ability to swap models by changing a string. The Rust engine calls AI Gateway over HTTP for LLM steps; the Next.js app uses the AI SDK for interactive AI features (chat, mapping assistant).
 
@@ -82,9 +82,7 @@ Key Technical Decisions (min 1):
   * **Async signals** (fire-and-forget, high volume): Redis Streams via Upstash — durable, handles backpressure, the engine consumes at its own pace
   * The proto contract (`bridge_message.proto`) is preserved from v1 with additions for new step types
 
-* **Neon Postgres via Vercel Marketplace:** Replaces Supabase Postgres. Neon gives serverless connection pooling (important for Vercel Functions), database branching for preview deployments, and auto-scaling. Schema managed by Drizzle ORM with migrations.
-
-* **Clerk for auth via Vercel Marketplace:** Replaces Supabase Auth. Gives pre-built UI components, middleware auth patterns, and SSO support for hospital IT teams. SMART on FHIR auth for clinical data access goes through Medplum directly.
+* **Supabase for auth and operational database:** Consolidates auth and Postgres under a single vendor. Supabase Auth provides email/password and OAuth login, session management via cookies, and row-level security (RLS) integration with the database. Supabase Postgres provides connection pooling via Supavisor (important for Vercel Functions) and a direct connection for the Rust engine. Schema managed declaratively by Atlas SQL (`server/database/schema.sql`); queries use raw postgres.js tagged templates. SMART on FHIR auth for clinical data access goes through Medplum directly.
 
 ---
 
@@ -178,7 +176,7 @@ Architecture:
 │  └── Integrations    │   callbacks      └── Mapping │
 │                      └── CRUD APIs          agent   │
 │                           │                         │
-│  Auth: Clerk         DB: Neon Postgres (operational)│
+│  Auth: Supabase Auth DB: Supabase Postgres (oper.)  │
 └───────────────────────────┬─────────────────────────┘
                             │
                    gRPC (sync) / Redis Streams (async)
@@ -203,7 +201,7 @@ Architecture:
 │  │  HL7v2 Parser (zero-copy) · X12 Parser           │
 │  │  FHIR Resource Builder · MedplumClient           │
 │  │                                                  │
-│  │  DB: Neon Postgres via SQLx (operational state)  │
+│  │  DB: Supabase Postgres via SQLx (operational)    │
 │  └──────────────────────────────────────────────────┘
 │         │ gRPC (unix socket, ~0.1ms)                │
 │         ▼                                           │
@@ -222,7 +220,7 @@ Architecture:
 ┌──────────────────────┐         ┌────────────────────┐
 │  Medplum             │         │  Supporting Infra   │
 │  (FHIR Server)       │         │                    │
-│                      │         │  Neon Postgres     │
+│                      │         │  Supabase Postgres     │
 │  Patient, Obs,       │         │  (operational DB)  │
 │  Encounter, etc.     │         │                    │
 │  Subscriptions       │         │  Upstash Redis     │
@@ -258,12 +256,12 @@ Every component in the system is classified by whether it is **permitted to proc
 | Component | Handles PHI? | BAA required? | Notes |
 |---|---|---|---|
 | **Medplum** | Yes — primary PHI store | Yes (Medplum Cloud provides BAA; self-hosted = your responsibility) | All clinical data lives here. FHIR resources are PHI by definition. |
-| **Rust engine** | Yes — transient PHI in memory | Yes (your infrastructure — Fly.io/Railway/ECS must support BAA) | Parses HL7v2/FHIR messages containing PHI. Holds PHI in memory during step execution. Does not persist PHI — writes to Medplum or Neon, then drops. |
+| **Rust engine** | Yes — transient PHI in memory | Yes (your infrastructure — Fly.io/Railway/ECS must support BAA) | Parses HL7v2/FHIR messages containing PHI. Holds PHI in memory during step execution. Does not persist PHI — writes to Medplum or Supabase Postgres, then drops. |
 | **Python sidecar** | Yes — transient PHI in memory | Same as engine (same infrastructure) | Executes user-written steps that may operate on clinical data. Same transient-only rule. |
-| **Neon Postgres** | Conditional — operational data may reference PHI | Yes if signals/runtime\_sessions contain clinical payloads | Signal `payload` and `response_data` fields may contain PHI. Options: (a) store only FHIR resource references (Patient/123), not inline data, or (b) treat Neon as PHI-capable and sign Neon's BAA. Decision required before production. |
-| **Upstash Redis** | Conditional — async queue payloads | Yes if signal payloads flow through Redis Streams | Same decision as Neon: reference-only payloads avoid PHI in Redis. If payloads contain clinical data, Redis needs BAA coverage. |
+| **Supabase Postgres** | Conditional — operational data may reference PHI | Yes if signals/runtime\_sessions contain clinical payloads | Signal `payload` and `response_data` fields may contain PHI. Options: (a) store only FHIR resource references (Patient/123), not inline data, or (b) treat Supabase Postgres as PHI-capable and sign Supabase Postgres's BAA. Decision required before production. |
+| **Upstash Redis** | Conditional — async queue payloads | Yes if signal payloads flow through Redis Streams | Same decision as Supabase Postgres: reference-only payloads avoid PHI in Redis. If payloads contain clinical data, Redis needs BAA coverage. |
 | **Vercel (Next.js)** | Transient — webhook ingestion | Evaluate for production | Webhook endpoints receive raw HL7v2/FHIR payloads containing PHI. Payloads are in transit only (TLS-encrypted, not persisted on Vercel), but Vercel Functions do parse and validate message content before dispatching to the engine. If processing goes beyond simple dispatch (e.g., extracting fields for signal metadata), BAA coverage with Vercel should be evaluated. |
-| **Clerk** | No | No | Auth only. No clinical data touches Clerk. |
+| **Supabase Auth** | No | No | Auth only. No clinical data touches Supabase Auth. |
 | **AI Gateway / LLM providers** | **Requires explicit decision** | If yes, provider must have BAA | See below. |
 
 **AI Gateway and PHI — the hard constraint:**
@@ -279,7 +277,7 @@ The agent's `policy` field (JSONB) must include a `phi_llm_policy` enum: `deny |
 **Tenant isolation:**
 
 * v2 is single-tenant (one Portico deployment = one organization). Multi-tenant is a later-phase feature.
-* When multi-tenant ships: Medplum projects provide per-tenant FHIR isolation; Neon row-level security (RLS) provides per-tenant operational isolation; the engine routes signals to tenant-scoped agents.
+* When multi-tenant ships: Medplum projects provide per-tenant FHIR isolation; Supabase Postgres row-level security (RLS) provides per-tenant operational isolation; the engine routes signals to tenant-scoped agents.
 
 ---
 
@@ -387,16 +385,16 @@ Each step execution runs in a **fresh subprocess** within the sidecar container,
 
 ---
 
-Cross-Database Consistency (Medplum \+ Neon):
+Cross-Database Consistency (Medplum \+ Supabase Postgres):
 
-A workflow writes FHIR resources to Medplum and operational state to Neon. These are separate databases with no distributed transaction. Partial failure will happen. The design must handle it.
+A workflow writes FHIR resources to Medplum and operational state to Supabase Postgres. These are separate databases with no distributed transaction. Partial failure will happen. The design must handle it.
 
 **Outbox pattern for Medplum writes:**
 
-The engine does not write to Medplum and Neon independently. Instead:
+The engine does not write to Medplum and Supabase Postgres independently. Instead:
 
 1. **Step executes** — produces a FHIR Bundle and step result
-2. **Engine writes to Neon first** — inserts a row in `outbox_events` table within the same transaction as the RuntimeSession update:
+2. **Engine writes to Supabase Postgres first** — inserts a row in `outbox_events` table within the same transaction as the RuntimeSession update:
 
 ```
 outbox_events
@@ -413,23 +411,23 @@ outbox_events
 ```
 
 3. **Outbox publisher** (background task in the engine) polls `outbox_events WHERE status = 'pending'`, sends to Medplum, and marks `confirmed` or `failed`.
-4. If Medplum is down, the outbox retries with exponential backoff. The RuntimeSession is already committed to Neon — the UI shows "FHIR write pending" rather than an inconsistent state.
+4. If Medplum is down, the outbox retries with exponential backoff. The RuntimeSession is already committed to Supabase Postgres — the UI shows "FHIR write pending" rather than an inconsistent state.
 
 **Failure scenarios and recovery:**
 
 | Scenario | What happens | Recovery |
 |---|---|---|
-| Medplum transaction succeeds, Neon update fails | Neon transaction rolls back. Outbox event never created. Medplum has the data but Portico doesn't know. | Engine retries the full step. FHIRStep uses conditional creates (`If-None-Exist`) so the Medplum retry is idempotent. |
-| Neon outbox written, Medplum send fails | Outbox event stays `pending`. RuntimeSession shows step as "pending\_fhir\_write". | Outbox publisher retries. After max retries, marks `failed` and surfaces in dashboard. |
-| Engine crashes mid-step | Neon transaction was never committed. Signal stays `dispatched`. | On restart, engine re-processes `dispatched` signals from Neon. Idempotency keys prevent duplicate processing. |
-| Engine crashes after Neon commit, before Medplum send | Outbox event exists as `pending`. | Outbox publisher picks it up on restart. |
+| Medplum transaction succeeds, Supabase Postgres update fails | Supabase Postgres transaction rolls back. Outbox event never created. Medplum has the data but Portico doesn't know. | Engine retries the full step. FHIRStep uses conditional creates (`If-None-Exist`) so the Medplum retry is idempotent. |
+| Supabase Postgres outbox written, Medplum send fails | Outbox event stays `pending`. RuntimeSession shows step as "pending\_fhir\_write". | Outbox publisher retries. After max retries, marks `failed` and surfaces in dashboard. |
+| Engine crashes mid-step | Supabase Postgres transaction was never committed. Signal stays `dispatched`. | On restart, engine re-processes `dispatched` signals from Supabase Postgres. Idempotency keys prevent duplicate processing. |
+| Engine crashes after Supabase Postgres commit, before Medplum send | Outbox event exists as `pending`. | Outbox publisher picks it up on restart. |
 
 **Reconciliation job (cron):**
 
 A scheduled job (Vercel cron or engine background task) runs every 15 minutes:
 * Queries `outbox_events WHERE status = 'pending' AND created_at < now() - interval '5 minutes'`
 * Re-attempts Medplum sends for stuck events
-* Queries Medplum for resources that should exist (by idempotency reference) and reconciles with Neon state
+* Queries Medplum for resources that should exist (by idempotency reference) and reconciles with Supabase Postgres state
 * Logs discrepancies to `audit_log`
 
 ---
@@ -443,7 +441,7 @@ The doc said "webhooks for HL7" but classic HL7v2 arrives over MLLP/TCP (Minimal
 1. **MLLP/TCP listener (traditional hospital feeds):**
    * HL7v2 over MLLP is a TCP connection with a specific framing protocol (VT/FS/CR delimiters). This cannot run on Vercel — it needs a persistent TCP socket.
    * The **MLLP listener runs in the engine container** (or a dedicated ingress sidecar). Rust is well-suited for this: `tokio::net::TcpListener` with a custom MLLP codec.
-   * On receiving an HL7v2 message, the listener: (a) sends an ACK/NAK back to the sender per HL7v2 protocol, (b) creates a Signal in Neon, (c) queues for processing.
+   * On receiving an HL7v2 message, the listener: (a) sends an ACK/NAK back to the sender per HL7v2 protocol, (b) creates a Signal in Supabase Postgres, (c) queues for processing.
    * This is the path for direct hospital interface engine connections (ADT feeds, lab results, orders).
 
 2. **HTTP webhook (modern integrations):**
@@ -490,10 +488,10 @@ Engine Durability (Single-Node):
 
 **Queue reconstruction on startup:**
 
-1. Engine starts and connects to Neon Postgres.
+1. Engine starts and connects to Supabase Postgres.
 2. Queries `signals WHERE status IN ('pending', 'dispatched') ORDER BY created_at ASC`.
 3. For each signal: looks up the associated agent, creates the agent's MPSC queue if it doesn't exist, and enqueues the signal.
-4. Also resumes the Redis Streams consumer group from the last `XACK`ed message ID (persisted in Neon as `engine_state.last_redis_stream_id`).
+4. Also resumes the Redis Streams consumer group from the last `XACK`ed message ID (persisted in Supabase Postgres as `engine_state.last_redis_stream_id`).
 5. Engine is now caught up. New signals flow in via gRPC or Redis Streams.
 
 **Graceful shutdown (deploy/restart):**
@@ -501,12 +499,12 @@ Engine Durability (Single-Node):
 1. Engine receives `SIGTERM` (Fly.io/Railway/ECS send this before killing the container).
 2. Engine stops accepting new gRPC connections and Redis Stream reads.
 3. Engine drains in-flight signals: waits up to 30 seconds for currently-executing steps to complete.
-4. For signals still in MPSC queues (not yet started): marks them as `pending` in Neon (they were `dispatched` when queued).
-5. Persists `engine_state.last_redis_stream_id` to Neon.
+4. For signals still in MPSC queues (not yet started): marks them as `pending` in Supabase Postgres (they were `dispatched` when queued).
+5. Persists `engine_state.last_redis_stream_id` to Supabase Postgres.
 6. Engine exits cleanly.
 
 If the engine is `SIGKILL`ed (hard crash, OOM):
-* In-flight signals stay as `dispatched` in Neon. On restart, the reconstruction query picks them up.
+* In-flight signals stay as `dispatched` in Supabase Postgres. On restart, the reconstruction query picks them up.
 * The Redis consumer group's last `XACK` position may be slightly behind — Redis re-delivers unacknowledged messages. Idempotency keys prevent duplicate processing.
 
 **Lease model for in-flight signals:**
@@ -535,7 +533,7 @@ The engine exposes a `/health` HTTP endpoint (Tonic health service or a small Hy
 Key Workflow (v2):
 
 1. External system sends a healthcare message (HL7v2 ADT, FHIR Bundle, CSV file, etc.)
-2. Next.js webhook endpoint receives the message, validates format, creates a Signal in Neon Postgres
+2. Next.js webhook endpoint receives the message, validates format, creates a Signal in Supabase Postgres
 3. Signal is dispatched to the Rust engine:
    * Sync path (gRPC): for signals that need an immediate response
    * Async path (Redis Streams): for high-volume fire-and-forget signals
@@ -548,7 +546,7 @@ Key Workflow (v2):
       * `LLMStep` (optional): AI-assisted data mapping or enrichment via AI Gateway
       * `PythonStep` (optional): custom business logic via Python sidecar
    3. RuntimeSession created with step results and timing data
-5. RuntimeSession saved to Neon Postgres
+5. RuntimeSession saved to Supabase Postgres
 6. Signal updated with result and RuntimeSession reference
 7. Web UI reflects the updated state via Server Components (no Realtime subscription needed — poll or SSE)
 
@@ -593,12 +591,12 @@ portico/
 │   │   ├── chat/route.ts         # AI mapping assistant
 │   │   └── cron/
 │   │       └── cleanup/route.ts  # Scheduled maintenance
-│   └── proxy.ts                  # Clerk auth middleware
+│   └── proxy.ts                  # Supabase auth middleware
 │
 ├── lib/
 │   ├── db/
-│   │   ├── schema.ts             # Drizzle ORM schema (operational tables)
-│   │   ├── client.ts             # Neon serverless client (lazy init)
+│   │   ├── types.ts              # TypeScript row types (operational tables)
+│   │   ├── client.ts             # postgres.js client (lazy init)
 │   │   └── migrations/
 │   ├── medplum/
 │   │   ├── client.ts             # Medplum SDK client
@@ -679,7 +677,6 @@ portico/
 │
 ├── next.config.ts
 ├── vercel.ts                         # Vercel project config (crons, rewrites)
-├── drizzle.config.ts
 └── package.json
 ```
 
@@ -687,7 +684,7 @@ portico/
 
 Database Schema (v2):
 
-**Neon Postgres (operational — managed by Drizzle):**
+**Supabase Postgres (operational — managed by Atlas SQL):**
 
 ```
 agents
@@ -818,8 +815,8 @@ What Changed from v1:
 | Concern | v1 | v2 | Why |
 |---|---|---|---|
 | Frontend | Tauri + SvelteKit desktop app | Next.js web app on Vercel | No native OS needs; web gives preview deploys, SSR, streaming AI, team access |
-| Auth | Supabase Auth | Clerk (Vercel Marketplace) | Pre-built UI, SSO for hospital IT, middleware patterns |
-| Database | Supabase Postgres | Neon Postgres (Vercel Marketplace) | Serverless pooling, branch-per-preview, auto-scaling |
+| Auth | Supabase Auth | Supabase Auth | Consolidated with database under one vendor; email/password + OAuth, RLS integration, self-hostable |
+| Database | Supabase Postgres | Supabase Postgres | Unified with auth provider, connection pooling via Supavisor, self-hostable for on-prem |
 | Clinical data | None (planned) | Medplum (FHIR R4) | Don't rebuild FHIR compliance — Medplum owns clinical data |
 | Event bridge | Python asyncio + Supabase Realtime | gRPC (sync) + Redis Streams (async) | Eliminates the bridge service; webhooks + queue replace Realtime |
 | LLM provider | Direct API key to together.ai | AI Gateway (OIDC, failover, cost tracking) | Provider-agnostic, observable, no keys to manage |
@@ -853,7 +850,7 @@ Deployment:
 └────────┬─────────┘     └────────┬─────────┘     └─────────────────┘
          │                        │
     ┌────▼────────────────────────▼──┐
-    │        Neon Postgres           │
+    │       Supabase Postgres            │
     │        (operational DB)        │
     └────────────────────────────────┘
     ┌────────────────┐
@@ -865,7 +862,7 @@ CI/CD:
 
 * **Web app:** push to main -> Vercel auto-deploys. PRs get preview deployments.
 * **Rust engine:** push to main -> GitHub Actions builds Docker image -> deploys to Fly.io/Railway
-* **Database:** Drizzle migrations run as part of the web app deploy pipeline
+* **Database:** Atlas schema applied as part of the deploy pipeline (`atlas schema apply`)
 * **Medplum:** managed separately (Medplum Cloud) or as part of infra (self-hosted via AWS CDK)
 
 ---
@@ -874,17 +871,18 @@ Environment Variables:
 
 | Service | Variable | Purpose |
 |---|---|---|
-| Web (Vercel) | `DATABASE_URL` | Neon Postgres connection string (auto-provisioned) |
+| Web (Vercel) | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| Web (Vercel) | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous/public key |
+| Web (Vercel) | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (server-side only) |
+| Web (Vercel) | `DATABASE_URL` | Supabase Postgres pooler connection string |
 | Web (Vercel) | `UPSTASH_REDIS_REST_URL` | Redis connection (auto-provisioned) |
 | Web (Vercel) | `UPSTASH_REDIS_REST_TOKEN` | Redis auth (auto-provisioned) |
-| Web (Vercel) | `CLERK_SECRET_KEY` | Clerk auth (auto-provisioned) |
-| Web (Vercel) | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk client auth (auto-provisioned) |
 | Web (Vercel) | `MEDPLUM_BASE_URL` | Medplum FHIR API base URL |
 | Web (Vercel) | `MEDPLUM_CLIENT_ID` | Medplum OAuth client ID |
 | Web (Vercel) | `MEDPLUM_CLIENT_SECRET` | Medplum OAuth client secret |
 | Web (Vercel) | `ENGINE_GRPC_URL` | Rust engine gRPC endpoint |
 | Web (Vercel) | `VERCEL_OIDC_TOKEN` | AI Gateway auth (auto-provisioned) |
-| Engine | `DATABASE_URL` | Neon Postgres connection string |
+| Engine | `DATABASE_URL` | Supabase Postgres connection string |
 | Engine | `GRPC_PORT` | gRPC listen port (default 50051) |
 | Engine | `AI_GATEWAY_URL` | AI Gateway endpoint for LLM steps |
 | Engine | `AI_GATEWAY_API_KEY` | AI Gateway auth key (required — engine runs outside Vercel so OIDC is not available; use manual API key) |
@@ -912,8 +910,8 @@ Using the above architecture, users can:
 Production prerequisites (must be resolved before handling real patient data):
 
 * PHI boundary enforcement — implement `phi_llm_policy` in agent policy, validate in engine before LLM dispatch
-* BAA coverage for all PHI-touching infrastructure (Medplum, Fly.io/Railway/ECS, Neon if storing clinical payloads)
-* Decision on reference-only vs. inline PHI in signal payloads (impacts Neon and Redis BAA requirements)
+* BAA coverage for all PHI-touching infrastructure (Medplum, Fly.io/Railway/ECS, Supabase Postgres if storing clinical payloads)
+* Decision on reference-only vs. inline PHI in signal payloads (impacts Supabase Postgres and Redis BAA requirements)
 * Python sidecar sandboxing — cgroup limits, network egress policy, package allowlist, import restrictions
 * Outbox publisher + reconciliation cron operational and tested
 * Dead-letter signal handling in the dashboard

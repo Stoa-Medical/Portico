@@ -1,36 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDb } from '@/lib/db/client'
-import { signals } from '@/lib/db/schema'
+import { getSql } from '@/lib/db/client'
 
 export async function POST(request: NextRequest) {
   try {
     const rawBody = await request.text()
 
-    // Parse MSH segment to extract message type
     const lines = rawBody.split('\r').filter(Boolean)
     const mshSegment = lines.find((line) => line.startsWith('MSH'))
 
     let messageType = 'unknown'
     if (mshSegment) {
       const fields = mshSegment.split('|')
-      // MSH-9 is the message type field (index 8 in zero-based after split)
       if (fields.length > 8) {
         messageType = fields[8]
       }
     }
 
-    const db = getDb()
+    const sql = getSql()
 
-    const [inserted] = await db
-      .insert(signals)
-      .values({
-        signalType: 'run',
-        source: 'hl7v2-http',
-        idempotencyKey: crypto.randomUUID(),
-        payload: { raw: rawBody },
-        sourceMetadata: { messageType, segmentCount: lines.length },
-      })
-      .returning({ id: signals.id })
+    const [inserted] = await sql<[{ id: string }]>`
+      INSERT INTO signals (signal_type, source, idempotency_key, payload, source_metadata)
+      VALUES ('run', 'hl7v2-http', ${crypto.randomUUID()}, ${JSON.stringify({ raw: rawBody })}, ${JSON.stringify({ messageType, segmentCount: lines.length })})
+      RETURNING id
+    `
 
     return NextResponse.json({ accepted: true, signalId: inserted.id })
   } catch (error) {

@@ -1,37 +1,32 @@
-import { getDb } from '@/lib/db/client'
-import { signals, runtimeSessions, agents } from '@/lib/db/schema'
-import { sql, gte, eq, desc } from 'drizzle-orm'
+import { getSql } from '@/lib/db/client'
+import type { SignalCountRow, AgentPerformanceRow, RecentSessionRow } from '@/lib/db/types'
 
 export async function getSignalCounts(since: Date) {
-  const db = getDb()
+  const sql = getSql()
 
-  const rows = await db
-    .select({
-      status: signals.status,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(signals)
-    .where(gte(signals.createdAt, since))
-    .groupBy(signals.status)
-
-  return rows
+  return await sql<SignalCountRow[]>`
+    SELECT status, count(*)::int AS count
+    FROM signals
+    WHERE created_at >= ${since}
+    GROUP BY status
+  `
 }
 
 export async function getAgentPerformance(since: Date) {
-  const db = getDb()
+  const sql = getSql()
 
-  const rows = await db
-    .select({
-      agentId: runtimeSessions.agentId,
-      agentName: agents.name,
-      avgExecutionMs: sql<number>`avg(${runtimeSessions.totalExecutionMs})::int`,
-      successCount: sql<number>`count(*) filter (where ${runtimeSessions.status} = 'completed')::int`,
-      totalCount: sql<number>`count(*)::int`,
-    })
-    .from(runtimeSessions)
-    .leftJoin(agents, eq(runtimeSessions.agentId, agents.id))
-    .where(gte(runtimeSessions.createdAt, since))
-    .groupBy(runtimeSessions.agentId, agents.name)
+  const rows = await sql<AgentPerformanceRow[]>`
+    SELECT
+      rs.agent_id AS "agentId",
+      a.name AS "agentName",
+      avg(rs.total_execution_ms)::int AS "avgExecutionMs",
+      count(*) FILTER (WHERE rs.status = 'completed')::int AS "successCount",
+      count(*)::int AS "totalCount"
+    FROM runtime_sessions rs
+    LEFT JOIN agents a ON rs.agent_id = a.id
+    WHERE rs.created_at >= ${since}
+    GROUP BY rs.agent_id, a.name
+  `
 
   return rows.map((row) => ({
     ...row,
@@ -40,23 +35,42 @@ export async function getAgentPerformance(since: Date) {
 }
 
 export async function getRecentSessions(limit: number) {
-  const db = getDb()
+  const sql = getSql()
 
-  const rows = await db
-    .select({
-      id: runtimeSessions.id,
-      agentId: runtimeSessions.agentId,
-      agentName: agents.name,
-      status: runtimeSessions.status,
-      totalExecutionMs: runtimeSessions.totalExecutionMs,
-      dataQualityScore: runtimeSessions.dataQualityScore,
-      createdAt: runtimeSessions.createdAt,
-      completedAt: runtimeSessions.completedAt,
-    })
-    .from(runtimeSessions)
-    .leftJoin(agents, eq(runtimeSessions.agentId, agents.id))
-    .orderBy(desc(runtimeSessions.createdAt))
-    .limit(limit)
+  return await sql<RecentSessionRow[]>`
+    SELECT
+      rs.id,
+      rs.agent_id AS "agentId",
+      a.name AS "agentName",
+      rs.status,
+      rs.total_execution_ms AS "totalExecutionMs",
+      rs.data_quality_score AS "dataQualityScore",
+      rs.created_at AS "createdAt",
+      rs.completed_at AS "completedAt"
+    FROM runtime_sessions rs
+    LEFT JOIN agents a ON rs.agent_id = a.id
+    ORDER BY rs.created_at DESC
+    LIMIT ${limit}
+  `
+}
 
-  return rows
+export type SignalVolumeBucket = {
+  bucket: Date
+  status: string
+  count: number
+}
+
+export async function getSignalVolumeByDay(since: Date) {
+  const sql = getSql()
+
+  return await sql<SignalVolumeBucket[]>`
+    SELECT
+      date_trunc('day', created_at) AS bucket,
+      status,
+      count(*)::int AS count
+    FROM signals
+    WHERE created_at >= ${since}
+    GROUP BY bucket, status
+    ORDER BY bucket ASC
+  `
 }

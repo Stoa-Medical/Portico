@@ -1,24 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDb } from '@/lib/db/client'
-import { signals } from '@/lib/db/schema'
+import { getSql } from '@/lib/db/client'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
-    // Medplum subscription notifications follow the FHIR SubscriptionStatus pattern
     const subscriptionId = body?.subscription?.reference ?? body?.id ?? null
     const notificationType = body?.type ?? body?.resourceType ?? 'unknown'
 
-    const db = getDb()
+    const sql = getSql()
 
-    await db.insert(signals).values({
-      signalType: 'run',
-      source: 'medplum-subscription',
-      idempotencyKey: crypto.randomUUID(),
-      payload: body,
-      sourceMetadata: { subscriptionId, notificationType },
-    })
+    await sql`
+      INSERT INTO signals (signal_type, source, idempotency_key, payload, source_metadata)
+      VALUES ('run', 'medplum-subscription', ${crypto.randomUUID()}, ${JSON.stringify(body)}, ${JSON.stringify({ subscriptionId, notificationType })})
+    `
 
     return NextResponse.json({ accepted: true })
   } catch (error) {

@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { eq } from 'drizzle-orm'
-import { getDb } from '@/lib/db/client'
-import { signals } from '@/lib/db/schema'
+import { getSql } from '@/lib/db/client'
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,14 +13,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const db = getDb()
+    const sql = getSql()
     const key = idempotencyKey || crypto.randomUUID()
 
-    // Check for existing signal with this idempotency key
-    const [existing] = await db
-      .select({ id: signals.id, status: signals.status })
-      .from(signals)
-      .where(eq(signals.idempotencyKey, key))
+    const [existing] = await sql<[{ id: string; status: string }?]>`
+      SELECT id, status FROM signals WHERE idempotency_key = ${key}
+    `
 
     if (existing) {
       return NextResponse.json(
@@ -31,17 +27,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const [inserted] = await db
-      .insert(signals)
-      .values({
-        signalType,
-        source,
-        agentId,
-        payload: payload ?? null,
-        sourceMetadata: sourceMetadata ?? null,
-        idempotencyKey: key,
-      })
-      .returning({ id: signals.id })
+    const [inserted] = await sql<[{ id: string }]>`
+      INSERT INTO signals (signal_type, source, agent_id, payload, source_metadata, idempotency_key)
+      VALUES (${signalType}, ${source}, ${agentId}, ${payload ?? null}, ${sourceMetadata ?? null}, ${key})
+      RETURNING id
+    `
 
     return NextResponse.json({ id: inserted.id, status: 'pending' }, { status: 201 })
   } catch (error) {

@@ -1,15 +1,8 @@
-import { neon } from '@neondatabase/serverless'
-import { drizzle } from 'drizzle-orm/neon-http'
-import * as schema from './schema'
+import postgres from 'postgres'
 
-function createDb() {
-  const sql = neon(process.env.DATABASE_URL!)
-  return drizzle(sql, { schema })
-}
+let _sql: ReturnType<typeof postgres> | null = null
 
-let _db: ReturnType<typeof createDb> | null = null
-
-export function getDb() {
-  if (!_db) _db = createDb()
-  return _db
+export function getSql() {
+  if (!_sql) _sql = postgres(process.env.DATABASE_URL!, { prepare: false })
+  return _sql
 }

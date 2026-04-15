@@ -6,7 +6,7 @@ Next.js 15 App Router — the Portico dashboard and API layer.
 
 ```
 app/
-├── layout.tsx              # Root layout (ClerkProvider, Geist fonts, dark mode)
+├── layout.tsx              # Root layout (Geist fonts, dark mode)
 ├── globals.css             # Tailwind CSS global styles
 │
 ├── (auth)/                 # Auth route group (public)
@@ -14,8 +14,8 @@ app/
 │   ├── login/page.tsx
 │   └── register/page.tsx
 │
-├── (dashboard)/            # Dashboard route group (protected by Clerk)
-│   ├── layout.tsx          #   Sidebar nav + header with UserButton
+├── (dashboard)/            # Dashboard route group (protected by Supabase Auth)
+│   ├── layout.tsx          #   Sidebar nav + header with user menu
 │   ├── page.tsx            #   System overview (agent count, pending signals, recent sessions)
 │   ├── agents/             #   Agent list + detail ([id])
 │   ├── workflows/          #   Workflow list + detail ([id])
@@ -40,19 +40,18 @@ These files live at the project root (not inside `app/`) per Next.js convention:
 
 | File | Purpose |
 |------|---------|
-| `middleware.ts` | Clerk auth — protects `/(dashboard)(.*)` routes |
-| `lib/` | Shared modules: database client, agent logic, Medplum client, analytics queries |
+| `middleware.ts` | Supabase Auth — protects dashboard routes, redirects to `/login` |
+| `lib/` | Shared modules: database client, Supabase auth, agent logic, Medplum client, analytics queries |
 | `components/` | Shared UI components (shadcn/ui — added via `npx shadcn@latest add`) |
 | `hooks/` | Custom React hooks |
 | `next.config.ts` | Next.js configuration |
-| `drizzle.config.ts` | Drizzle ORM / Neon Postgres configuration |
 | `components.json` | shadcn/ui configuration |
 
 ## Running
 
 ```bash
-npm install
-npm run dev     # http://localhost:3000
+pnpm install
+pnpm dev     # http://localhost:3000
 ```
 
-Requires environment variables for Clerk, Neon Postgres, and optionally Medplum/Redis/AI Gateway. See the root README for setup.
+Requires environment variables for Supabase and optionally Medplum/Redis/AI Gateway. See the root README for setup.

@@ -14,7 +14,7 @@ graph TB
         UI["Dashboard UI<br/>(App Router)"]
         API["API Routes<br/>(webhooks, chat, signals)"]
         LIB["lib/<br/>(agents, db, medplum, analytics)"]
-        MW["Clerk Middleware"]
+        MW["Supabase Auth Middleware"]
     end
 
     subgraph "Rust Engine · Docker container"
@@ -24,7 +24,7 @@ graph TB
     end
 
     subgraph "Data Layer"
-        NEON[("Neon Postgres<br/>(operational data)")]
+        SUPA[("Supabase Postgres<br/>(operational data)")]
         MED[("Medplum<br/>(FHIR clinical data)")]
         REDIS[("Upstash Redis<br/>(async signals)")]
     end
@@ -33,9 +33,9 @@ graph TB
     API -->|gRPC sync| ENG
     API -->|Redis Streams async| REDIS
     REDIS --> ENG
-    ENG -->|SQLx| NEON
+    ENG -->|SQLx| SUPA
     ENG -->|REST API| MED
-    LIB -->|Drizzle ORM| NEON
+    LIB -->|postgres.js| SUPA
     LIB -->|REST API| MED
     ENG -->|HTTP| AIGW["AI Gateway"]
     API -->|AI SDK| AIGW
@@ -46,8 +46,8 @@ graph TB
 | Layer | Technology |
 |-------|-----------|
 | **Web framework** | Next.js 15 (App Router, React 19) |
-| **Auth** | Clerk |
-| **Database** | Neon Postgres (Drizzle ORM) |
+| **Auth** | Supabase Auth |
+| **Database** | Supabase Postgres (Atlas + postgres.js) |
 | **Clinical data** | Medplum (FHIR R4) |
 | **Cache / async signals** | Upstash Redis |
 | **AI** | Vercel AI SDK + AI Gateway |
@@ -59,31 +59,31 @@ graph TB
 ### Repository Structure
 
 ```
-├── app/                    # Next.js App Router (pages, layouts, API routes)
-│   ├── (auth)/             #   Login / register pages
-│   ├── (dashboard)/        #   Dashboard, agents, workflows, mappings, integrations, analytics
-│   └── api/                #   Webhook endpoints (HL7, FHIR, Medplum), chat, signals, cron
-├── lib/                    # Shared TypeScript modules (imported by app/)
-│   ├── db/                 #   Drizzle schema + client (Neon Postgres)
-│   ├── agents/             #   Agent types, actions, mapping agent
-│   ├── engine/             #   gRPC client for Rust engine
-│   ├── medplum/            #   Medplum FHIR client wrapper
-│   └── analytics/          #   Analytics query functions
-├── server/                 # Backend services (containerized)
-│   ├── engine/             #   Rust gRPC workflow orchestrator
-│   ├── python-sidecar/     #   Sandboxed Python step execution
-│   ├── database/           #   Rust DB crate + Atlas HCL schema
-│   ├── proto/              #   Protobuf definitions
-│   └── docker-compose.yml  #   Local dev environment
-├── design/                 # Design documents
-│   └── 2-cloud-native.md   #   Full architecture design doc
-├── middleware.ts           # Clerk auth middleware (Next.js root convention)
-├── drizzle.config.ts       # Drizzle ORM config
-├── next.config.ts          # Next.js config
-└── package.json            # Node.js dependencies and scripts
+├── src/
+│   ├── app/                    # Next.js App Router (pages, layouts, API routes)
+│   │   ├── (auth)/             #   Login / register pages (Supabase Auth)
+│   │   ├── (dashboard)/        #   Dashboard, agents, workflows, mappings, integrations, analytics
+│   │   └── api/                #   Webhook endpoints (HL7, FHIR, Medplum), chat, signals, cron
+│   ├── lib/                    # Shared TypeScript modules (imported by app/)
+│   │   ├── db/                 #   Database client + types (Supabase Postgres)
+│   │   ├── supabase/           #   Supabase Auth client utilities (server, browser, middleware)
+│   │   ├── agents/             #   Agent types, actions, mapping agent
+│   │   ├── engine/             #   gRPC client for Rust engine
+│   │   ├── medplum/            #   Medplum FHIR client wrapper
+│   │   └── analytics/          #   Analytics query functions
+│   ├── components/             # React components (UI primitives, sign-out button)
+│   └── middleware.ts           # Supabase auth middleware
+├── server/                     # Backend services (containerized)
+│   ├── engine/                 #   Rust gRPC workflow orchestrator
+│   ├── python-sidecar/         #   Sandboxed Python step execution
+│   ├── database/               #   Atlas SQL schema (source of truth) + Rust DB crate
+│   ├── proto/                  #   Protobuf definitions
+│   └── docker-compose.yml      #   Local dev environment
+├── design/                     # Design documents
+│   └── 2-cloud-native.md       #   Full architecture design doc
+├── next.config.ts              # Next.js config
+└── package.json                # Node.js dependencies and scripts
 ```
-
-> **Note**: `lib/` and `middleware.ts` live at the project root because Next.js treats files inside `app/` as route segments. This is standard Next.js App Router convention — see [Next.js project structure docs](https://nextjs.org/docs/getting-started/project-structure).
 
 ### Getting Started
 
@@ -91,13 +91,14 @@ graph TB
 
 - Node.js 20+
 - Docker & Docker Compose (for the Rust engine)
+- [Atlas CLI](https://atlasgo.io/getting-started#installation) (for schema management)
 
 #### Web App (Next.js)
 
 ```bash
-npm install
-cp .env.example .env.local    # Set DATABASE_URL, CLERK keys, etc.
-npm run dev                    # http://localhost:3000
+pnpm install
+cp .env.example .env.local    # Set Supabase keys, DATABASE_URL, etc.
+pnpm run dev                    # http://localhost:3000
 ```
 
 #### Server (Rust Engine + Python Sidecar)
@@ -120,12 +121,12 @@ See [server/README.md](server/README.md) for detailed setup.
 
 | Script | Description |
 |--------|-------------|
-| `npm run dev` | Start Next.js dev server |
-| `npm run build` | Production build |
-| `npm run start` | Start production server |
-| `npm run lint` | ESLint |
-| `npm run db:push` | Push Drizzle schema to database |
-| `npm run db:generate` | Generate Drizzle migrations |
+| `pnpm dev` | Start Next.js dev server |
+| `pnpm build` | Production build |
+| `pnpm start` | Start production server |
+| `pnpm lint` | ESLint |
+| `pnpm db:apply` | Apply Atlas schema to database |
+| `pnpm db:diff` | Show pending schema changes |
 
 ### Architecture Deep Dive
 

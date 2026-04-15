@@ -1,5 +1,5 @@
 services:
-  # PostgreSQL (local dev — production uses Neon)
+  # PostgreSQL (local dev — production uses Supabase Postgres)
   postgres:
     image: supabase/postgres:15.1.0.117
     restart: unless-stopped
@@ -26,11 +26,11 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - ./database/scheme.hcl:/scheme.hcl
+      - ./database/schema.sql:/schema.sql
     command: >
       schema apply
         --url "postgresql://postgres:postgres@postgres:5432/postgres?search_path=public&sslmode=disable"
-        --to "file:///scheme.hcl"
+        --to "file:///schema.sql"
         --auto-approve
     networks:
       - portico-network

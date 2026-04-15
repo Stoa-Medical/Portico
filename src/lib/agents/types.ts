@@ -1,4 +1,4 @@
-// ─── Enum types (mirror Drizzle pgEnum values) ─────────────────────────────
+// ─── Enum types ────────────────────────────────────────────────────────────
 
 export type StepType = 'python' | 'llm' | 'transform' | 'validate' | 'fhir'
 
@@ -19,7 +19,7 @@ export type ConnectionDirection = 'inbound' | 'outbound'
 
 export type IntegrationStatus = 'active' | 'inactive' | 'error'
 
-// ─── Entity types (plain TS mirrors of Drizzle schema for use in components) ─
+// ─── Entity types ──────────────────────────────────────────────────────────
 
 export interface Agent {
   id: string
