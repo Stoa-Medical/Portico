@@ -18,22 +18,19 @@ graph TB
     end
 
     subgraph "Rust Engine · Docker container"
-        ENG["Workflow Orchestrator<br/>(gRPC + tokio)"]
+        ENG["Signal Runner<br/>(tokio)"]
         PY["Python Sidecar<br/>(sandboxed step execution)"]
-        ENG <-->|gRPC| PY
+        ENG <-->|HTTP| PY
     end
 
     subgraph "Data Layer"
         SUPA[("Supabase Postgres<br/>(operational data)")]
         MED[("Medplum<br/>(FHIR clinical data)")]
-        REDIS[("Upstash Redis<br/>(async signals)")]
     end
 
     UI --> LIB
-    API -->|gRPC sync| ENG
-    API -->|Redis Streams async| REDIS
-    REDIS --> ENG
-    ENG -->|SQLx| SUPA
+    API -->|insert pending signals| SUPA
+    ENG -->|lease signals, write results| SUPA
     ENG -->|REST API| MED
     LIB -->|postgres.js| SUPA
     LIB -->|REST API| MED
@@ -49,10 +46,9 @@ graph TB
 | **Auth** | Supabase Auth |
 | **Database** | Supabase Postgres (Atlas + postgres.js) |
 | **Clinical data** | Medplum (FHIR R4) |
-| **Cache / async signals** | Upstash Redis |
 | **AI** | Vercel AI SDK + AI Gateway |
 | **Styling** | Tailwind CSS 4, Geist fonts, shadcn/ui |
-| **Workflow engine** | Rust (tokio, gRPC) |
+| **Workflow engine** | Rust (tokio, SQLx) |
 | **Python execution** | Python sidecar (FastAPI, sandboxed) |
 | **Deployment** | Vercel (web app), Docker (engine + sidecar) |
 
@@ -68,16 +64,15 @@ graph TB
 │   │   ├── db/                 #   Database client + types (Supabase Postgres)
 │   │   ├── supabase/           #   Supabase Auth client utilities (server, browser, middleware)
 │   │   ├── agents/             #   Agent types, actions, mapping agent
-│   │   ├── engine/             #   gRPC client for Rust engine
 │   │   ├── medplum/            #   Medplum FHIR client wrapper
 │   │   └── analytics/          #   Analytics query functions
 │   ├── components/             # React components (UI primitives, sign-out button)
 │   └── middleware.ts           # Supabase auth middleware
 ├── server/                     # Backend services (containerized)
-│   ├── engine/                 #   Rust gRPC workflow orchestrator
+│   ├── engine/                 #   Rust signal runner (leases signals from Postgres, runs steps)
 │   ├── python-sidecar/         #   Sandboxed Python step execution
-│   ├── database/               #   Atlas SQL schema (source of truth) + Rust DB crate
-│   ├── proto/                  #   Protobuf definitions
+│   ├── database/               #   Atlas SQL schema (source of truth)
+│   ├── scripts/e2e.sh          #   End-to-end check against the compose stack
 │   └── docker-compose.yml      #   Local dev environment
 ├── design/                     # Design documents
 │   └── 2-cloud-native.md       #   Full architecture design doc
@@ -105,14 +100,8 @@ pnpm run dev                    # http://localhost:3000
 
 ```bash
 cd server
-docker compose up --build      # Postgres :54322, Engine :50051, Sidecar :8001
-```
-
-Or with tmuxinator for development:
-
-```bash
-cd server
-tmuxinator start
+docker compose up --build      # Postgres :54322, Engine health :8080, Sidecar :8001
+./scripts/e2e.sh               # seeds an agent, sends signals, asserts on the results
 ```
 
 See [server/README.md](server/README.md) for detailed setup.
@@ -133,7 +122,7 @@ See [server/README.md](server/README.md) for detailed setup.
 See [`design/2-cloud-native.md`](design/2-cloud-native.md) for the full design doc covering:
 - Rust engine responsibilities (orchestration, parsing, FHIR resource construction)
 - Python sidecar architecture (crash isolation, independent scaling)
-- Communication patterns (gRPC sync vs Redis Streams async)
+- Communication patterns (gRPC sync vs Redis Streams async). Neither is implemented yet: the web app inserts `pending` signals and the engine leases them from Postgres.
 - Medplum integration strategy
 - AI Gateway usage for LLM steps
 

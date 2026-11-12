@@ -1,155 +1,95 @@
-# Server
+# Portico Server
 
-Backend services for Portico — containerized and deployed alongside the Next.js web app.
+The backend that runs signals: a Rust engine, a Python sidecar for Python steps, and the Postgres schema both the engine and the web app use.
 
-## Architecture
+## How a signal runs
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Docker Compose (local) / Container platform (production)   │
-│                                                             │
-│  ┌──────────────────────┐    ┌─────────────────────────┐   │
-│  │   Rust Engine         │    │   Python Sidecar         │   │
-│  │   (gRPC :50051)       │◄──►│   (HTTP :8001)           │   │
-│  │   (health :8080)      │    │                          │   │
-│  │                        │    │  Sandboxed step exec     │   │
-│  │  Signal routing        │    │  Any Python version      │   │
-│  │  Workflow orchestration│    │  Crash-isolated          │   │
-│  │  HL7v2/X12 parsing     │    └─────────────────────────┘   │
-│  │  FHIR construction     │                                  │
-│  └───────┬────────────────┘                                  │
-│          │                                                   │
-└──────────┼───────────────────────────────────────────────────┘
-           │
-     ┌─────┼──────────────────────┐
-     │     │                      │
-     ▼     ▼                      ▼
-  Neon    Medplum             AI Gateway
-  Postgres (FHIR R4)         (LLM steps)
-```
+1. The web app inserts a row into `signals` with `status = 'pending'` and an `agent_id`.
+2. The engine polls Postgres and leases the oldest pending signal whose agent has nothing in flight. Leasing sets `status = 'dispatched'` and a lease expiry.
+3. For a `run` signal the engine opens a `runtime_sessions` row, loads the agent's steps in `step_order`, and runs them. Each step's output is the next step's input. The signal's `payload` is the first input.
+4. The engine writes per-step results and timings to the session and settles the signal as `completed` (with `response_data`) or `failed` (with `error_message`). A run stops at the first failing step.
+5. `sync` and `fyi` signals are acknowledged as `completed` without running steps.
+
+Signals with no `agent_id` stay pending. The HL7, FHIR and Medplum webhooks currently insert signals that way.
+
+### Ordering and recovery
+
+- One signal per agent runs at a time, in arrival order. Up to `MAX_CONCURRENT_SIGNALS` agents run in parallel.
+- This assumes a single engine instance. Two engines could lease two signals for the same agent at once.
+- On startup and on shutdown the engine returns every `dispatched` signal to `pending` and marks its open session `cancelled`. A rerun executes the steps again from the start, so steps with side effects can repeat.
+- A run is cut off 30 seconds before its lease expires and settles as `failed`.
 
 ## Components
 
-### Rust Engine (`engine/`)
+### Engine (`engine/`)
 
-Workflow orchestrator — the core of Portico's signal processing pipeline.
+| File | Role |
+|------|------|
+| `src/main.rs` | Config, poll loop, health server, graceful shutdown |
+| `src/db.rs` | Every SQL statement the engine runs |
+| `src/runner.rs` | Runs one leased signal to a settled state |
+| `src/steps/` | One executor per step type |
+| `src/services/fhir_client.rs` | Medplum OAuth and FHIR REST client |
 
-- Receives signals via gRPC (`run`, `sync`, `fyi`) from the Next.js web app
-- Consumes async signals from Upstash Redis Streams
-- Orchestrates agent execution with per-agent tokio MPSC queues
-- Delegates: LLM steps → AI Gateway, FHIR ops → Medplum REST, Python steps → sidecar
-- Persists runtime sessions and results to Neon Postgres via SQLx
+Step types:
 
-### Python Sidecar (`python-sidecar/`)
+| Type | Status | Config |
+|------|--------|--------|
+| `python` | Works | `script`, optional `timeout_seconds`. The script reads `input_data` and assigns `output_data`. |
+| `llm` | Calls the AI Gateway | `model`, `system_prompt`, optional `output_schema` |
+| `fhir` | Calls Medplum | `operation` (`create`, `read`, `search`, `transaction`), `resource_type`, `id`, `params` |
+| `transform` | Stub, returns its input | none |
+| `validate` | Stub, always valid | none |
 
-Sandboxed Python step execution (replaces the v1 Python bridge).
+### Python sidecar (`python-sidecar/`)
 
-- Receives step code + input JSON from the Rust engine
-- Executes in an isolated namespace with configurable timeout (`MAX_EXECUTION_TIME`)
-- Crash isolation: a Python failure does not take down the engine
-- Independent Python version and dependencies from the Rust build
+FastAPI service with `POST /execute` and `GET /health`. It runs each script in a subprocess with a timeout and a restricted import hook. The import hook is not a security boundary. Isolation comes from the container.
 
-### Database Crate (`database/`)
+### Schema (`database/schema.sql`)
 
-Shared Rust library for database models, operations, and schema.
+The single schema definition. Atlas applies it declaratively. Compose applies it on startup through the `schema_migrator` service, which uses the throwaway `atlas_dev` database to compute the diff.
 
-- Models: Agent, Step, Signal, RuntimeSession, Connection
-- Database operations via SQLx
-- Atlas HCL schema definition (`scheme.hcl`)
-
-### Protobuf (`proto/`)
-
-Shared gRPC/Protobuf definitions:
-- `bridge_message.proto` — signal processing RPCs
-- `python_step.proto` — Python sidecar communication
-
-## Quick Start
-
-### Docker Compose (recommended)
+## Running
 
 ```bash
-cd server
 docker compose up --build
 ```
 
-This launches:
-- **Postgres** on `:54322` (local dev — production uses Neon)
-- **Schema migration** via Atlas (auto-applies `scheme.hcl`)
-- **Rust Engine** on `:50051` (gRPC) + `:8080` (health)
-- **Python Sidecar** on `:8001`
+- Postgres on `:54322`
+- Engine health on `:8080` (`GET /health`)
+- Python sidecar on `:8001`
 
-### tmuxinator (development)
+The web app connects to the same Postgres with `DATABASE_URL=postgresql://postgres:postgres@localhost:54322/postgres`.
+
+## Verifying
 
 ```bash
-cd server
-tmuxinator start
+./scripts/e2e.sh                                  # inserts signals directly
+WEB_URL=http://localhost:3000 ./scripts/e2e.sh    # creates them through POST /api/signals
 ```
 
-### Manual Setup
+The script brings up the stack, seeds agents with a transform step and a Python step, and asserts on the rows the engine writes: a successful run, a run whose Python step raises, and a signal left `dispatched` across an engine restart.
 
-1. **Postgres**: `docker compose up postgres` or use Supabase CLI (`cd database && supabase start`)
-2. **Engine**: `cd engine && cp .env-example .env && cargo run`
-3. **Python Sidecar**: `cd python-sidecar && pip install -r requirements.txt && python server.py`
+To type-check the engine without a local Rust toolchain:
 
-## Communication with the Web App
+```bash
+docker run --rm -v "$PWD/engine":/w -w /w rust:1.85 cargo check
+```
 
-| Pattern | Transport | Use Case |
-|---------|-----------|----------|
-| **Sync signals** | gRPC (`:50051`) | Requests needing a response (workflow triggers, status queries) |
-| **Async signals** | Upstash Redis Streams | Fire-and-forget, high-volume events (webhook ingestion, Medplum subscriptions) |
+## Environment variables
 
-The web app's `lib/engine/client.ts` handles gRPC communication. Async signals are published to Redis from Next.js API routes and consumed by the engine at its own pace.
-
-## Environment Variables
-
-| Variable | Service | Description |
+| Variable | Used by | Description |
 |----------|---------|-------------|
 | `DATABASE_URL` | Engine | Postgres connection string |
-| `GRPC_PORT` | Engine | gRPC listen port (default: 50051) |
-| `HEALTH_PORT` | Engine | Health check port (default: 8080) |
-| `PYTHON_SIDECAR_URL` | Engine | Sidecar endpoint (default: `http://python-sidecar:8001`) |
-| `AI_GATEWAY_URL` | Engine | AI Gateway endpoint |
-| `AI_GATEWAY_API_KEY` | Engine | AI Gateway auth |
-| `MEDPLUM_BASE_URL` | Engine | Medplum FHIR server URL |
-| `MEDPLUM_CLIENT_ID` | Engine | Medplum client credentials |
-| `MEDPLUM_CLIENT_SECRET` | Engine | Medplum client credentials |
-| `REDIS_URL` | Engine | Upstash Redis for async signals |
-| `MAX_EXECUTION_TIME` | Sidecar | Python step timeout in seconds (default: 60) |
+| `HEALTH_PORT` | Engine | Health check port (default 8080) |
+| `PYTHON_SIDECAR_URL` | Engine | Sidecar endpoint (default `http://localhost:8001`) |
+| `AI_GATEWAY_URL`, `AI_GATEWAY_API_KEY` | Engine | Required for `llm` steps |
+| `MEDPLUM_BASE_URL`, `MEDPLUM_CLIENT_ID`, `MEDPLUM_CLIENT_SECRET` | Engine | Required for `fhir` steps |
+| `POLL_INTERVAL_MS` | Engine | Idle poll interval (default 1000) |
+| `MAX_CONCURRENT_SIGNALS` | Engine | Signals run at once (default 8) |
+| `SIGNAL_LEASE_SECONDS` | Engine | Lease length (default 300) |
+| `MAX_EXECUTION_TIME` | Sidecar | Upper bound on a Python step's timeout in seconds (default 60) |
 
-## Testing
+## Not implemented
 
-```bash
-cd engine && cargo test       # Rust engine tests
-cd database && cargo test     # Database crate tests
-```
-
-## Structure
-
-```
-server/
-├── engine/                 # Rust gRPC workflow orchestrator
-│   ├── src/
-│   │   ├── main.rs         #   Entry point
-│   │   ├── core/           #   Workflow management, signal routing
-│   │   ├── handlers/       #   Signal handlers (run, sync, fyi)
-│   │   ├── services/       #   Agent management, caching
-│   │   └── steps/          #   Step implementations
-│   ├── Cargo.toml
-│   └── Dockerfile
-├── python-sidecar/         # Sandboxed Python execution
-│   ├── server.py           #   HTTP server
-│   ├── executor.py         #   Step runner
-│   ├── requirements.txt
-│   └── Dockerfile
-├── database/               # Shared Rust DB crate
-│   ├── src/
-│   │   ├── models/         #   Agent, Step, Signal, RuntimeSession
-│   │   └── tests/
-│   ├── scheme.hcl          #   Atlas schema definition
-│   └── Cargo.toml
-├── proto/                  # Protobuf definitions
-│   ├── bridge_message.proto
-│   └── python_step.proto
-├── docker-compose.yml      # Full local dev environment
-└── .tmuxinator.yml         # tmux dev session config
-```
+The design in [`design/2-cloud-native.md`](../design/2-cloud-native.md) also describes gRPC dispatch, Redis Streams, a Medplum outbox, an MLLP listener, retries and dead-letter handling. None of those exist in this tree. The `outbox_events`, `dead_letter_signals`, `engine_state` and `audit_log` tables are in the schema and nothing writes to them yet.

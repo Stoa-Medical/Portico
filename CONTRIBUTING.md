@@ -10,14 +10,11 @@ Thank you for considering a contribution to **Portico** – we're thrilled to ha
 
 | Tool | Recommended Version | Purpose |
 |------|---------------------|---------|
-| **Node.js** | 18 LTS | SvelteKit front-end & tooling |
+| **Node.js** | 20+ | Next.js web app & tooling |
 | **pnpm** | ≥ 8 | JS/TS package manager |
-| **Rust** | stable (latest) | Tauri / engine / shared libraries |
-| **Python** | 3.10 + | Bridge micro-service |
-| **uv** | latest | ⚡ Ultra-fast Python package manager |
-| **Docker & Compose** | latest | Local services & CI |
-| **PostgreSQL** | 15 + | Primary database |
-| **Atlas CLI** | latest | Database schema & ORM management |
+| **Docker & Compose** | latest | Postgres, Rust engine, Python sidecar |
+| **Rust** | 1.85+ (optional) | Only to build the engine outside Docker |
+| **Atlas CLI** | latest | Applying `server/database/schema.sql` to a hosted database |
 
 ### Clone & Install
 
@@ -27,14 +24,10 @@ $ git clone https://github.com/your-fork/Portico.git
 $ cd Portico
 
 # Install JS packages
-$ cd app && pnpm install
+$ pnpm install
 
-# (Optional) Setup Python & Rust deps as needed
-
-# Python deps with **uv** (recommended)
-```bash
-# From repo root
-uv pip install -r server/bridge/pyproject.toml  # syncs exact versions
+# Start Postgres, the engine and the sidecar, then run the end-to-end check
+$ cd server && ./scripts/e2e.sh
 ```
 
 ### Git Hooks with *pre-commit*
@@ -78,7 +71,7 @@ Common `<type>` values:
 
 Before opening a PR, please ensure:
 
-- [ ] `pnpm test` / `cargo test` / `pytest` all pass
+- [ ] `pnpm typecheck` and `server/scripts/e2e.sh` pass
 - [ ] `pre-commit run --all-files` succeeds
 - [ ] New/changed code is fully typed and documented
 - [ ] Screenshots or GIFs for UI changes are attached
@@ -101,7 +94,7 @@ Violations may result in review dismissal or, in severe cases, revocation of con
 
 ## 3. Professional & Legal Notes
 
-📜 **License.** Portico is released under the Business Source License 1.1 (BSL 1.1). By contributing you agree your work will be distributed under the project's license. The license converts to Apache 2.0 on **July 1 2030**.
+📜 **License.** Portico is released under the Apache 2.0 License. By contributing you agree your work will be distributed under the project's license.
 
 ⚖️ **Liability.** Contributions are provided **as-is**; the project and its contributors make no warranties. You are responsible for ensuring you have the right to submit any code, data, or documentation you contribute.
 

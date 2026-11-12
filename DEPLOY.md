@@ -121,7 +121,6 @@ Even for local development, Supabase Auth requires a real project for login to w
   MEDPLUM_BASE_URL=https://api.medplum.com
   MEDPLUM_CLIENT_ID=...
   MEDPLUM_CLIENT_SECRET=...
-  ENGINE_GRPC_URL=engine.yourdomain.com:50051
   CRON_SECRET=<generate with: openssl rand -hex 32>
   ```
 - [ ] Push to `main` — Vercel builds and deploys automatically
@@ -131,26 +130,22 @@ Even for local development, Supabase Auth requires a real project for login to w
 
 - [ ] Build the Docker images from the repository root:
   ```bash
-  docker build -t portico-engine -f server/engine/Dockerfile .
-  docker build -t portico-sidecar -f server/python-sidecar/Dockerfile server/python-sidecar
+  docker build -t portico-engine server/engine
+  docker build -t portico-sidecar server/python-sidecar
   ```
-  Note: the engine Dockerfile uses the repo root as build context (needs `server/proto/`
-  and `server/database/`). The sidecar uses `server/python-sidecar/`.
 
 - [ ] Configure engine environment variables:
 
   | Variable | Required | Description |
   |----------|----------|-------------|
   | `DATABASE_URL` | Yes | Supabase Postgres **direct** connection (port 5432) |
-  | `GRPC_PORT` | No | gRPC listen port (default: 50051) |
   | `HEALTH_PORT` | No | Health check HTTP port (default: 8080) |
   | `PYTHON_SIDECAR_URL` | Yes | Sidecar endpoint (e.g., `http://sidecar:8001`) |
-  | `MEDPLUM_BASE_URL` | Yes | Medplum FHIR server URL |
-  | `MEDPLUM_CLIENT_ID` | Yes | Medplum OAuth client ID |
-  | `MEDPLUM_CLIENT_SECRET` | Yes | Medplum OAuth client secret |
-  | `AI_GATEWAY_URL` | No | AI Gateway endpoint for LLM steps |
-  | `AI_GATEWAY_API_KEY` | No | AI Gateway API key |
-  | `REDIS_URL` | No | Upstash Redis for async signal queue |
+  | `MEDPLUM_BASE_URL` | For FHIR steps | Medplum FHIR server URL |
+  | `MEDPLUM_CLIENT_ID` | For FHIR steps | Medplum OAuth client ID |
+  | `MEDPLUM_CLIENT_SECRET` | For FHIR steps | Medplum OAuth client secret |
+  | `AI_GATEWAY_URL` | For LLM steps | AI Gateway endpoint |
+  | `AI_GATEWAY_API_KEY` | For LLM steps | AI Gateway API key |
 
 - [ ] Configure sidecar environment variables:
 
@@ -165,7 +160,7 @@ Even for local development, Supabase Auth requires a real project for login to w
   curl http://<engine-host>:8080/health
   curl http://<sidecar-host>:8001/health
   ```
-- [ ] Update `ENGINE_GRPC_URL` in Vercel env vars to point to the deployed engine
+- [ ] The engine needs no inbound route from the web app. It only needs to reach Postgres and the sidecar. Run one engine instance: per-agent ordering assumes a single engine owns all leases.
 
 ### 5. End-to-end verification
 
@@ -178,7 +173,7 @@ Even for local development, Supabase Auth requires a real project for login to w
     -H "Content-Type: application/json" \
     -d '{"signalType":"run","source":"test","agentId":"<agent-id>"}'
   ```
-- [ ] Verify the signal appears in the dashboard as pending
+- [ ] Verify the signal settles as `completed` or `failed` and its run appears on the agent's page
 
 ---
 
@@ -217,7 +212,6 @@ by the `schema_migrator` service.
 | `MEDPLUM_BASE_URL` | No | Medplum FHIR API URL (default: `https://api.medplum.com`) |
 | `MEDPLUM_CLIENT_ID` | No | Medplum OAuth client ID |
 | `MEDPLUM_CLIENT_SECRET` | No | Medplum OAuth client secret |
-| `ENGINE_GRPC_URL` | No | Engine gRPC endpoint (default: `localhost:50051`) |
 | `CRON_SECRET` | Yes | Secret for authenticating Vercel Cron requests |
 
 ### Engine (Docker)
@@ -225,15 +219,16 @@ by the `schema_migrator` service.
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `DATABASE_URL` | Yes | Postgres **direct** connection (port 5432) |
-| `GRPC_PORT` | No | gRPC listen port (default: 50051) |
 | `HEALTH_PORT` | No | Health check port (default: 8080) |
 | `PYTHON_SIDECAR_URL` | Yes | Python sidecar endpoint |
-| `MEDPLUM_BASE_URL` | Yes | Medplum FHIR API URL |
-| `MEDPLUM_CLIENT_ID` | Yes | Medplum OAuth client ID |
-| `MEDPLUM_CLIENT_SECRET` | Yes | Medplum OAuth client secret |
-| `AI_GATEWAY_URL` | No | AI Gateway for LLM steps |
-| `AI_GATEWAY_API_KEY` | No | AI Gateway API key |
-| `REDIS_URL` | No | Upstash Redis for async signal queue |
+| `MEDPLUM_BASE_URL` | For FHIR steps | Medplum FHIR API URL |
+| `MEDPLUM_CLIENT_ID` | For FHIR steps | Medplum OAuth client ID |
+| `MEDPLUM_CLIENT_SECRET` | For FHIR steps | Medplum OAuth client secret |
+| `AI_GATEWAY_URL` | For LLM steps | AI Gateway endpoint |
+| `AI_GATEWAY_API_KEY` | For LLM steps | AI Gateway API key |
+| `POLL_INTERVAL_MS` | No | Idle poll interval (default: 1000) |
+| `MAX_CONCURRENT_SIGNALS` | No | Signals run at once, one per agent (default: 8) |
+| `SIGNAL_LEASE_SECONDS` | No | Lease length; a run is cut off 30s before it (default: 300) |
 
 ### Python sidecar (Docker)
 

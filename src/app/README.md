@@ -54,4 +54,4 @@ pnpm install
 pnpm dev     # http://localhost:3000
 ```
 
-Requires environment variables for Supabase and optionally Medplum/Redis/AI Gateway. See the root README for setup.
+Requires environment variables for Supabase and optionally Medplum. See the root README for setup.
