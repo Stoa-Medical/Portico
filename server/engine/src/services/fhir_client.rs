@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context, Result};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 /// HTTP client for communicating with a Medplum FHIR server.
 ///

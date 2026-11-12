@@ -1,26 +1,73 @@
-use anyhow::Result;
-use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::get, Json, Router};
-use dotenvy::dotenv;
-use sqlx::postgres::PgPoolOptions;
-use std::collections::HashMap;
+mod db;
+mod runner;
+mod services;
+mod steps;
+
 use std::env;
 use std::net::SocketAddr;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tokio::sync::RwLock;
-use tonic::transport::Server;
+use std::time::Duration;
 
-use portico_database::models::Workflow;
-use portico_database::DatabaseItem;
-use portico_engine::RpcServer;
+use anyhow::{Context, Result};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::get, Json, Router};
+use sqlx::postgres::PgPoolOptions;
+use sqlx::PgPool;
+use tokio::sync::Semaphore;
+use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 
-/// Shared state for the health check HTTP server.
+const DRAIN_TIMEOUT: Duration = Duration::from_secs(30);
+const LEASE_SWEEP_INTERVAL: Duration = Duration::from_secs(30);
+const LEASE_MARGIN_SECONDS: u64 = 30;
+
+struct Config {
+    database_url: String,
+    health_port: u16,
+    poll_interval: Duration,
+    max_concurrent: usize,
+    lease_seconds: u64,
+}
+
+impl Config {
+    fn from_env() -> Result<Self> {
+        let lease_seconds: u64 = env_or("SIGNAL_LEASE_SECONDS", 300)?;
+        anyhow::ensure!(
+            lease_seconds > LEASE_MARGIN_SECONDS,
+            "SIGNAL_LEASE_SECONDS must exceed {LEASE_MARGIN_SECONDS}"
+        );
+        Ok(Self {
+            database_url: env::var("DATABASE_URL").context("DATABASE_URL must be set")?,
+            health_port: env_or("HEALTH_PORT", 8080)?,
+            poll_interval: Duration::from_millis(env_or("POLL_INTERVAL_MS", 1000)?),
+            max_concurrent: env_or("MAX_CONCURRENT_SIGNALS", 8)?,
+            lease_seconds,
+        })
+    }
+
+    /// A run is cut off before its lease can expire, so the sweep only ever
+    /// reclaims leases left by a crashed engine.
+    fn run_budget(&self) -> Duration {
+        Duration::from_secs(self.lease_seconds - LEASE_MARGIN_SECONDS)
+    }
+}
+
+fn env_or<T: FromStr>(name: &str, default: T) -> Result<T>
+where
+    T::Err: std::error::Error + Send + Sync + 'static,
+{
+    match env::var(name) {
+        Ok(raw) => raw.parse().with_context(|| format!("invalid {name}")),
+        Err(_) => Ok(default),
+    }
+}
+
 #[derive(Clone)]
 struct HealthState {
     draining: Arc<AtomicBool>,
 }
 
-/// GET / -- returns 200 when healthy, 503 when draining.
 async fn health_check(State(state): State<HealthState>) -> impl IntoResponse {
     if state.draining.load(Ordering::SeqCst) {
         (
@@ -28,147 +75,138 @@ async fn health_check(State(state): State<HealthState>) -> impl IntoResponse {
             Json(serde_json::json!({ "status": "draining" })),
         )
     } else {
-        (
-            StatusCode::OK,
-            Json(serde_json::json!({ "status": "ok" })),
-        )
+        (StatusCode::OK, Json(serde_json::json!({ "status": "ok" })))
     }
+}
+
+async fn poll_signals(
+    pool: PgPool,
+    config: Arc<Config>,
+    cancel: CancellationToken,
+    tracker: TaskTracker,
+) {
+    let permits = Arc::new(Semaphore::new(config.max_concurrent));
+    let mut sweep = tokio::time::interval(LEASE_SWEEP_INTERVAL);
+
+    loop {
+        let permit = tokio::select! {
+            _ = cancel.cancelled() => return,
+            _ = sweep.tick() => {
+                match db::release_leases(&pool, true).await {
+                    Ok(0) => {}
+                    Ok(n) => println!("[engine] reclaimed {n} expired lease(s)"),
+                    Err(e) => eprintln!("[engine] lease sweep failed: {e:#}"),
+                }
+                continue;
+            }
+            permit = permits.clone().acquire_owned() => permit.expect("semaphore is never closed"),
+        };
+
+        match db::lease_next(&pool, config.lease_seconds as f64).await {
+            Ok(Some(signal)) => {
+                let pool = pool.clone();
+                let budget = config.run_budget();
+                tracker.spawn(async move {
+                    let signal_id = signal.id;
+                    if let Err(e) = runner::process(&pool, signal, budget).await {
+                        eprintln!("[engine] signal {signal_id} left dispatched: {e:#}");
+                    }
+                    drop(permit);
+                });
+            }
+            Ok(None) => {
+                drop(permit);
+                tokio::select! {
+                    _ = cancel.cancelled() => return,
+                    _ = tokio::time::sleep(config.poll_interval) => {}
+                }
+            }
+            Err(e) => {
+                drop(permit);
+                eprintln!("[engine] lease query failed: {e:#}");
+                tokio::select! {
+                    _ = cancel.cancelled() => return,
+                    _ = tokio::time::sleep(config.poll_interval) => {}
+                }
+            }
+        }
+    }
+}
+
+async fn shutdown_signal() -> Result<()> {
+    #[cfg(unix)]
+    {
+        let mut sigterm =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            _ = sigterm.recv() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    tokio::signal::ctrl_c().await?;
+    Ok(())
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Read Config
-    dotenv().ok();
+    dotenvy::dotenv().ok();
+    let config = Arc::new(Config::from_env()?);
 
-    let grpc_port: u16 = env::var("GRPC_PORT")
-        .unwrap_or_else(|_| "50051".to_string())
-        .parse()
-        .expect("GRPC_PORT should be a number");
-
-    let health_port: u16 = env::var("HEALTH_PORT")
-        .unwrap_or_else(|_| "8080".to_string())
-        .parse()
-        .expect("HEALTH_PORT should be a number");
-
-    // Support both DATABASE_URL (preferred) and POSTGRES_DB_URI (backward compat)
-    let db_url: String = env::var("DATABASE_URL")
-        .or_else(|_| env::var("POSTGRES_DB_URI"))
-        .expect("DATABASE_URL (or POSTGRES_DB_URI) needs to be specified");
-
-    // Define the server address
-    let addr = format!("0.0.0.0:{}", grpc_port).parse::<SocketAddr>()?;
-    println!("Will try to start the gRPC server on {}", addr);
-
-    println!("Trying to connect to the database...");
-    // Connect to database (share pooled connection)
-    let db_conn_pool = PgPoolOptions::new().connect(&db_url).await?;
-    println!("Connected to the database successfully");
-
-    // Pull corresponding `Workflows` and corresponding `Steps`
-    let workflows: Vec<Workflow> = Workflow::try_db_select_all(&db_conn_pool)
+    let pool = PgPoolOptions::new()
+        .max_connections(config.max_concurrent as u32 + 2)
+        .connect(&config.database_url)
         .await
-        .expect("Failed to fetch workflows from database");
+        .context("could not connect to the database")?;
 
-    println!(
-        "Fetched workflows successfully, count: {}",
-        workflows.len()
-    );
-
-    // Create a thread-safe workflow map
-    let workflow_map: Arc<RwLock<HashMap<String, Workflow>>> = Arc::new(RwLock::new(
-        workflows
-            .into_iter()
-            .map(|workflow| (workflow.identifiers.global_uuid.clone(), workflow))
-            .collect(),
-    ));
-
-    // Create an instance of our gRPC service
-    let bridge_service = RpcServer::new(workflow_map, db_conn_pool.clone());
-
-    // Grab a reference to the workflow manager before consuming bridge_service
-    let workflow_manager = bridge_service.workflow_manager();
-
-    // Initialize workflow queues and reconstruct from the database before serving traffic
-    {
-        let mut manager = workflow_manager.lock().await;
-
-        if let Err(e) = manager.init_workflow_queues().await {
-            eprintln!("[ERROR] Failed to initialize workflow queues: {}", e);
-        }
-
-        println!("[INFO] Reconstructing signal queues from database...");
-        if let Err(e) = manager.reconstruct_queues().await {
-            eprintln!(
-                "[ERROR] Failed to reconstruct queues: {}. Continuing startup anyway.",
-                e
-            );
-        }
+    let recovered = db::release_leases(&pool, false).await?;
+    if recovered > 0 {
+        println!("[engine] returned {recovered} signal(s) from a previous run to pending");
     }
 
-    // ---- Health check HTTP server ----
     let draining = Arc::new(AtomicBool::new(false));
-    let health_state = HealthState {
-        draining: draining.clone(),
-    };
-
     let health_app = Router::new()
         .route("/", get(health_check))
-        .with_state(health_state);
-
-    let health_addr: SocketAddr = format!("0.0.0.0:{}", health_port).parse()?;
+        .route("/health", get(health_check))
+        .with_state(HealthState {
+            draining: draining.clone(),
+        });
+    let health_addr = SocketAddr::from(([0, 0, 0, 0], config.health_port));
     let health_listener = tokio::net::TcpListener::bind(health_addr).await?;
-    println!("Health check server listening on {}", health_addr);
-
     let health_server = tokio::spawn(async move {
         if let Err(e) = axum::serve(health_listener, health_app).await {
-            eprintln!("[ERROR] Health check server error: {}", e);
+            eprintln!("[engine] health server error: {e}");
         }
     });
 
-    // ---- SIGTERM / Ctrl-C handling ----
-    #[cfg(unix)]
-    let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+    let cancel = CancellationToken::new();
+    let tracker = TaskTracker::new();
+    let poller = tokio::spawn(poll_signals(
+        pool.clone(),
+        config.clone(),
+        cancel.clone(),
+        tracker.clone(),
+    ));
+    println!(
+        "[engine] polling for signals, health on {health_addr}, up to {} at once",
+        config.max_concurrent
+    );
 
-    // Start the gRPC server (consumes bridge_service)
-    println!("Starting gRPC server with workflow queuing support...");
-    let server_future = Server::builder()
-        .add_service(bridge_service.with_server())
-        .serve(addr);
-
-    tokio::select! {
-        result = server_future => {
-            if let Err(e) = result {
-                eprintln!("[ERROR] gRPC server exited with error: {}", e);
-            }
-        }
-        _ = tokio::signal::ctrl_c() => {
-            println!("Received SIGINT (Ctrl-C), initiating graceful shutdown...");
-        }
-        _ = async {
-            #[cfg(unix)]
-            sigterm.recv().await;
-            #[cfg(not(unix))]
-            std::future::pending::<()>().await;
-        } => {
-            println!("Received SIGTERM, initiating graceful shutdown...");
-        }
-    }
-
-    // ---- Graceful shutdown sequence ----
-    println!("[INFO] Beginning shutdown drain...");
-
-    // Mark as draining so health checks return 503
+    shutdown_signal().await?;
+    println!("[engine] shutting down");
     draining.store(true, Ordering::SeqCst);
+    cancel.cancel();
+    poller.await.ok();
 
-    // Perform graceful shutdown via the workflow manager
+    tracker.close();
+    if tokio::time::timeout(DRAIN_TIMEOUT, tracker.wait())
+        .await
+        .is_err()
     {
-        let mut manager = workflow_manager.lock().await;
-        manager.shutdown().await;
+        eprintln!("[engine] drain timed out, releasing remaining leases");
     }
+    db::release_leases(&pool, false).await?;
 
-    // Abort the health server
     health_server.abort();
-
-    println!("[INFO] Shutdown complete");
     Ok(())
 }
