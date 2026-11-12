@@ -10,7 +10,34 @@ The backend that runs signals: a Rust engine, a Python sidecar for Python steps,
 4. The engine writes per-step results and timings to the session and settles the signal as `completed` (with `response_data`) or `failed` (with `error_message`). A run stops at the first failing step.
 5. `sync` and `fyi` signals are acknowledged as `completed` without running steps.
 
-Signals with no `agent_id` stay pending. The HL7, FHIR and Medplum webhooks currently insert signals that way.
+Signals with no `agent_id` stay pending.
+
+### Webhooks
+
+Each inbound webhook URL names an integration: `POST /api/webhooks/{hl7,fhir,medplum}/<integration-id>`. The route copies the integration's `agent_id` onto the signal, so the integration decides which agent runs.
+
+| Route | Integration `connection_type` | Retry key |
+|-------|-------------------------------|-----------|
+| `hl7/<id>` | `hl7v2-http` | MSH-10 control id |
+| `fhir/<id>` | `rest-webhook` | resource type, id and `meta.versionId` |
+| `medplum/<id>` | `fhir-subscription` | resource type, id and `meta.versionId` |
+
+The sender authenticates with `Authorization: Bearer <secret>`. The integration stores only the secret's SHA-256, in `config.webhook_secret_sha256`. A retry with the same retry key returns the first signal with `"duplicate": true`. A message with no retry key always creates a new signal.
+
+Responses: `404` for an unknown integration or one of another connection type, `401` for a missing or wrong secret, `409` for an integration that is inactive, outbound, or has no linked agent.
+
+There is no UI for creating integrations yet. To add one:
+
+```bash
+SECRET=$(openssl rand -hex 32)
+HASH=$(printf '%s' "$SECRET" | shasum -a 256 | cut -d' ' -f1)
+psql "$DATABASE_URL" -c "
+  INSERT INTO integrations (name, connection_type, direction, agent_id, config)
+  VALUES ('Lab feed', 'hl7v2-http', 'inbound', '<agent-id>',
+          jsonb_build_object('webhook_secret_sha256', '$HASH'))
+  RETURNING id"
+echo "Give the sender this secret: $SECRET"
+```
 
 ### Ordering and recovery
 
@@ -68,7 +95,7 @@ The web app connects to the same Postgres with `DATABASE_URL=postgresql://postgr
 WEB_URL=http://localhost:3000 ./scripts/e2e.sh    # creates them through POST /api/signals
 ```
 
-The script brings up the stack, seeds agents with a transform step and a Python step, and asserts on the rows the engine writes: a successful run, a run whose Python step raises, and a signal left `dispatched` across an engine restart.
+The script brings up the stack, seeds agents with a transform step and a Python step, and asserts on the rows the engine writes: a successful run, a run whose Python step raises, and a signal left `dispatched` across an engine restart. With `WEB_URL` set it also posts an HL7 message to a seeded integration and checks routing, retries, and the `401`, `404` and `409` responses.
 
 To type-check the engine without a local Rust toolchain:
 

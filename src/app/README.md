@@ -27,9 +27,9 @@ app/
     ├── chat/route.ts       #   AI chat endpoint (AI SDK + AI Gateway)
     ├── signals/route.ts    #   Signal ingestion API
     ├── webhooks/
-    │   ├── hl7/route.ts    #   HL7v2 message webhook
-    │   ├── fhir/route.ts   #   FHIR resource webhook
-    │   └── medplum/route.ts#   Medplum subscription webhook
+    │   ├── hl7/[integrationId]/route.ts     #   HL7v2 message webhook
+    │   ├── fhir/[integrationId]/route.ts    #   FHIR resource webhook
+    │   └── medplum/[integrationId]/route.ts #   Medplum subscription webhook
     └── cron/
         └── cleanup/route.ts#   Scheduled cleanup (verified with CRON_SECRET)
 ```

@@ -119,6 +119,53 @@ assert_eq "session statuses, oldest first" \
   "$(psql -c "SELECT string_agg(status::text, ',' ORDER BY created_at) FROM runtime_sessions WHERE signal_id = '$orphan_signal'")" \
   "cancelled,completed"
 
+if [[ -n "$WEB_URL" ]]; then
+  echo "--- a webhook routes to its integration's agent"
+  secret="e2e-secret-$run_id"
+  secret_hash="$(printf '%s' "$secret" | shasum -a 256 | cut -d' ' -f1)"
+  hl7_agent="$(seed_agent "e2e-hl7-$run_id" 'output_data = {"has_msh": input_data["raw"].startswith("MSH")}')"
+  seed_integration() {
+    psql -v name="e2e-$1-$run_id" -v agent="$hl7_agent" -v hash="$secret_hash" -v status="$1" <<'SQL' | head -1
+INSERT INTO integrations (name, connection_type, direction, agent_id, status, config)
+VALUES (:'name', 'hl7v2-http', 'inbound', :'agent', :'status'::integration_status,
+        jsonb_build_object('webhook_secret_sha256', :'hash'))
+RETURNING id;
+SQL
+  }
+  integration="$(seed_integration active)"
+  inactive_integration="$(seed_integration inactive)"
+  hl7_message=$'MSH|^~\\&|LAB|HOSP|PORTICO|STOA|20260101||ORU^R01|CTRL-'"$run_id"$'|P|2.5\rPID|1||12345'
+
+  post_hl7() {
+    curl -s -o "$3" -w '%{http_code}' -X POST "$WEB_URL/api/webhooks/hl7/$1" \
+      -H "authorization: Bearer $2" -H 'content-type: text/plain' --data-binary "$hl7_message"
+  }
+  body="$(mktemp)"
+
+  assert_eq "POST with the right secret" "$(post_hl7 "$integration" "$secret" "$body")" "200"
+  hl7_signal="$(sed -E 's/.*"signalId":"([^"]+)".*/\1/' "$body")"
+  assert_eq "signal carries the integration's agent" \
+    "$(psql -c "SELECT agent_id FROM signals WHERE id = '$hl7_signal'")" "$hl7_agent"
+  assert_eq "signal status" "$(wait_settled "$hl7_signal")" "completed"
+  assert_eq "signal response_data" \
+    "$(psql -c "SELECT response_data::text FROM signals WHERE id = '$hl7_signal'")" '{"has_msh": true}'
+  assert_eq "integration last_seen_at set" \
+    "$(psql -c "SELECT (last_seen_at IS NOT NULL)::text FROM integrations WHERE id = '$integration'")" "true"
+
+  assert_eq "retry of the same control id" "$(post_hl7 "$integration" "$secret" "$body")" "200"
+  assert_eq "retry returns the first signal" "$(sed -E 's/.*"signalId":"([^"]+)".*/\1/' "$body")" "$hl7_signal"
+  assert_eq "retry is flagged duplicate" "$(grep -o '"duplicate":[a-z]*' "$body")" '"duplicate":true'
+  assert_eq "signals for the integration" \
+    "$(psql -c "SELECT count(*) FROM signals WHERE idempotency_key LIKE '$integration:%'")" "1"
+
+  assert_eq "POST with a wrong secret" "$(post_hl7 "$integration" "wrong" "$body")" "401"
+  assert_eq "POST to an unknown integration" "$(post_hl7 "$(uuidgen | tr 'A-Z' 'a-z')" "$secret" "$body")" "404"
+  assert_eq "POST to an inactive integration" "$(post_hl7 "$inactive_integration" "$secret" "$body")" "409"
+  assert_eq "rejected requests created no signals" \
+    "$(psql -c "SELECT count(*) FROM signals WHERE agent_id = '$hl7_agent'")" "1"
+  rm -f "$body"
+fi
+
 echo "--- the session query the agent page runs returns the run"
 assert_eq "sessions visible for the agent" \
   "$(psql -c "SELECT count(*) FROM runtime_sessions WHERE agent_id = '$good_agent' AND status = 'completed'")" "2"

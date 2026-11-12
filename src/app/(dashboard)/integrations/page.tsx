@@ -50,7 +50,7 @@ export default async function IntegrationsPage() {
             <Radio className="mx-auto mb-4 h-10 w-10 text-muted-foreground" />
             <p className="text-lg font-medium">No integrations configured</p>
             <p className="mt-2 text-sm text-muted-foreground">
-              Add an integration row via SQL or the admin API to get started.
+              Add an integration row via SQL to get started. See server/README.md.
             </p>
           </CardContent>
         </Card>
