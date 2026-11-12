@@ -19,36 +19,54 @@ services:
       timeout: 5s
       retries: 5
 
-  # Apply schema migrations using Atlas
+  # Scratch database Atlas needs to compute the diff for an SQL schema file
+  atlas_dev:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+    tmpfs:
+      - /var/lib/postgresql/data
+    networks:
+      - portico-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+  # Apply database/schema.sql declaratively using Atlas
   schema_migrator:
     image: arigaio/atlas:latest
     depends_on:
       postgres:
+        condition: service_healthy
+      atlas_dev:
         condition: service_healthy
     volumes:
       - ./database/schema.sql:/schema.sql
     command: >
       schema apply
         --url "postgresql://postgres:postgres@postgres:5432/postgres?search_path=public&sslmode=disable"
+        --dev-url "postgresql://postgres:postgres@atlas_dev:5432/postgres?search_path=public&sslmode=disable"
         --to "file:///schema.sql"
         --auto-approve
     networks:
       - portico-network
 
-  # Rust engine — workflow orchestrator
+  # Rust engine: leases pending signals from Postgres and runs each agent's steps
   engine:
     build:
-      context: ..
-      dockerfile: ./server/engine/Dockerfile
+      context: ./engine
+      dockerfile: Dockerfile
     ports:
-      - "50051:50051"
       - "8080:8080"    # Health check endpoint
     depends_on:
-      postgres:
+      schema_migrator:
+        condition: service_completed_successfully
+      python-sidecar:
         condition: service_healthy
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/postgres
-      - GRPC_PORT=50051
       - HEALTH_PORT=8080
       - PYTHON_SIDECAR_URL=http://python-sidecar:8001
       - AI_GATEWAY_URL=https://ai-gateway.vercel.sh
@@ -56,7 +74,6 @@ services:
       - MEDPLUM_BASE_URL=${MEDPLUM_BASE_URL:-https://api.medplum.com}
       - MEDPLUM_CLIENT_ID=${MEDPLUM_CLIENT_ID:-}
       - MEDPLUM_CLIENT_SECRET=${MEDPLUM_CLIENT_SECRET:-}
-      - REDIS_URL=${REDIS_URL:-}
     networks:
       - portico-network
     restart: unless-stopped
@@ -79,7 +96,7 @@ services:
       - portico-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8001/health || exit 1"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
       interval: 10s
       timeout: 5s
       retries: 3
